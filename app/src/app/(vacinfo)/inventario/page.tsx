@@ -1,0 +1,240 @@
+import clsx from "clsx";
+import { obtenerSesion, ROLES_GESTORES, type Sesion } from "@/lib/sesion";
+import { corteDeFinca } from "@/lib/datos";
+import { fecha, hoyISO, num, pesos } from "@/lib/formato";
+import { Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { fechaValida, fincaElegida, uno } from "@/components/inventario/comun";
+import { TablaSaldos, type Saldo } from "@/components/inventario/tabla-saldos";
+import { FormularioMovimiento } from "@/components/inventario/formulario-movimiento";
+import { CatalogoInsumos } from "@/components/inventario/catalogo-insumos";
+import type { Insumo } from "@/components/inventario/opciones";
+
+export const metadata = { title: "Inventario" };
+
+/** Corte por defecto: el de la finca, pero sin dejar por fuera movimientos o consumos registrados después. */
+async function corteInventario(supabase: Sesion["supabase"], fincaId: string, hoy: string) {
+  const [corte, { data: mov }, { data: cons }] = await Promise.all([
+    corteDeFinca(supabase, fincaId),
+    supabase.from("movimientos_insumos").select("fecha").eq("finca_id", fincaId).lte("fecha", hoy).order("fecha", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("consumos_diarios").select("fecha").eq("finca_id", fincaId).lte("fecha", hoy).order("fecha", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  return [corte, mov?.fecha, cons?.fecha].filter((f): f is string => !!f).sort().at(-1)!;
+}
+
+export default async function InventarioPage(props: PageProps<"/inventario">) {
+  const sp = await props.searchParams;
+  const sesion = await obtenerSesion();
+  const { supabase, fincas, organizacionId, rol } = sesion;
+
+  if (fincas.length === 0) {
+    return (
+      <div className="space-y-6">
+        <Encabezado eyebrow="Inventario" titulo="Inventario con saldo" />
+        <Tarjeta>
+          <Vacio>Tu organización todavía no tiene fincas registradas.</Vacio>
+        </Tarjeta>
+      </div>
+    );
+  }
+
+  const finca = await fincaElegida(sesion, uno(sp.finca));
+  const hoy = hoyISO();
+  const corte = fechaValida(uno(sp.corte)) ?? (await corteInventario(supabase, finca.id, hoy));
+  const gestor = ROLES_GESTORES.includes(rol);
+
+  const [{ data: saldosData, error: errorSaldos }, { data: insumosData }, { data: movimientos }, { data: consumos }] = await Promise.all([
+    supabase.rpc("saldo_insumos", { p_finca: finca.id, p_corte: corte }),
+    supabase
+      .from("insumos")
+      .select("id, nombre, categoria, unidad, contenido, precio, stock_minimo, consumo_diario_fuente")
+      .eq("organizacion_id", organizacionId)
+      .order("nombre"),
+    supabase
+      .from("movimientos_insumos")
+      .select("id, insumo_id, producto, fecha, hora, tipo, cantidad, entrega, recibe")
+      .eq("finca_id", finca.id)
+      .lte("fecha", corte)
+      .order("fecha", { ascending: false })
+      .order("registrado_en", { ascending: false })
+      .limit(30),
+    supabase
+      .from("consumos_diarios")
+      .select("id, fecha, kg_concentrado_vacas, kg_sal_vacas, kg_concentrado_terneras, kg_sal_terneras")
+      .eq("finca_id", finca.id)
+      .lte("fecha", corte)
+      .order("fecha", { ascending: false })
+      .limit(30),
+  ]);
+
+  const saldos = (saldosData ?? []) as Saldo[];
+  const insumos = (insumosData ?? []) as Insumo[];
+  const porId = new Map(insumos.map((i) => [i.id, i]));
+
+  const alertas = saldos.filter((s) => s.estado !== "ok");
+  const valor = saldos.reduce((t, s) => t + Math.max(Number(s.saldo), 0) * Number((s.insumo_id && porId.get(s.insumo_id)?.precio) ?? 0), 0);
+  const sinPrecio = saldos.filter((s) => s.saldo > 0 && !(s.insumo_id && porId.get(s.insumo_id)?.precio)).length;
+  const proximo = [...saldos]
+    .filter((s) => s.estado === "agotado" || s.dias_alcanza != null)
+    .sort((a, b) => (a.estado === "agotado" ? -1 : Number(a.dias_alcanza)) - (b.estado === "agotado" ? -1 : Number(b.dias_alcanza)))[0];
+
+  return (
+    <div className="space-y-6">
+      <Encabezado
+        eyebrow={`Inventario · ${finca.nombre}`}
+        titulo="Inventario con saldo"
+        descripcion={`Saldo al ${fecha(corte, true)}: lo que ha entrado, menos las salidas, menos el consumo diario registrado en VacDaTa.`}
+      />
+
+      <form action="/inventario" className="papel flex flex-wrap items-end gap-3 rounded-2xl p-4">
+        <label className="text-sm font-bold text-bosque">
+          Finca
+          <select name="finca" defaultValue={finca.id} className="campo-control mt-1 min-w-44">
+            {fincas.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm font-bold text-bosque">
+          Saldo al
+          <input type="date" name="corte" defaultValue={corte} className="campo-control mt-1" />
+        </label>
+        <button className="boton-accion rounded-xl bg-lima px-4 py-3 font-bold text-bosque">Ver saldo</button>
+      </form>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Metrica
+          tono={alertas.length ? "alerta" : "lima"}
+          valor={alertas.length}
+          etiqueta={
+            alertas.length
+              ? `Productos bajos o agotados: ${alertas.map((a) => a.producto).join(", ")}`
+              : "Productos bajos o agotados"
+          }
+        />
+        <Metrica
+          tono="crema"
+          valor={pesos(valor)}
+          etiqueta={`Valor estimado del inventario (saldo × precio)${sinPrecio ? ` · ${sinPrecio} sin precio` : ""}`}
+        />
+        <Metrica
+          tono={proximo && (proximo.estado === "agotado" || Number(proximo.dias_alcanza) < 3) ? "alerta" : "lima"}
+          valor={proximo ? proximo.producto : "—"}
+          etiqueta={
+            !proximo
+              ? "Próximo a agotarse: no hay consumo reciente"
+              : proximo.estado === "agotado"
+                ? "Próximo a agotarse: ya está agotado"
+                : `Próximo a agotarse: alcanza para ${num(proximo.dias_alcanza)} días`
+          }
+        />
+      </div>
+
+      <Tarjeta>
+        <TituloTarjeta detalle={`${saldos.length} productos con movimientos`}>Saldo por insumo</TituloTarjeta>
+        {errorSaldos ? (
+          <Vacio>No se pudo calcular el saldo: {errorSaldos.message}</Vacio>
+        ) : saldos.length === 0 ? (
+          <Vacio>Todavía no hay ingresos ni salidas de insumos registrados en {finca.nombre}.</Vacio>
+        ) : (
+          <>
+            <TablaSaldos saldos={saldos} />
+            <p className="mt-3 text-xs text-tinta-suave">
+              El consumo diario es el promedio de salidas y consumos de los últimos 30 días. Queda <strong>bajo</strong> si alcanza para menos de 7
+              días o está por debajo del mínimo.
+            </p>
+          </>
+        )}
+      </Tarjeta>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_1.3fr]">
+        <Tarjeta>
+          <TituloTarjeta>Registrar movimiento</TituloTarjeta>
+          <FormularioMovimiento fincaId={finca.id} hoy={hoy} catalogo={insumos.map(({ nombre, unidad, contenido }) => ({ nombre, unidad, contenido }))} />
+        </Tarjeta>
+
+        <Tarjeta>
+          <TituloTarjeta detalle="Últimos 30">Movimientos recientes</TituloTarjeta>
+          {!movimientos?.length ? (
+            <Vacio>No hay movimientos hasta el {fecha(corte, true)}.</Vacio>
+          ) : (
+            <div className="max-h-[28rem] overflow-auto">
+              <table className="w-full min-w-[520px] text-sm">
+                <thead className="sticky top-0 bg-leche">
+                  <tr className="border-b-2 border-bosque text-left text-xs uppercase text-tinta-suave">
+                    <th className="py-2 pr-2">Fecha</th>
+                    <th className="px-2 py-2">Tipo</th>
+                    <th className="px-2 py-2">Producto</th>
+                    <th className="px-2 py-2 text-right">Cantidad</th>
+                    <th className="py-2 pl-2">Entrega → recibe</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {movimientos.map((m) => (
+                    <tr key={m.id} className="border-b border-tinta/10">
+                      <td className="py-2 pr-2 tabular-nums">
+                        {fecha(m.fecha)}
+                        {m.hora && <span className="block text-xs text-tinta-suave">{m.hora.slice(0, 5)}</span>}
+                      </td>
+                      <td className="px-2 py-2">
+                        <Etiqueta tono={m.tipo === "ingreso" ? "verde" : "amarillo"}>{m.tipo === "ingreso" ? "Ingreso" : "Salida"}</Etiqueta>
+                      </td>
+                      <td className="px-2 py-2 font-bold text-bosque">{m.producto}</td>
+                      <td className={clsx("px-2 py-2 text-right tabular-nums", m.tipo === "salida" && "text-cafe")}>
+                        {m.tipo === "ingreso" ? "+" : "−"}
+                        {num(m.cantidad)} {(m.insumo_id && porId.get(m.insumo_id)?.unidad) ?? ""}
+                      </td>
+                      <td className="py-2 pl-2 text-tinta-suave">{[m.entrega, m.recibe].filter(Boolean).join(" → ") || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Tarjeta>
+      </div>
+
+      <Tarjeta>
+        <TituloTarjeta detalle="Kilos registrados en VacDaTa · últimos 30 días con registro">Consumos diarios</TituloTarjeta>
+        {!consumos?.length ? (
+          <Vacio>No hay consumos diarios registrados hasta el {fecha(corte, true)}.</Vacio>
+        ) : (
+          <div className="max-h-80 overflow-auto">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead className="sticky top-0 bg-leche">
+                <tr className="border-b-2 border-bosque text-xs uppercase text-tinta-suave">
+                  <th className="py-2 pr-2 text-left">Fecha</th>
+                  <th className="px-2 py-2 text-right">Concentrado vacas</th>
+                  <th className="px-2 py-2 text-right">Sal vacas</th>
+                  <th className="px-2 py-2 text-right">Concentrado terneras</th>
+                  <th className="py-2 pl-2 text-right">Sal terneras</th>
+                </tr>
+              </thead>
+              <tbody>
+                {consumos.map((c) => (
+                  <tr key={c.id} className="border-b border-tinta/10 tabular-nums">
+                    <td className="py-1.5 pr-2">{fecha(c.fecha)}</td>
+                    <td className="px-2 py-1.5 text-right">{kg(c.kg_concentrado_vacas)}</td>
+                    <td className="px-2 py-1.5 text-right">{kg(c.kg_sal_vacas)}</td>
+                    <td className="px-2 py-1.5 text-right">{kg(c.kg_concentrado_terneras)}</td>
+                    <td className="py-1.5 pl-2 text-right">{kg(c.kg_sal_terneras)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Tarjeta>
+
+      {gestor && (
+        <Tarjeta>
+          <TituloTarjeta detalle="Compartido por todas las fincas de la organización">Catálogo de insumos</TituloTarjeta>
+          <CatalogoInsumos insumos={insumos} />
+        </Tarjeta>
+      )}
+    </div>
+  );
+}
+
+const kg = (v: number | null) => (v == null ? "—" : `${num(v)} kg`);

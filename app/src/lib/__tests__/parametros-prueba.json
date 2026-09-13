@@ -1,0 +1,355 @@
+{
+  "precio_litro": 2190,
+  "valorizacion_mensual_por_animal": 120000,
+  "animales": {
+    "vacas_produccion": 42,
+    "vacas_horras": 8,
+    "novillas": 8,
+    "terneronas": 8,
+    "terneras": 8,
+    "toros": 0,
+    "caballos": 0,
+    "perros": 0,
+    "otros": 0
+  },
+  "litros_dia": {
+    "venta": 830,
+    "terneras": 32,
+    "consumo_humano": 3
+  },
+  "costos": [
+    {
+      "categoria": "Concentrados",
+      "items": [
+        {
+          "nombre": "Concentrado vacas",
+          "mes": 17145536
+        },
+        {
+          "nombre": "Sales",
+          "mes": 485625
+        },
+        {
+          "nombre": "Concentrado novillas - terneronas",
+          "mes": 240000
+        },
+        {
+          "nombre": "Concentrado horras",
+          "mes": 225000
+        },
+        {
+          "nombre": "Concentrado terneras",
+          "mes": 225000
+        },
+        {
+          "nombre": "Minerales (Premex)",
+          "mes": 128520
+        }
+      ]
+    },
+    {
+      "categoria": "Fertilizantes",
+      "items": [
+        {
+          "nombre": "Abono - fertilizante químico",
+          "mes": 10442880
+        },
+        {
+          "nombre": "Fertilizante polvo",
+          "mes": 528571
+        },
+        {
+          "nombre": "Fertilizante líquido",
+          "mes": 507429
+        },
+        {
+          "nombre": "Cales",
+          "mes": 502164
+        },
+        {
+          "nombre": "Abonaza gallinaza",
+          "mes": 461760
+        }
+      ]
+    },
+    {
+      "categoria": "Venenos",
+      "items": [
+        {
+          "nombre": "Veneno plagas",
+          "mes": 799200
+        },
+        {
+          "nombre": "Veneno hongos",
+          "mes": 799200
+        },
+        {
+          "nombre": "Veneno mosco",
+          "mes": 200857
+        },
+        {
+          "nombre": "Veneno garrapata",
+          "mes": 95143
+        }
+      ]
+    },
+    {
+      "categoria": "Suministros de aseo",
+      "items": [
+        {
+          "nombre": "Sellador",
+          "mes": 154688
+        },
+        {
+          "nombre": "Papel",
+          "mes": 78000
+        },
+        {
+          "nombre": "Desinfectante",
+          "mes": 67500
+        },
+        {
+          "nombre": "Ácido",
+          "mes": 64688
+        },
+        {
+          "nombre": "Degraso",
+          "mes": 57375
+        },
+        {
+          "nombre": "Jabones",
+          "mes": 54000
+        }
+      ]
+    },
+    {
+      "categoria": "Medicamentos",
+      "items": [
+        {
+          "nombre": "Analgésico",
+          "mes": 469198
+        },
+        {
+          "nombre": "Antibióticos",
+          "mes": 469198
+        },
+        {
+          "nombre": "Vitaminas",
+          "mes": 260665
+        },
+        {
+          "nombre": "Purgante",
+          "mes": 218959
+        },
+        {
+          "nombre": "Secantes",
+          "mes": 155342
+        },
+        {
+          "nombre": "Sueros",
+          "mes": 113601
+        }
+      ]
+    },
+    {
+      "categoria": "Insumos equipo de ordeño",
+      "items": [
+        {
+          "nombre": "Accesorios ordeño",
+          "mes": 112500
+        },
+        {
+          "nombre": "Pezoneras",
+          "mes": 96164
+        },
+        {
+          "nombre": "Aceite ordeño",
+          "mes": 15000
+        }
+      ]
+    },
+    {
+      "categoria": "Pagos a terceros",
+      "items": [
+        {
+          "nombre": "Electricidad",
+          "mes": 1700000
+        },
+        {
+          "nombre": "Impuesto predial",
+          "mes": 450000
+        },
+        {
+          "nombre": "Estacones",
+          "mes": 117857
+        },
+        {
+          "nombre": "Zanjas",
+          "mes": 98214
+        },
+        {
+          "nombre": "Gasolina",
+          "mes": 80000
+        },
+        {
+          "nombre": "Acueducto",
+          "mes": 30000
+        },
+        {
+          "nombre": "Pitas",
+          "mes": 25548
+        },
+        {
+          "nombre": "Arriendo",
+          "mes": 0
+        }
+      ]
+    },
+    {
+      "categoria": "Nómina",
+      "items": [
+        {
+          "nombre": "Salario mayordomo",
+          "mes": 3000000
+        },
+        {
+          "nombre": "Prestaciones mayordomo",
+          "mes": 655200,
+          "caja": false
+        },
+        {
+          "nombre": "Seguridad social mayordomo",
+          "mes": 1156320
+        },
+        {
+          "nombre": "Salario empleado 1",
+          "mes": 3400000
+        },
+        {
+          "nombre": "Prestaciones empleado 1",
+          "mes": 742560,
+          "caja": false
+        },
+        {
+          "nombre": "Seguridad social empleado 1",
+          "mes": 1310496
+        }
+      ]
+    },
+    {
+      "categoria": "Transporte de leche",
+      "items": [
+        {
+          "nombre": "Transporte leche",
+          "mes": 1608900
+        }
+      ]
+    },
+    {
+      "categoria": "Otros transportes",
+      "items": [
+        {
+          "nombre": "Transporte concentrado",
+          "mes": 607104
+        },
+        {
+          "nombre": "Transporte abono",
+          "mes": 177600
+        },
+        {
+          "nombre": "Transporte cales",
+          "mes": 48285
+        },
+        {
+          "nombre": "Transporte abonaza",
+          "mes": 44400
+        }
+      ]
+    },
+    {
+      "categoria": "Varios",
+      "items": [
+        {
+          "nombre": "Mantenimiento equipos",
+          "mes": 100000
+        },
+        {
+          "nombre": "Internet",
+          "mes": 70000
+        },
+        {
+          "nombre": "Celular",
+          "mes": 70000
+        },
+        {
+          "nombre": "Overoles",
+          "mes": 53333
+        },
+        {
+          "nombre": "Arreglo vía interna",
+          "mes": 50000,
+          "caja": false
+        },
+        {
+          "nombre": "Arreglo vía externa",
+          "mes": 50000,
+          "caja": false
+        },
+        {
+          "nombre": "Botas",
+          "mes": 31333
+        }
+      ]
+    },
+    {
+      "categoria": "Reproducción (semen)",
+      "items": [
+        {
+          "nombre": "Semen pajilla",
+          "mes": 248548
+        }
+      ]
+    },
+    {
+      "categoria": "Gastos administrativos",
+      "items": [
+        {
+          "nombre": "Contador",
+          "mes": 600000
+        },
+        {
+          "nombre": "Veterinario",
+          "mes": 180000
+        },
+        {
+          "nombre": "Auxiliar general",
+          "mes": 100000
+        }
+      ]
+    },
+    {
+      "categoria": "Préstamo inversión",
+      "items": [
+        {
+          "nombre": "Préstamo bancario inversión",
+          "mes": 2500000
+        }
+      ]
+    },
+    {
+      "categoria": "Provisiones y mortales",
+      "items": [
+        {
+          "nombre": "Mortales",
+          "mes": 1500000,
+          "caja": false
+        },
+        {
+          "nombre": "Imprevistos",
+          "mes": 284153,
+          "caja": false
+        }
+      ]
+    }
+  ]
+}

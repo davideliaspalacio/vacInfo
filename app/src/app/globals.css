@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+/* Paleta tomada de los prototipos de Canva: VacInfo (bosque/lima/crema) y VacDaTa (azul campo). */
+@theme {
+  --color-bosque: #173f2a;
+  --color-bosque-claro: #1d5136;
+  --color-bosque-oscuro: #0d291c;
+  --color-pasto: #8fbf55;
+  --color-pasto-oscuro: #4f7a39;
+  --color-lima: #d9ef9f;
+  --color-lima-suave: #edf4dc;
+  --color-crema: #f7f1df;
+  --color-leche: #fffdf7;
+  --color-tinta: #182019;
+  --color-tinta-suave: #52644d;
+  --color-cafe: #9b653c;
+  --color-dorado: #f4c95d;
+  --color-alerta: #a53b2b;
+  --color-campo: #2563eb;
+  --color-campo-oscuro: #1d4ed8;
+
+  --font-sans: var(--font-dm-sans), system-ui, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, serif;
+}
+
+body {
+  color: var(--color-tinta);
+  font-family: var(--font-sans);
+}
+
+.fondo-vacinfo {
+  background:
+    radial-gradient(circle at 12% 22%, rgba(255, 255, 255, 0.12), transparent 22%),
+    linear-gradient(150deg, #1d5136 0%, #173f2a 48%, #0d291c 100%);
+  background-attachment: fixed;
+}
+
+.grano::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.16;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.6) 0.65px, transparent 0.65px);
+  background-size: 7px 7px;
+  z-index: 0;
+}
+
+.papel {
+  background: rgba(255, 253, 247, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: 0 20px 55px rgba(3, 19, 11, 0.22);
+}
+
+.boton-accion {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid rgba(24, 32, 25, 0.1);
+  box-shadow: 0 8px 0 rgba(13, 41, 28, 0.16);
+}
+.boton-accion:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 0 rgba(13, 41, 28, 0.18);
+}
+.boton-accion:active {
+  transform: translateY(2px);
+  box-shadow: 0 4px 0 rgba(13, 41, 28, 0.16);
+}
+
+.mancha {
+  position: absolute;
+  background: #07100b;
+  border-radius: 43% 57% 60% 40% / 50% 42% 58% 50%;
+}
+
+.divisor-campo {
+  height: 10px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(90deg, #d9ef9f 0 28px, #f4c95d 28px 42px);
+}
+
+.campo-control {
+  width: 100%;
+  background: #fffef9;
+  border: 1px solid #bdc8b7;
+  border-radius: 12px;
+  padding: 0.7rem 0.85rem;
+  color: #182019;
+}
+.campo-control:focus {
+  border-color: #4f7a39;
+  box-shadow: 0 0 0 4px rgba(143, 191, 85, 0.2);
+  outline: none;
+}
+
+.matriz th,
+.matriz td {
+  border: 1px solid #8291a0;
+  padding: 0.35rem 0.45rem;
+  text-align: center;
+  white-space: nowrap;
+}
+.matriz thead th {
+  background: #dce8f2;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.66rem;
+}
+
+:focus-visible {
+  outline: 3px solid #f4c95d;
+  outline-offset: 3px;
+}
