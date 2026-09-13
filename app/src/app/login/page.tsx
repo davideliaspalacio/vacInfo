@@ -14,6 +14,9 @@ const DEMOS = [
   { email: "jhon@vacinfo.local", rol: "Trabajador · VacDaTa" },
 ];
 
+// Las cuentas demo solo existen en la base local (semillas); en producción no se muestran.
+const esBaseLocal = /127\.0\.0\.1|localhost/.test(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
+
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const siguiente = rutaSegura((await searchParams).siguiente) ?? undefined;
 
@@ -53,6 +56,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
               Tengo un código de invitación
             </Link>
           </div>
+          {esBaseLocal && (
           <div className="mt-7 border-t border-tinta/10 pt-5">
             <p className="text-xs font-bold uppercase tracking-wider text-tinta-suave">Cuentas de demostración · contraseña vacinfo123</p>
             <ul className="mt-3 space-y-1.5 text-sm">
@@ -64,6 +68,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
               ))}
             </ul>
           </div>
+          )}
         </div>
       </div>
     </main>
