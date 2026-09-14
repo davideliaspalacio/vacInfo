@@ -1,5 +1,9 @@
 import { fecha, num, pesos } from "@/lib/formato";
-import type { PropsInforme } from "./consultas";
+import { todasLasFilas, type PropsInforme } from "./consultas";
+
+async function todas<T>(consulta: Parameters<typeof todasLasFilas<T>>[0]) {
+  return { data: await todasLasFilas(consulta) };
+}
 
 type Celda = React.ReactNode;
 type Registro = { titulo: string; columnas: string[]; filas: Celda[][]; color?: string };
@@ -19,21 +23,22 @@ const TIPO_APLICACION: Record<string, string> = {
 
 export async function InformeAdministrativo({ supabase, rango, finca }: PropsInforme) {
   const { fincaId, desde, hasta } = rango;
+  // Un rango largo puede superar las 1000 filas que devuelve PostgREST por petición: se leen todas por bloques.
   const [movimientos, recolecciones, sanitarios, visitas, aplicaciones, consumos, mantenimientos, controles, bajas, secados, palpaciones, servicios, partos] =
     await Promise.all([
-      supabase.from("movimientos_insumos").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha"),
-      supabase.from("recolecciones_leche").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha"),
-      supabase.from("eventos_sanitarios").select("*, animales!inner(nombre, chapeta, categoria, raza, finca_id)").eq("animales.finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha"),
-      supabase.from("visitas").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha"),
-      supabase.from("aplicaciones_campo").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha"),
-      supabase.from("consumos_diarios").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha"),
-      supabase.from("mantenimientos").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha"),
-      supabase.from("controles_calidad").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha"),
-      supabase.from("bajas").select("*, animales!inner(nombre, chapeta, categoria, raza, finca_id)").eq("animales.finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha"),
-      supabase.from("secados").select("*, animales!inner(nombre, chapeta, categoria, raza, finca_id, servicios(fecha))").eq("animales.finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha"),
-      supabase.from("palpaciones").select("*, animales!inner(nombre, chapeta, categoria, raza, finca_id)").eq("animales.finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha"),
-      supabase.from("servicios").select("*, animales!inner(nombre, chapeta, categoria, raza, finca_id)").eq("animales.finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha"),
-      supabase.from("partos").select("*, animales!partos_animal_id_fkey!inner(nombre, chapeta, categoria, raza, finca_id)").eq("animales.finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha"),
+      todas((a, b) => supabase.from("movimientos_insumos").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("id").range(a, b)),
+      todas((a, b) => supabase.from("recolecciones_leche").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("id").range(a, b)),
+      todas((a, b) => supabase.from("eventos_sanitarios").select("*, animales!inner(nombre, chapeta, categoria, raza, finca_id)").eq("animales.finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("id").range(a, b)),
+      todas((a, b) => supabase.from("visitas").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("id").range(a, b)),
+      todas((a, b) => supabase.from("aplicaciones_campo").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("id").range(a, b)),
+      todas((a, b) => supabase.from("consumos_diarios").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("id").range(a, b)),
+      todas((a, b) => supabase.from("mantenimientos").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("id").range(a, b)),
+      todas((a, b) => supabase.from("controles_calidad").select("*").eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("id").range(a, b)),
+      todas((a, b) => supabase.from("bajas").select("*, animales!inner(nombre, chapeta, categoria, raza, finca_id)").eq("animales.finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("id").range(a, b)),
+      todas((a, b) => supabase.from("secados").select("*, animales!inner(nombre, chapeta, categoria, raza, finca_id, servicios(fecha))").eq("animales.finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("id").range(a, b)),
+      todas((a, b) => supabase.from("palpaciones").select("*, animales!inner(nombre, chapeta, categoria, raza, finca_id)").eq("animales.finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("id").range(a, b)),
+      todas((a, b) => supabase.from("servicios").select("*, animales!inner(nombre, chapeta, categoria, raza, finca_id)").eq("animales.finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("id").range(a, b)),
+      todas((a, b) => supabase.from("partos").select("*, animales!partos_animal_id_fkey!inner(nombre, chapeta, categoria, raza, finca_id)").eq("animales.finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha").order("id").range(a, b)),
     ]);
 
   const ev = sanitarios.data ?? [];

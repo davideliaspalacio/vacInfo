@@ -31,6 +31,16 @@ export class SinConexionError extends Error {
   }
 }
 
+const PREFIJO_ESPERA = "Hay muchos envíos seguidos.";
+/** El servidor pidió esperar (429): nada se pierde, se reintenta después. */
+export class EsperaError extends Error {
+  constructor(readonly segundos: number) {
+    const minutos = Math.max(1, Math.ceil(segundos / 60));
+    super(`${PREFIJO_ESPERA} Lo registrado sigue guardado en el teléfono; se reintenta en ${minutos} ${minutos === 1 ? "minuto" : "minutos"}.`);
+  }
+}
+export const esAvisoDeEspera = (texto: string) => texto.startsWith(PREFIJO_ESPERA);
+
 // ─────────────────────────── Avisos entre pestañas ───────────────────────────
 let canal: BroadcastChannel | null | undefined;
 function obtenerCanal() {
@@ -59,12 +69,30 @@ export function escucharCambios(alCambiar: () => void) {
 }
 
 // ─────────────────────────── Red ───────────────────────────
+/** Hasta cuándo no se vuelve a llamar cada ruta después de un 429. */
+const pausas = new Map<string, number>();
+
+function segundosDeEspera(retryAfter: string | null) {
+  const valor = retryAfter?.trim() ?? "";
+  const segundos = /^\d+$/.test(valor) ? Number(valor) : (Date.parse(valor) - Date.now()) / 1000;
+  return Number.isFinite(segundos) ? Math.min(Math.max(Math.ceil(segundos), 5), 3600) : 60;
+}
+
 async function pedirJSON<T>(url: string, init?: RequestInit): Promise<T> {
+  const ruta = url.split("?")[0];
+  const pausa = (pausas.get(ruta) ?? 0) - Date.now();
+  if (pausa > 0) throw new EsperaError(pausa / 1000);
+
   let res: Response;
   try {
     res = await fetch(url, { ...init, credentials: "same-origin", cache: "no-store", redirect: "manual" });
   } catch {
     throw new SinConexionError();
+  }
+  if (res.status === 429) {
+    const segundos = segundosDeEspera(res.headers.get("retry-after"));
+    pausas.set(ruta, Date.now() + segundos * 1000);
+    throw new EsperaError(segundos);
   }
   // El proxy redirige a /login cuando no hay sesión.
   if (res.type === "opaqueredirect" || res.status === 401 || (res.status >= 300 && res.status < 400)) throw new SinSesionError();

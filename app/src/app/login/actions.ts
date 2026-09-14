@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { correoParaIngresar, rutaInicio, rutaSegura } from "@/components/registro/cuentas";
+import { REGLAS, bloqueado, ipCliente, limitar, mensajeLimite, reiniciarLimiteCuenta } from "@/lib/limites";
 
 export type EstadoLogin = { error?: string };
 
@@ -12,8 +13,22 @@ export async function iniciarSesion(_: EstadoLogin, formData: FormData): Promise
   if (!identificador || !password) return { error: "Escribe tu correo o usuario y tu contraseña." };
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.signInWithPassword({ email: correoParaIngresar(identificador), password });
-  if (error || !data.user) return { error: "Usuario, correo o contraseña incorrectos." };
+  const email = correoParaIngresar(identificador);
+  // La IP cuenta cada intento; la cuenta solo los fallidos. El bloqueo aplica exista o no la cuenta.
+  const espera = bloqueado(
+    ...(await Promise.all([
+      limitar(supabase, await ipCliente(), REGLAS.loginIp),
+      limitar(supabase, email, REGLAS.loginCuenta, { consumir: false }),
+    ])),
+  );
+  if (espera) return { error: mensajeLimite(espera.reintentarEn) };
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error || !data.user) {
+    await limitar(supabase, email, REGLAS.loginCuenta);
+    return { error: "Usuario, correo o contraseña incorrectos." };
+  }
+  await reiniciarLimiteCuenta(supabase, email);
 
   const siguiente = rutaSegura(formData.get("siguiente"));
   if (siguiente) redirect(siguiente);

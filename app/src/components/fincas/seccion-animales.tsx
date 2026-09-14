@@ -1,27 +1,48 @@
 import Link from "next/link";
 import { obtenerSesion } from "@/lib/sesion";
 import { fecha, num } from "@/lib/formato";
+import { consultarPagina, leerPagina, type Params } from "@/lib/paginacion";
 import { Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { Paginacion } from "@/components/paginacion";
 
-export async function SeccionAnimales({ fincaId, corte }: { fincaId: string; corte: string }) {
+const VIENTRES_POR_PAGINA = 50;
+const OTROS_POR_PAGINA = 60;
+
+export async function SeccionAnimales({ fincaId, corte, searchParams }: { fincaId: string; corte: string; searchParams: Params }) {
   const { supabase } = await obtenerSesion();
-  const [{ data: filas }, { data: otros }] = await Promise.all([
-    supabase.rpc("estado_reproductivo", { p_finca: fincaId, p_corte: corte }),
-    supabase
-      .from("animales")
-      .select("id, chapeta, nombre, categoria, sexo")
-      .eq("finca_id", fincaId)
-      .eq("estado", "activo")
-      .or("sexo.eq.macho,categoria.not.in.(vaca,novilla)")
-      .order("nombre"),
+  // El límite y el desplazamiento se aplican en la base de datos sobre el resultado de estado_reproductivo.
+  const [vientres, otros] = await Promise.all([
+    consultarPagina(
+      (desde, hasta) =>
+        supabase
+          .rpc("estado_reproductivo", { p_finca: fincaId, p_corte: corte }, { count: "exact" })
+          .order("nombre")
+          .order("animal_id")
+          .range(desde, hasta),
+      leerPagina(searchParams, { tamano: VIENTRES_POR_PAGINA }),
+    ),
+    consultarPagina(
+      (desde, hasta) =>
+        supabase
+          .from("animales")
+          .select("id, chapeta, nombre, categoria, sexo", { count: "exact" })
+          .eq("finca_id", fincaId)
+          .eq("estado", "activo")
+          .or("sexo.eq.macho,categoria.not.in.(vaca,novilla)")
+          .order("nombre")
+          .order("id")
+          .range(desde, hasta),
+      leerPagina(searchParams, { param: "pvivos", tamano: OTROS_POR_PAGINA }),
+    ),
   ]);
 
-  const animales = filas ?? [];
+  const ruta = `/fincas/${fincaId}`;
+  const animales = vientres.filas;
 
   return (
     <div className="space-y-6">
-      <Tarjeta>
-        <TituloTarjeta detalle={`${animales.length} vientres`}>Estado reproductivo y producción</TituloTarjeta>
+      <Tarjeta id="vientres" className="scroll-mt-6">
+        <TituloTarjeta detalle={`${num(vientres.total)} vientres`}>Estado reproductivo y producción</TituloTarjeta>
         {animales.length === 0 ? (
           <Vacio>No hay vacas ni novillas activas en esta finca.</Vacio>
         ) : (
@@ -79,18 +100,39 @@ export async function SeccionAnimales({ fincaId, corte }: { fincaId: string; cor
             </table>
           </div>
         )}
+        <Paginacion
+          ruta={ruta}
+          searchParams={searchParams}
+          pagina={vientres.pagina.pagina}
+          tamano={vientres.pagina.tamano}
+          total={vientres.total}
+          unidad="vientres"
+          etiqueta="Páginas de vientres"
+          ancla="vientres"
+        />
       </Tarjeta>
 
-      {(otros?.length ?? 0) > 0 && (
-        <Tarjeta>
-          <TituloTarjeta detalle={`${otros!.length} animales`}>Otros seres vivos</TituloTarjeta>
+      {otros.total > 0 && (
+        <Tarjeta id="otros-seres-vivos" className="scroll-mt-6">
+          <TituloTarjeta detalle={`${num(otros.total)} animales`}>Otros seres vivos</TituloTarjeta>
           <div className="flex flex-wrap gap-2">
-            {otros!.map((a) => (
+            {otros.filas.map((a) => (
               <Link key={a.id} href={`/animales/${a.id}`} className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm hover:bg-lima-suave">
                 <strong className="text-bosque">{a.nombre}</strong> <span className="text-tinta-suave">· {a.chapeta ?? a.categoria}</span>
               </Link>
             ))}
           </div>
+          <Paginacion
+            ruta={ruta}
+            searchParams={searchParams}
+            param="pvivos"
+            pagina={otros.pagina.pagina}
+            tamano={otros.pagina.tamano}
+            total={otros.total}
+            unidad="animales"
+            etiqueta="Páginas de otros seres vivos"
+            ancla="otros-seres-vivos"
+          />
         </Tarjeta>
       )}
     </div>

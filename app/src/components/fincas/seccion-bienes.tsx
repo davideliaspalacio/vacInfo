@@ -2,20 +2,30 @@ import Link from "next/link";
 import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion } from "@/lib/sesion";
 import { fecha, hoyISO } from "@/lib/formato";
+import { consultarPagina, leerPagina, type Params } from "@/lib/paginacion";
 import { Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { Paginacion } from "@/components/paginacion";
 import { ESTADOS_BIEN, TIPOS_BIEN } from "@/components/fincas/etiquetas";
 
-export async function SeccionBienes({ fincaId }: { fincaId: string }) {
+const POR_PAGINA = 50;
+
+export async function SeccionBienes({ fincaId, searchParams }: { fincaId: string; searchParams: Params }) {
   const { supabase, rol } = await obtenerSesion();
-  const { data: bienes } = await supabase
-    .from("bienes")
-    .select("id, codigo, nombre, tipo, marca, estado, garantia_hasta, recordatorio")
-    .eq("finca_id", fincaId)
-    .order("codigo");
+  const { filas: bienes, total, pagina } = await consultarPagina(
+    (desde, hasta) =>
+      supabase
+        .from("bienes")
+        .select("id, codigo, nombre, tipo, marca, estado, garantia_hasta, recordatorio", { count: "exact" })
+        .eq("finca_id", fincaId)
+        .order("codigo")
+        .order("id")
+        .range(desde, hasta),
+    leerPagina(searchParams, { tamano: POR_PAGINA }),
+  );
   const hoy = hoyISO();
 
   return (
-    <Tarjeta>
+    <Tarjeta id="bienes" className="scroll-mt-6">
       <TituloTarjeta
         detalle={
           puedeRegistrar(rol) && (
@@ -27,7 +37,7 @@ export async function SeccionBienes({ fincaId }: { fincaId: string }) {
       >
         Bienes y equipos
       </TituloTarjeta>
-      {!bienes?.length ? (
+      {!bienes.length ? (
         <Vacio>Esta finca aún no tiene bienes registrados.</Vacio>
       ) : (
         <div className="overflow-x-auto">
@@ -69,6 +79,16 @@ export async function SeccionBienes({ fincaId }: { fincaId: string }) {
           </table>
         </div>
       )}
+      <Paginacion
+        ruta={`/fincas/${fincaId}`}
+        searchParams={searchParams}
+        pagina={pagina.pagina}
+        tamano={pagina.tamano}
+        total={total}
+        unidad="bienes"
+        etiqueta="Páginas de bienes"
+        ancla="bienes"
+      />
     </Tarjeta>
   );
 }

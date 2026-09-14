@@ -5,7 +5,9 @@ import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, litros, num, sumarDias } from "@/lib/formato";
+import { consultarPagina, leerPagina, paginarUnion } from "@/lib/paginacion";
 import { BotonVolver, Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { Paginacion } from "@/components/paginacion";
 import { Dato } from "@/components/fincas/campo";
 import { CodigoQR } from "@/components/fincas/codigo-qr";
 import { GraficoProduccion } from "@/components/fincas/grafico-produccion";
@@ -15,6 +17,10 @@ import { SeccionCrecimiento } from "@/components/levante/seccion-crecimiento";
 import { CATEGORIAS, ESPECIES, ESTADOS_ANIMAL, ESTADOS_SANITARIOS, SEXOS, TIPOS_BAJA, TIPOS_SANITARIOS } from "@/components/fincas/etiquetas";
 
 const DIAS_PRODUCCION = 60;
+const POR_PAGINA = 20;
+const BAJAS_POR_PAGINA = 10;
+const CLAVES = "id, fecha, registrado_en";
+const DESC = { ascending: false } as const;
 
 type EventoReproductivo = {
   clave: string;
@@ -24,8 +30,8 @@ type EventoReproductivo = {
   responsable: string | null;
 };
 
-export default async function FichaAnimal({ params }: PageProps<"/animales/[id]">) {
-  const { id } = await params;
+export default async function FichaAnimal({ params, searchParams }: PageProps<"/animales/[id]">) {
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
   const { supabase, rol } = await obtenerSesion();
   const gestor = ROLES_GESTORES.includes(rol);
 
@@ -47,17 +53,38 @@ export default async function FichaAnimal({ params }: PageProps<"/animales/[id]"
   ]);
   const mostrarCrecimiento = animal.fincas && (esLevante(animal.categoria) || (pesajes.data?.length ?? 0) > 0);
 
-  const [madre, crias, ordenos, estadoRep, servicios, palpaciones, partos, secados, sanidad, bajas] = await Promise.all([
+  const [madre, crias, ordenos, estadoRep, historial, sanidad, bajas, ultimaBaja] = await Promise.all([
     animal.madre_id ? supabase.from("animales").select("id, nombre, chapeta").eq("id", animal.madre_id).maybeSingle() : Promise.resolve({ data: null }),
     supabase.from("animales").select("id, nombre, chapeta, sexo, fecha_nacimiento").eq("madre_id", id).order("fecha_nacimiento", { ascending: false }),
     supabase.from("ordenos").select("fecha, jornada, litros").eq("animal_id", id).gte("fecha", desde).lte("fecha", corte).order("fecha"),
     supabase.rpc("estado_reproductivo", { p_finca: animal.finca_id, p_corte: corte }).eq("animal_id", id).maybeSingle(),
-    supabase.from("servicios").select("*").eq("animal_id", id),
-    supabase.from("palpaciones").select("*").eq("animal_id", id),
-    supabase.from("partos").select("*, cria:animales!partos_cria_id_fkey(id, nombre)").eq("animal_id", id),
-    supabase.from("secados").select("*").eq("animal_id", id),
-    supabase.from("eventos_sanitarios").select("*").eq("animal_id", id).order("fecha", { ascending: false }),
-    supabase.from("bajas").select("*").eq("animal_id", id).order("fecha", { ascending: false }),
+    paginarUnion(
+      {
+        servicios: (a, b) => supabase.from("servicios").select(CLAVES, { count: "exact" }).eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+        palpaciones: (a, b) => supabase.from("palpaciones").select(CLAVES, { count: "exact" }).eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+        partos: (a, b) => supabase.from("partos").select(CLAVES, { count: "exact" }).eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+        secados: (a, b) => supabase.from("secados").select(CLAVES, { count: "exact" }).eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+      },
+      leerPagina(sp, { param: "prep", tamano: POR_PAGINA }),
+    ),
+    consultarPagina(
+      (a, b) => supabase.from("eventos_sanitarios").select("*", { count: "exact" }).eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+      leerPagina(sp, { param: "psan", tamano: POR_PAGINA }),
+    ),
+    consultarPagina(
+      (a, b) => supabase.from("bajas").select("*", { count: "exact" }).eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+      leerPagina(sp, { param: "pbajas", tamano: BAJAS_POR_PAGINA }),
+    ),
+    supabase.from("bajas").select("fecha, tipo, causa").eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).limit(1).maybeSingle(),
+  ]);
+
+  // Del historial reproductivo solo se traen completas las filas de la página visible.
+  const sinFilas = Promise.resolve({ data: [] });
+  const [servicios, palpaciones, partos, secados] = await Promise.all([
+    historial.ids("servicios").length ? supabase.from("servicios").select("*").in("id", historial.ids("servicios")) : sinFilas,
+    historial.ids("palpaciones").length ? supabase.from("palpaciones").select("*").in("id", historial.ids("palpaciones")) : sinFilas,
+    historial.ids("partos").length ? supabase.from("partos").select("*, cria:animales!partos_cria_id_fkey(id, nombre)").in("id", historial.ids("partos")) : sinFilas,
+    historial.ids("secados").length ? supabase.from("secados").select("*").in("id", historial.ids("secados")) : sinFilas,
   ]);
 
   const porDia = new Map<string, number>();
@@ -116,10 +143,13 @@ export default async function FichaAnimal({ params }: PageProps<"/animales/[id]"
       detalle: s.motivo ?? "",
       responsable: null,
     })),
-  ].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  ];
+  const porClave = new Map(reproduccion.map((r) => [r.clave, r]));
+  const prefijo = { servicios: "s", palpaciones: "p", partos: "pa", secados: "se" } as const;
+  const eventos = historial.claves.flatMap((c) => porClave.get(`${prefijo[c.fuente]}-${c.id}`) ?? []);
 
   const er = estadoRep.data;
-  const baja = bajas.data?.[0];
+  const baja = ultimaBaja.data;
 
   return (
     <div className="space-y-8">
@@ -264,9 +294,9 @@ export default async function FichaAnimal({ params }: PageProps<"/animales/[id]"
         )}
       </Tarjeta>
 
-      <Tarjeta>
-        <TituloTarjeta detalle={`${reproduccion.length} eventos`}>Reproducción</TituloTarjeta>
-        {reproduccion.length === 0 ? (
+      <Tarjeta id="reproduccion" className="scroll-mt-6">
+        <TituloTarjeta detalle={`${num(historial.total)} eventos`}>Reproducción</TituloTarjeta>
+        {eventos.length === 0 ? (
           <Vacio>Sin servicios, palpaciones, partos ni secados registrados.</Vacio>
         ) : (
           <div className="overflow-x-auto">
@@ -280,7 +310,7 @@ export default async function FichaAnimal({ params }: PageProps<"/animales/[id]"
                 </tr>
               </thead>
               <tbody>
-                {reproduccion.map((r) => (
+                {eventos.map((r) => (
                   <tr key={r.clave}>
                     <td>{fecha(r.fecha)}</td>
                     <td>{r.evento}</td>
@@ -292,11 +322,22 @@ export default async function FichaAnimal({ params }: PageProps<"/animales/[id]"
             </table>
           </div>
         )}
+        <Paginacion
+          ruta={`/animales/${id}`}
+          searchParams={sp}
+          param="prep"
+          pagina={historial.pagina.pagina}
+          tamano={historial.pagina.tamano}
+          total={historial.total}
+          unidad="eventos"
+          etiqueta="Páginas del historial reproductivo"
+          ancla="reproduccion"
+        />
       </Tarjeta>
 
-      <Tarjeta>
-        <TituloTarjeta detalle={`${sanidad.data?.length ?? 0} registros`}>Sanidad</TituloTarjeta>
-        {!sanidad.data?.length ? (
+      <Tarjeta id="sanidad" className="scroll-mt-6">
+        <TituloTarjeta detalle={`${num(sanidad.total)} registros`}>Sanidad</TituloTarjeta>
+        {!sanidad.filas.length ? (
           <Vacio>Sin enfermedades, tratamientos ni vacunas registrados.</Vacio>
         ) : (
           <div className="overflow-x-auto">
@@ -316,7 +357,7 @@ export default async function FichaAnimal({ params }: PageProps<"/animales/[id]"
                 </tr>
               </thead>
               <tbody>
-                {sanidad.data.map((s) => (
+                {sanidad.filas.map((s) => (
                   <tr key={s.id}>
                     <td>{fecha(s.fecha)}</td>
                     <td>{TIPOS_SANITARIOS[s.tipo]}</td>
@@ -339,11 +380,21 @@ export default async function FichaAnimal({ params }: PageProps<"/animales/[id]"
             </table>
           </div>
         )}
+        <Paginacion
+          ruta={`/animales/${id}`}
+          searchParams={sp}
+          param="psan"
+          pagina={sanidad.pagina.pagina}
+          tamano={sanidad.pagina.tamano}
+          total={sanidad.total}
+          etiqueta="Páginas del historial de sanidad"
+          ancla="sanidad"
+        />
       </Tarjeta>
 
-      {(bajas.data?.length ?? 0) > 0 && (
-        <Tarjeta>
-          <TituloTarjeta>Bajas</TituloTarjeta>
+      {bajas.total > 0 && (
+        <Tarjeta id="bajas" className="scroll-mt-6">
+          <TituloTarjeta detalle={bajas.total > 1 ? `${num(bajas.total)} registros` : undefined}>Bajas</TituloTarjeta>
           <div className="overflow-x-auto">
             <table className="matriz w-full border-collapse bg-white text-sm">
               <thead>
@@ -356,7 +407,7 @@ export default async function FichaAnimal({ params }: PageProps<"/animales/[id]"
                 </tr>
               </thead>
               <tbody>
-                {bajas.data!.map((b) => (
+                {bajas.filas.map((b) => (
                   <tr key={b.id}>
                     <td>{fecha(b.fecha)}</td>
                     <td>{TIPOS_BAJA[b.tipo]}</td>
@@ -368,6 +419,16 @@ export default async function FichaAnimal({ params }: PageProps<"/animales/[id]"
               </tbody>
             </table>
           </div>
+          <Paginacion
+            ruta={`/animales/${id}`}
+            searchParams={sp}
+            param="pbajas"
+            pagina={bajas.pagina.pagina}
+            tamano={bajas.pagina.tamano}
+            total={bajas.total}
+            etiqueta="Páginas de bajas"
+            ancla="bajas"
+          />
         </Tarjeta>
       )}
     </div>

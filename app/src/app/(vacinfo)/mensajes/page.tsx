@@ -4,11 +4,15 @@ import { obtenerSesion, ETIQUETA_ROL, ROLES_GESTORES, type Rol } from "@/lib/ses
 import { corteDeFinca } from "@/lib/datos";
 import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
 import { fecha } from "@/lib/formato";
+import { consultarPagina, leerPagina } from "@/lib/paginacion";
 import { Encabezado, Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { Paginacion } from "@/components/paginacion";
 import { cambiarEstadoComentario, marcarMensajeLeido } from "./actions";
 import { FormularioMensaje } from "./formulario-mensaje";
 
 export const metadata = { title: "Mensajes" };
+
+const POR_PAGINA = 20;
 
 const URGENCIAS = [
   { id: "alta", titulo: "Urgente", tono: "rojo", clase: "border-alerta/25 bg-[#fbe9e5]" },
@@ -22,11 +26,12 @@ const ETIQUETA_ESTADO = { nuevo: "Nuevo", leido: "Leído", resuelto: "Resuelto" 
 
 const fechaHora = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Bogota" });
 
-export default async function MensajesPage() {
+export default async function MensajesPage({ searchParams }: PageProps<"/mensajes">) {
+  const sp = await searchParams;
   const { supabase, user, rol, organizacionId, fincas } = await obtenerSesion();
   const esGestor = ROLES_GESTORES.includes(rol);
 
-  const [alertasPorFinca, { data: comentarios }, { data: mensajes }, { data: miembros }] = await Promise.all([
+  const [alertasPorFinca, comentarios, mensajes, { data: miembros }, { count: pendientes }] = await Promise.all([
     Promise.all(
       fincas.map(async (f) => {
         const corte = await corteDeFinca(supabase, f.id);
@@ -34,19 +39,30 @@ export default async function MensajesPage() {
         return (data ?? []).map((a) => ({ ...a, finca: f.nombre, corte }));
       }),
     ),
-    supabase
-      .from("comentarios")
-      .select("id, mensaje, urgencia, estado, registrado_por, registrado_en, fincas(nombre)")
-      .eq("organizacion_id", organizacionId)
-      .order("registrado_en", { ascending: false })
-      .limit(50),
-    supabase
-      .from("mensajes")
-      .select("id, texto, remitente_id, destinatario_id, leido, creado_en")
-      .eq("organizacion_id", organizacionId)
-      .order("creado_en", { ascending: false })
-      .limit(50),
+    consultarPagina(
+      (desde, hasta) =>
+        supabase
+          .from("comentarios")
+          .select("id, mensaje, urgencia, estado, registrado_por, registrado_en, fincas(nombre)", { count: "exact" })
+          .eq("organizacion_id", organizacionId)
+          .order("registrado_en", { ascending: false })
+          .order("id")
+          .range(desde, hasta),
+      leerPagina(sp, { param: "pcom", tamano: POR_PAGINA }),
+    ),
+    consultarPagina(
+      (desde, hasta) =>
+        supabase
+          .from("mensajes")
+          .select("id, texto, remitente_id, destinatario_id, leido, creado_en", { count: "exact" })
+          .eq("organizacion_id", organizacionId)
+          .order("creado_en", { ascending: false })
+          .order("id")
+          .range(desde, hasta),
+      leerPagina(sp, { param: "pmen", tamano: POR_PAGINA }),
+    ),
     supabase.from("miembros").select("usuario_id, rol").eq("organizacion_id", organizacionId),
+    supabase.from("comentarios").select("id", { count: "exact", head: true }).eq("organizacion_id", organizacionId).eq("estado", "nuevo"),
   ]);
 
   const ids = (miembros ?? []).map((m) => m.usuario_id);
@@ -59,8 +75,6 @@ export default async function MensajesPage() {
     .filter((m) => m.usuario_id !== user.id)
     .map((m) => ({ id: m.usuario_id, nombre: nombre(m.usuario_id), rol: ETIQUETA_ROL[m.rol as Rol] }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-
-  const pendientes = (comentarios ?? []).filter((c) => c.estado === "nuevo").length;
 
   return (
     <div className="space-y-7">
@@ -116,17 +130,17 @@ export default async function MensajesPage() {
         </Tarjeta>
 
         <div className="space-y-5">
-          <Tarjeta>
+          <Tarjeta id="comentarios" className="scroll-mt-6">
             <TituloTarjeta detalle={pendientes ? `${pendientes} sin leer` : undefined}>
               <span className="inline-flex items-center gap-2">
                 <MessageSquareText className="h-5 w-5" aria-hidden /> Comentarios del equipo
               </span>
             </TituloTarjeta>
-            {(comentarios ?? []).length === 0 ? (
+            {comentarios.filas.length === 0 ? (
               <Vacio>Nadie ha enviado comentarios desde VacDaTa.</Vacio>
             ) : (
               <ul className="divide-y divide-[#d6ddcf]">
-                {(comentarios ?? []).map((c) => (
+                {comentarios.filas.map((c) => (
                   <li key={c.id} className={clsx("py-3", c.estado === "resuelto" && "opacity-70")}>
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <strong className="text-bosque">{nombre(c.registrado_por)}</strong>
@@ -160,17 +174,28 @@ export default async function MensajesPage() {
                 ))}
               </ul>
             )}
+            <Paginacion
+              ruta="/mensajes"
+              searchParams={sp}
+              param="pcom"
+              pagina={comentarios.pagina.pagina}
+              tamano={comentarios.pagina.tamano}
+              total={comentarios.total}
+              unidad="comentarios"
+              etiqueta="Páginas de comentarios"
+              ancla="comentarios"
+            />
           </Tarjeta>
 
-          <Tarjeta>
+          <Tarjeta id="mensajes-equipo" className="scroll-mt-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-display text-xl font-bold text-bosque">Mensajes</h2>
             </div>
-            {(mensajes ?? []).length === 0 ? (
+            {mensajes.filas.length === 0 ? (
               <Vacio>Todavía no hay mensajes.</Vacio>
             ) : (
               <ul className="divide-y divide-[#d6ddcf]">
-                {(mensajes ?? []).map((m) => {
+                {mensajes.filas.map((m) => {
                   const paraMi = m.destinatario_id === user.id;
                   const mio = m.remitente_id === user.id;
                   return (
@@ -197,6 +222,17 @@ export default async function MensajesPage() {
                 })}
               </ul>
             )}
+            <Paginacion
+              ruta="/mensajes"
+              searchParams={sp}
+              param="pmen"
+              pagina={mensajes.pagina.pagina}
+              tamano={mensajes.pagina.tamano}
+              total={mensajes.total}
+              unidad="mensajes"
+              etiqueta="Páginas de mensajes"
+              ancla="mensajes-equipo"
+            />
             <div className="mt-5">
               {soloLectura(rol) ? <p className="text-sm text-tinta-suave">{MENSAJE_SOLO_LECTURA}</p> : <FormularioMensaje miembros={opciones} />}
             </div>

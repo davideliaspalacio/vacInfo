@@ -1,10 +1,13 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRightLeft, CalendarDays, Lightbulb, LogOut, Settings2 } from "lucide-react";
 import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, num } from "@/lib/formato";
+import { consultarPagina, leerPagina } from "@/lib/paginacion";
 import { BotonVolver, Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { Paginacion } from "@/components/paginacion";
 import { guardarReglasFinca } from "@/app/(vacinfo)/fincas/actions";
 import { ESTADOS_POTRERO, gruposDeFinca, nombrePotrero } from "@/components/potreros/rotacion";
 import { APLICACIONES, TarjetaPotrero } from "@/components/potreros/tarjeta-potrero";
@@ -19,6 +22,8 @@ import { crearPotreros, guardarPotrero, moverGrupo, sacarGrupo } from "./actions
 
 export const metadata = { title: "Potreros" };
 
+const ROTACIONES_POR_PAGINA = 40;
+
 export default async function PotrerosFinca({ params, searchParams }: PageProps<"/fincas/[id]/potreros">) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const pedido = typeof sp.corte === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.corte) ? sp.corte : null;
@@ -30,16 +35,21 @@ export default async function PotrerosFinca({ params, searchParams }: PageProps<
   if (!finca) notFound();
 
   const corte = await corteDeFinca(supabase, id, pedido);
-  const [{ data: estados }, { data: rotaciones }, { data: aplicaciones }, grupos] = await Promise.all([
+  const [{ data: estados }, rotaciones, { data: aplicaciones }, grupos] = await Promise.all([
     supabase.rpc("estado_potreros", { p_finca: id, p_corte: corte }),
-    supabase
-      .from("rotaciones_potrero")
-      .select("id, grupo, animales, fecha_entrada, fecha_salida, observaciones, potreros(numero, nombre)")
-      .eq("finca_id", id)
-      .lte("fecha_entrada", corte)
-      .order("fecha_entrada", { ascending: false })
-      .order("registrado_en", { ascending: false })
-      .limit(40),
+    consultarPagina(
+      (desde, hasta) =>
+        supabase
+          .from("rotaciones_potrero")
+          .select("id, grupo, animales, fecha_entrada, fecha_salida, observaciones, potreros(numero, nombre)", { count: "exact" })
+          .eq("finca_id", id)
+          .lte("fecha_entrada", corte)
+          .order("fecha_entrada", { ascending: false })
+          .order("registrado_en", { ascending: false })
+          .order("id")
+          .range(desde, hasta),
+      leerPagina(sp, { param: "prot", tamano: ROTACIONES_POR_PAGINA }),
+    ),
     supabase
       .from("aplicaciones_campo")
       .select("id, fecha, tipo, producto, potreros, potrero_ids, dias_retiro_pastoreo")
@@ -142,7 +152,15 @@ export default async function PotrerosFinca({ params, searchParams }: PageProps<
           </Tarjeta>
 
           <Tarjeta>
-            <TituloTarjeta>Aplicaciones recientes</TituloTarjeta>
+            <TituloTarjeta
+              detalle={
+                <Link href={`/fincas/${id}?tab=historial`} className="font-bold text-pasto-oscuro hover:underline">
+                  Ver historial
+                </Link>
+              }
+            >
+              Aplicaciones recientes
+            </TituloTarjeta>
             {!aplicaciones?.length ? (
               <p className="text-sm text-tinta-suave">Sin fumigaciones ni abonos registrados.</p>
             ) : (
@@ -201,9 +219,9 @@ export default async function PotrerosFinca({ params, searchParams }: PageProps<
         </div>
       )}
 
-      <Tarjeta>
-        <TituloTarjeta detalle="Últimas 40">Historial de rotaciones</TituloTarjeta>
-        {!rotaciones?.length ? (
+      <Tarjeta id="rotaciones" className="scroll-mt-6">
+        <TituloTarjeta detalle={rotaciones.total ? `${num(rotaciones.total)} rotaciones` : undefined}>Historial de rotaciones</TituloTarjeta>
+        {!rotaciones.filas.length ? (
           <Vacio>Sin rotaciones registradas.</Vacio>
         ) : (
           <div className="overflow-x-auto">
@@ -220,7 +238,7 @@ export default async function PotrerosFinca({ params, searchParams }: PageProps<
                 </tr>
               </thead>
               <tbody>
-                {rotaciones.map((r) => {
+                {rotaciones.filas.map((r) => {
                   const hasta = r.fecha_salida && r.fecha_salida <= corte ? r.fecha_salida : corte;
                   const dias = Math.round((Date.parse(`${hasta}T12:00:00`) - Date.parse(`${r.fecha_entrada}T12:00:00`)) / 86400000);
                   const abierta = !r.fecha_salida || r.fecha_salida > corte;
@@ -240,6 +258,17 @@ export default async function PotrerosFinca({ params, searchParams }: PageProps<
             </table>
           </div>
         )}
+        <Paginacion
+          ruta={`/fincas/${id}/potreros`}
+          searchParams={sp}
+          param="prot"
+          pagina={rotaciones.pagina.pagina}
+          tamano={rotaciones.pagina.tamano}
+          total={rotaciones.total}
+          unidad="rotaciones"
+          etiqueta="Páginas del historial de rotaciones"
+          ancla="rotaciones"
+        />
       </Tarjeta>
 
       {gestor && (

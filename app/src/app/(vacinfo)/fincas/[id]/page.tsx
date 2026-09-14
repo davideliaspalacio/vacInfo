@@ -5,6 +5,7 @@ import { Calculator, CalendarDays, FilePlus2, MapPin, Pencil, Wrench } from "luc
 import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { fecha, litros, num, pesos } from "@/lib/formato";
+import type { Params } from "@/lib/paginacion";
 import { BotonVolver, Encabezado, Metrica, Tarjeta } from "@/components/ui";
 import { alertasDeFinca, resumenAlCorte } from "@/components/fincas/consultas";
 import { Bloque, EsqueletoMetricas, EsqueletoTabla } from "@/components/fincas/esqueletos";
@@ -116,7 +117,7 @@ export default async function FichaFinca({ params, searchParams }: PageProps<"/f
       <Pestanas activa={tab} fincaId={id} opciones={PESTANAS.map((p) => ({ ...p, href: enlace(p.valor), cuenta: cuentas[p.valor] }))} />
 
       <Suspense key={`${tab}-${pedido ?? ""}`} fallback={<EsqueletoTabla />}>
-        <SeccionFinca tab={tab} fincaId={id} nombre={finca.nombre} datos={datos} />
+        <SeccionFinca tab={tab} fincaId={id} nombre={finca.nombre} datos={datos} searchParams={sp} />
       </Suspense>
     </div>
   );
@@ -167,16 +168,18 @@ function EsqueletoResumen() {
   );
 }
 
-async function SeccionFinca({ tab, fincaId, nombre, datos }: { tab: Pestana; fincaId: string; nombre: string; datos: DatosCorte }) {
+type PropsSeccion = { tab: Pestana; fincaId: string; nombre: string; datos: DatosCorte; searchParams: Params };
+
+async function SeccionFinca({ tab, fincaId, nombre, datos, searchParams }: PropsSeccion) {
   switch (tab) {
     case "bienes":
-      return <SeccionBienes fincaId={fincaId} />;
+      return <SeccionBienes fincaId={fincaId} searchParams={searchParams} />;
     case "arbol":
       return <ArbolElementos fincaId={fincaId} nombre={nombre} />;
     case "historial":
-      return <HistorialServicios fincaId={fincaId} />;
+      return <HistorialServicios fincaId={fincaId} searchParams={searchParams} />;
   }
   const { corte } = await datos;
   if (tab === "alertas") return <SeccionAlertas alertas={await alertasDeFinca(fincaId, corte)} corte={corte} />;
-  return <SeccionAnimales fincaId={fincaId} corte={corte} />;
+  return <SeccionAnimales fincaId={fincaId} corte={corte} searchParams={searchParams} />;
 }

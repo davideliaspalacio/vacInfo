@@ -827,6 +827,30 @@ export type Database = {
           },
         ]
       }
+      limites_uso: {
+        Row: {
+          bloqueado_hasta: string | null
+          clave: string
+          conteo: number
+          vence_en: string
+          ventana_inicio: string
+        }
+        Insert: {
+          bloqueado_hasta?: string | null
+          clave: string
+          conteo?: number
+          vence_en?: string
+          ventana_inicio?: string
+        }
+        Update: {
+          bloqueado_hasta?: string | null
+          clave?: string
+          conteo?: number
+          vence_en?: string
+          ventana_inicio?: string
+        }
+        Relationships: []
+      }
       mantenimientos: {
         Row: {
           bien_id: string | null
@@ -1644,6 +1668,20 @@ export type Database = {
           vacas_ordeno: number
         }[]
       }
+      consumir_limite: {
+        Args: {
+          p_bloqueo_segundos?: number
+          p_clave: string
+          p_consumir?: boolean
+          p_maximo: number
+          p_ventana_segundos: number
+        }
+        Returns: {
+          permitido: boolean
+          reintentar_en: number
+          restantes: number
+        }[]
+      }
       crear_organizacion: {
         Args: { p_nit?: string; p_nombre: string }
         Returns: string
@@ -1778,6 +1816,7 @@ export type Database = {
         Args: { p_cria?: Json; p_parto: Json }
         Returns: string
       }
+      reiniciar_limite: { Args: { p_clave: string }; Returns: undefined }
       resumen_finca: {
         Args: { p_corte?: string; p_finca: string }
         Returns: {

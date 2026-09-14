@@ -554,6 +554,45 @@ supabase db push
 - **Auditoría**: cada evento guarda quién y cuándo lo registró.
 - **Credenciales**: `.env*` y `entregables/` están en `.gitignore`. La llave publicable es pública por diseño; la secreta nunca va al cliente.
 
+### Rate limiting
+
+Implementado en Postgres (sin servicios externos ni variables nuevas): tabla `limites_uso` (claves en sha256, sin acceso directo) y función `consumir_limite()` (`20260914000010_rate_limit.sql`). El ayudante `src/lib/limites.ts` falla en abierto si la base no responde.
+
+```mermaid
+flowchart LR
+    R["Petición"] --> L["limitar(clave, regla)"]
+    L --> F["consumir_limite()<br/>ventana fija por clave"]
+    F -->|permitido| OK["Continúa"]
+    F -->|excedido| NO["429 + Retry-After<br/>o mensaje en el formulario"]
+    F -. error de la base .-> OK
+```
+
+| Dónde | Clave | Límite |
+|---|---|---|
+| Login | IP | 30 intentos / 15 min |
+| Login | cuenta (solo fallos) | 5 / 15 min, luego bloqueo 15 min; un acceso correcto reinicia |
+| Registro y cuenta nueva por invitación | IP | 5 / hora |
+| Consultar código de invitación | IP | 20 / 15 min |
+| Aceptar invitación | usuario e IP | 10 / hora |
+| Crear empresa | usuario | 3 / día |
+| `/api/campo/sincronizar` | usuario | 60 / min, cuerpo ≤ 1 MB (413), ≤ 100 registros |
+| `/api/campo/catalogo` · `/api/campo/mensajes` | usuario | 20 / min · 60 / min |
+| Importar Excel | usuario | 10 / hora |
+
+VacDaTa trata el 429 como “reintentar más tarde”: los registros siguen pendientes y respeta `Retry-After`.
+
+**Supabase Auth en la nube:** como el login se hace desde los servidores de Vercel, los límites de Auth por IP se comparten entre todos los usuarios; se subieron a 1.800 renovaciones/5 min y 300 registros/verificaciones/5 min. La protección fina por persona la da la capa propia. Siguiente paso: `Sb-Forwarded-For`.
+
+### Cabeceras de seguridad
+
+`next.config.ts` envía `Content-Security-Policy` (sin orígenes externos salvo Supabase), `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` (cámara solo para “Escanear chapeta”) y `Strict-Transport-Security` en producción.
+
+### Paginación
+
+Todas las listas que crecen se paginan en la base con `.range()` y conteo exacto (`src/lib/paginacion.ts`, `src/components/paginacion.tsx`): fincas (12), animales de la finca (50), bienes, historial de servicios (varias tablas unidas), historial reproductivo y sanitario del animal, mantenimientos, movimientos y consumos de inventario, comentarios y mensajes, equipo e invitaciones, importaciones, rotaciones de potreros y grupos de levante. Cada lista usa su propio parámetro (`?pmov=`, `?pcom=`, …) y conserva los demás filtros.
+
+Verificación: `node scripts/qa/seguridad.mjs http://localhost:3100` (cabeceras, 429, 413 y bloqueo de login).
+
 ---
 
 ## 15. Documentación relacionada y hoja de ruta

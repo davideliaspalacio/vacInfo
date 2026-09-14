@@ -5,7 +5,9 @@ import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, num } from "@/lib/formato";
+import { leerPagina, recortar } from "@/lib/paginacion";
 import { BotonVolver, Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { Paginacion } from "@/components/paginacion";
 import { guardarReglasFinca } from "@/app/(vacinfo)/fincas/actions";
 import { ESTADOS_LEVANTE, tonoGanancia, type EstadoLevante } from "@/components/levante/etiquetas";
 import { FormularioDestete, FormularioPesaje, FormularioReglasLevante } from "@/components/levante/formularios-levante";
@@ -13,6 +15,8 @@ import { SeccionCrecimiento } from "@/components/levante/seccion-crecimiento";
 import { registrarDestete, registrarPesaje } from "./actions";
 
 export const metadata = { title: "Levante" };
+
+const POR_GRUPO = 50;
 
 const GRUPOS: { clave: string; titulo: string; estados: EstadoLevante[]; vacio: string }[] = [
   { clave: "lactante", titulo: "Terneras lactantes", estados: ["lactante"], vacio: "No hay crías lactantes." },
@@ -47,9 +51,10 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
     : [];
 
   const cuenta = (...estados: string[]) => filas.filter((f) => estados.includes(f.estado)).length;
+  // Conserva corte y páginas de los grupos al abrir o cerrar la curva de un animal.
   const enlace = (extra: Record<string, string | undefined>) => {
     const q = new URLSearchParams();
-    if (pedido) q.set("corte", pedido);
+    for (const [k, v] of Object.entries(sp)) if (!(k in extra) && typeof v === "string") q.set(k, v);
     for (const [k, v] of Object.entries(extra)) if (v) q.set(k, v);
     const s = q.toString();
     return `/fincas/${id}/levante${s ? `?${s}` : ""}`;
@@ -94,7 +99,7 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
         <Tarjeta id="crecimiento">
           <TituloTarjeta
             detalle={
-              <Link href={enlace({})} scroll={false} className="font-bold text-bosque hover:underline">
+              <Link href={enlace({ animal: undefined })} scroll={false} className="font-bold text-bosque hover:underline">
                 Cerrar
               </Link>
             }
@@ -149,10 +154,16 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
       )}
 
       {GRUPOS.map((g) => {
-        const grupo = filas.filter((f) => g.estados.includes(f.estado as EstadoLevante));
+        // levante_finca devuelve todo el levante (hace falta para los conteos y formularios); aquí solo se pinta una página por grupo.
+        const param = `p${g.clave}`;
+        const ancla = `grupo-${g.clave}`;
+        const { filas: grupo, total, pagina } = recortar(
+          filas.filter((f) => g.estados.includes(f.estado as EstadoLevante)),
+          leerPagina(sp, { param, tamano: POR_GRUPO }),
+        );
         return (
-          <Tarjeta key={g.clave}>
-            <TituloTarjeta detalle={`${grupo.length} animales`}>{g.titulo}</TituloTarjeta>
+          <Tarjeta key={g.clave} id={ancla} className="scroll-mt-6">
+            <TituloTarjeta detalle={`${num(total)} animales`}>{g.titulo}</TituloTarjeta>
             {grupo.length === 0 ? (
               <Vacio>{g.vacio}</Vacio>
             ) : (
@@ -208,6 +219,17 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
                 </table>
               </div>
             )}
+            <Paginacion
+              ruta={`/fincas/${id}/levante`}
+              searchParams={sp}
+              param={param}
+              pagina={pagina.pagina}
+              tamano={pagina.tamano}
+              total={total}
+              unidad="animales"
+              etiqueta={`Páginas de ${g.titulo.toLowerCase()}`}
+              ancla={ancla}
+            />
           </Tarjeta>
         );
       })}

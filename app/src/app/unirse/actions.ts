@@ -8,6 +8,7 @@ import type { EstadoFormulario } from "@/components/fincas/campo";
 import { datosDe, textoRequerido } from "@/components/fincas/validacion";
 import { correoDeUsuario, errorUsuario, rutaInicio } from "@/components/registro/cuentas";
 import { clienteConToken, mensajeErrorCuenta } from "@/components/registro/servidor";
+import { REGLAS, bloqueado, ipCliente, limitar, mensajeLimite } from "@/lib/limites";
 
 const limpiarCodigo = (codigo: string) => codigo.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
 
@@ -41,9 +42,16 @@ export async function unirseConCuentaNueva(_: EstadoFormulario, formData: FormDa
   const { codigo, nombre, modo, usuario, correo, clave } = resultado.data;
 
   const supabase = await createClient();
+  const ip = await ipCliente();
+  const porCodigo = await limitar(supabase, ip, REGLAS.invitacionIp);
+  if (!porCodigo.permitido) return { mensaje: mensajeLimite(porCodigo.reintentarEn) };
+
   const { data: invitaciones } = await supabase.rpc("ver_invitacion", { p_codigo: codigo });
   const invitacion = invitaciones?.[0];
   if (!invitacion?.valida) return { mensaje: "El código ya venció o no es válido. Pide uno nuevo al administrador de la finca." };
+
+  const espera = bloqueado(...(await Promise.all([limitar(supabase, ip, REGLAS.registroIp), limitar(supabase, ip, REGLAS.aceptarIp)])));
+  if (espera) return { mensaje: mensajeLimite(espera.reintentarEn) };
 
   const email = modo === "usuario" ? correoDeUsuario(usuario ?? "") : (correo ?? "").trim().toLowerCase();
   const { data, error } = await supabase.auth.signUp({ email, password: clave, options: { data: { nombre_completo: nombre } } });
@@ -72,6 +80,11 @@ export async function aceptarInvitacion(codigoCrudo: string): Promise<EstadoAcep
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect(`/unirse?codigo=${codigo}`);
+
+  const espera = bloqueado(
+    ...(await Promise.all([limitar(supabase, user.id, REGLAS.aceptarUsuario), limitar(supabase, await ipCliente(), REGLAS.aceptarIp)])),
+  );
+  if (espera) return { error: mensajeLimite(espera.reintentarEn) };
 
   const { error } = await supabase.rpc("aceptar_invitacion", { p_codigo: codigo });
   if (error) return { error: error.code === "P0001" ? error.message : "No pudimos unirte al equipo. Intenta de nuevo." };

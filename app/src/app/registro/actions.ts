@@ -8,6 +8,7 @@ import type { EstadoFormulario } from "@/components/fincas/campo";
 import { datosDe, mensajeErrorBD, numeroOpcional, textoOpcional, textoRequerido } from "@/components/fincas/validacion";
 import { ROLES_GESTORES, type Rol } from "@/components/equipo/roles";
 import { estadoRegistro, mensajeErrorCuenta } from "@/components/registro/servidor";
+import { REGLAS, ipCliente, limitar, mensajeLimite } from "@/lib/limites";
 
 const esquemaCuenta = z
   .object({
@@ -24,6 +25,9 @@ export async function crearCuenta(_: EstadoFormulario, formData: FormData): Prom
   const { nombre, correo, password } = resultado.data;
 
   const supabase = await createClient();
+  const limite = await limitar(supabase, await ipCliente(), REGLAS.registroIp);
+  if (!limite.permitido) return { mensaje: mensajeLimite(limite.reintentarEn) };
+
   const { data, error } = await supabase.auth.signUp({ email: correo, password, options: { data: { nombre_completo: nombre } } });
   if (error) return { mensaje: mensajeErrorCuenta(error, "correo") };
   if (!data.session) return { mensaje: "Te enviamos un correo para confirmar la cuenta. Confírmala e ingresa para continuar." };
@@ -41,6 +45,13 @@ export async function crearEmpresa(_: EstadoFormulario, formData: FormData): Pro
   if (!resultado.success) return { errores: z.flattenError(resultado.error).fieldErrors, mensaje: "Revisa los campos marcados." };
 
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/registro");
+  const limite = await limitar(supabase, user.id, REGLAS.organizacionUsuario);
+  if (!limite.permitido) return { mensaje: mensajeLimite(limite.reintentarEn) };
+
   const { error } = await supabase.rpc("crear_organizacion", { p_nombre: resultado.data.nombre, p_nit: resultado.data.nit ?? undefined });
   if (error) {
     if (error.message.includes("ya pertenece")) redirect("/registro/finca");

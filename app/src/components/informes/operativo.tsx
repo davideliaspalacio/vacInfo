@@ -62,6 +62,7 @@ export async function InformeOperativo({ supabase, rango, finca }: PropsInforme)
         .eq("animales.finca_id", fincaId)
         .lte("fecha", hasta)
         .order("fecha", { ascending: false })
+        .order("id")
         .range(a, b),
     ),
     todasLasFilas((a, b) =>

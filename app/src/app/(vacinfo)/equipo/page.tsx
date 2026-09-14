@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { obtenerSesion, ROLES_GESTORES, type Rol } from "@/lib/sesion";
+import { consultarPagina, leerPagina, recortar } from "@/lib/paginacion";
 import { Encabezado, Tarjeta, TituloTarjeta } from "@/components/ui";
+import { Paginacion } from "@/components/paginacion";
 import { CajaPlan } from "@/components/equipo/plan";
 import { TablaMiembros, type MiembroEquipo } from "@/components/equipo/miembros";
 import { FormularioInvitacion, ListaInvitaciones, type InvitacionLista } from "@/components/equipo/invitaciones";
@@ -9,31 +11,40 @@ import { usuarioDeCorreo } from "@/components/registro/cuentas";
 
 export const metadata: Metadata = { title: "Equipo" };
 
+const MIEMBROS_POR_PAGINA = 25;
+const INVITACIONES_POR_PAGINA = 10;
+
 const ORDEN_ROL: Record<Rol, number> = { propietario: 0, administrador: 1, mayordomo: 2, veterinario: 3, consultor: 4, trabajador: 5 };
 
-export default async function EquipoPage() {
+export default async function EquipoPage({ searchParams }: PageProps<"/equipo">) {
+  const sp = await searchParams;
   const sesion = await obtenerSesion();
   const { supabase, organizacionId } = sesion;
   const esGestor = ROLES_GESTORES.includes(sesion.rol);
 
-  const [{ data: filas }, consultaInvitaciones] = await Promise.all([
+  // RLS solo deja ver los perfiles de la propia organización, así no hace falta un `.in()` con cientos de ids.
+  const [{ data: filas }, { data: perfiles }, consultaInvitaciones] = await Promise.all([
     supabase.from("miembros").select("usuario_id, rol, fincas").eq("organizacion_id", organizacionId).order("creado_en"),
+    supabase.from("perfiles").select("id, nombre_completo"),
     esGestor
-      ? supabase
-          .from("invitaciones")
-          .select("id, codigo, rol, finca_id, usos, usos_max, expira_en")
-          .eq("organizacion_id", organizacionId)
-          .eq("activa", true)
-          .order("creado_en", { ascending: false })
-          .limit(50)
+      ? consultarPagina(
+          (desde, hasta) =>
+            supabase
+              .from("invitaciones")
+              .select("id, codigo, rol, finca_id, usos, usos_max, expira_en", { count: "exact" })
+              .eq("organizacion_id", organizacionId)
+              .eq("activa", true)
+              .order("creado_en", { ascending: false })
+              .order("id")
+              .range(desde, hasta),
+          leerPagina(sp, { param: "pinv", tamano: INVITACIONES_POR_PAGINA }),
+        )
       : null,
   ]);
 
-  const ids = (filas ?? []).map((f) => f.usuario_id);
-  const { data: perfiles } = ids.length ? await supabase.from("perfiles").select("id, nombre_completo").in("id", ids) : { data: [] };
   const nombrePorId = new Map((perfiles ?? []).map((p) => [p.id, p.nombre_completo]));
 
-  const miembros: MiembroEquipo[] = (filas ?? [])
+  const todos: MiembroEquipo[] = (filas ?? [])
     .map((f) => {
       const esYo = f.usuario_id === sesion.user.id;
       return {
@@ -45,13 +56,14 @@ export default async function EquipoPage() {
       };
     })
     .sort((a, b) => ORDEN_ROL[a.rol] - ORDEN_ROL[b.rol] || a.nombre.localeCompare(b.nombre, "es"));
+  const { filas: miembros, pagina: paginaMiembros } = recortar(todos, leerPagina(sp, { param: "pmiembros", tamano: MIEMBROS_POR_PAGINA }));
 
   const fincas = sesion.fincas.map((f) => ({ id: f.id, nombre: f.nombre }));
   const nombreFinca = new Map(fincas.map((f) => [f.id, f.nombre]));
   const origen = await origenActual();
 
   const invitaciones: InvitacionLista[] = await Promise.all(
-    (consultaInvitaciones?.data ?? []).map(async (inv) => {
+    (consultaInvitaciones?.filas ?? []).map(async (inv) => {
       const estado = estadoInvitacion(inv);
       const { enlace, svg } = await datosCodigo(inv.codigo, origen);
       return {
@@ -82,9 +94,20 @@ export default async function EquipoPage() {
       />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <Tarjeta>
-          <TituloTarjeta detalle={`${miembros.length} ${miembros.length === 1 ? "persona" : "personas"}`}>Miembros</TituloTarjeta>
+        <Tarjeta id="miembros" className="scroll-mt-6">
+          <TituloTarjeta detalle={`${todos.length} ${todos.length === 1 ? "persona" : "personas"}`}>Miembros</TituloTarjeta>
           <TablaMiembros miembros={miembros} fincas={fincas} yo={sesion.user.id} rolActor={sesion.rol} puedeGestionar={esGestor} />
+          <Paginacion
+            ruta="/equipo"
+            searchParams={sp}
+            param="pmiembros"
+            pagina={paginaMiembros.pagina}
+            tamano={paginaMiembros.tamano}
+            total={todos.length}
+            unidad="personas"
+            etiqueta="Páginas de miembros"
+            ancla="miembros"
+          />
         </Tarjeta>
         <Tarjeta className="self-start">
           <CajaPlan plan={sesion.plan} pruebaHasta={sesion.pruebaHasta} />
@@ -100,9 +123,22 @@ export default async function EquipoPage() {
             </p>
             <FormularioInvitacion fincas={fincas} />
           </Tarjeta>
-          <Tarjeta>
-            <TituloTarjeta detalle={invitaciones.length ? `${invitaciones.length} activas` : undefined}>Invitaciones activas</TituloTarjeta>
+          <Tarjeta id="invitaciones" className="scroll-mt-6">
+            <TituloTarjeta detalle={consultaInvitaciones?.total ? `${consultaInvitaciones.total} activas` : undefined}>Invitaciones activas</TituloTarjeta>
             <ListaInvitaciones invitaciones={invitaciones} />
+            {consultaInvitaciones && (
+              <Paginacion
+                ruta="/equipo"
+                searchParams={sp}
+                param="pinv"
+                pagina={consultaInvitaciones.pagina.pagina}
+                tamano={consultaInvitaciones.pagina.tamano}
+                total={consultaInvitaciones.total}
+                unidad="invitaciones"
+                etiqueta="Páginas de invitaciones"
+                ancla="invitaciones"
+              />
+            )}
           </Tarjeta>
         </div>
       )}

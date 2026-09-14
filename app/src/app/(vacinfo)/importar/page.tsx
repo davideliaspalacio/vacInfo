@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { fecha, num } from "@/lib/formato";
+import { consultarPagina, leerPagina } from "@/lib/paginacion";
 import { BotonVolver, Encabezado, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { Paginacion } from "@/components/paginacion";
 import { ImportadorExcel } from "@/components/importador/importador-excel";
 
 export const metadata = { title: "Importar Excel" };
@@ -15,18 +17,30 @@ type Resumen = {
 
 const fechaHora = new Intl.DateTimeFormat("es-CO", { dateStyle: "short", timeStyle: "short", timeZone: "America/Bogota" });
 
+const POR_PAGINA = 20;
+
 export default async function ImportarPage({ searchParams }: PageProps<"/importar">) {
-  const { finca } = await searchParams;
+  const sp = await searchParams;
+  const { finca } = sp;
   const { supabase, rol, fincas } = await obtenerSesion();
   const gestor = ROLES_GESTORES.includes(rol);
 
-  const { data: historial } = await supabase
-    .from("importaciones")
-    .select("id, finca_id, archivo, hojas, resumen, registrado_por, registrado_en, fincas(nombre)")
-    .order("registrado_en", { ascending: false })
-    .limit(30);
+  const {
+    filas: historial,
+    total,
+    pagina,
+  } = await consultarPagina(
+    (desde, hasta) =>
+      supabase
+        .from("importaciones")
+        .select("id, finca_id, archivo, hojas, resumen, registrado_por, registrado_en, fincas(nombre)", { count: "exact" })
+        .order("registrado_en", { ascending: false })
+        .order("id")
+        .range(desde, hasta),
+    leerPagina(sp, { tamano: POR_PAGINA }),
+  );
 
-  const usuarios = [...new Set((historial ?? []).map((h) => h.registrado_por).filter((x): x is string => !!x))];
+  const usuarios = [...new Set(historial.map((h) => h.registrado_por).filter((x): x is string => !!x))];
   const { data: perfiles } = usuarios.length
     ? await supabase.from("perfiles").select("id, nombre_completo").in("id", usuarios)
     : { data: [] as { id: string; nombre_completo: string }[] };
@@ -62,9 +76,9 @@ export default async function ImportarPage({ searchParams }: PageProps<"/importa
         <ImportadorExcel key={fincaInicial} fincas={fincas.map((f) => ({ id: f.id, nombre: f.nombre }))} fincaInicial={fincaInicial} />
       )}
 
-      <Tarjeta>
-        <TituloTarjeta detalle={historial?.length ? `${historial.length} más recientes` : undefined}>Importaciones anteriores</TituloTarjeta>
-        {!historial?.length ? (
+      <Tarjeta id="importaciones" className="scroll-mt-6">
+        <TituloTarjeta detalle={total ? `${num(total)} en total` : undefined}>Importaciones anteriores</TituloTarjeta>
+        {!historial.length ? (
           <Vacio>Todavía no se ha importado ningún archivo.</Vacio>
         ) : (
           <div className="overflow-x-auto">
@@ -113,6 +127,16 @@ export default async function ImportarPage({ searchParams }: PageProps<"/importa
             </table>
           </div>
         )}
+        <Paginacion
+          ruta="/importar"
+          searchParams={sp}
+          pagina={pagina.pagina}
+          tamano={pagina.tamano}
+          total={total}
+          unidad="importaciones"
+          etiqueta="Páginas de importaciones"
+          ancla="importaciones"
+        />
       </Tarjeta>
     </div>
   );

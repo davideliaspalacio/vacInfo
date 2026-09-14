@@ -2,20 +2,35 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BellRing, Pencil } from "lucide-react";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
-import { fecha, hoyISO } from "@/lib/formato";
+import { fecha, hoyISO, num } from "@/lib/formato";
+import { consultarPagina, leerPagina } from "@/lib/paginacion";
 import { BotonVolver, Encabezado, Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { Paginacion } from "@/components/paginacion";
 import { Dato } from "@/components/fincas/campo";
 import { CodigoQR } from "@/components/fincas/codigo-qr";
 import { ESTADOS_BIEN, TIPOS_BIEN, TIPOS_MANTENIMIENTO } from "@/components/fincas/etiquetas";
 
-export default async function FichaBien({ params }: PageProps<"/bienes/[id]">) {
-  const { id } = await params;
+const POR_PAGINA = 20;
+
+export default async function FichaBien({ params, searchParams }: PageProps<"/bienes/[id]">) {
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
   const { supabase, rol } = await obtenerSesion();
   const gestor = ROLES_GESTORES.includes(rol);
 
-  const [{ data: bien }, { data: mantenimientos }] = await Promise.all([
+  const [{ data: bien }, mantenimientos] = await Promise.all([
     supabase.from("bienes").select("*, fincas(id, nombre)").eq("id", id).maybeSingle(),
-    supabase.from("mantenimientos").select("*").eq("bien_id", id).order("fecha", { ascending: false }),
+    consultarPagina(
+      (desde, hasta) =>
+        supabase
+          .from("mantenimientos")
+          .select("*", { count: "exact" })
+          .eq("bien_id", id)
+          .order("fecha", { ascending: false })
+          .order("registrado_en", { ascending: false })
+          .order("id")
+          .range(desde, hasta),
+      leerPagina(sp, { tamano: POR_PAGINA }),
+    ),
   ]);
   if (!bien) notFound();
 
@@ -79,9 +94,9 @@ export default async function FichaBien({ params }: PageProps<"/bienes/[id]">) {
         </Tarjeta>
       </div>
 
-      <Tarjeta>
-        <TituloTarjeta detalle={`${mantenimientos?.length ?? 0} registros`}>Historial de mantenimientos</TituloTarjeta>
-        {!mantenimientos?.length ? (
+      <Tarjeta id="mantenimientos" className="scroll-mt-6">
+        <TituloTarjeta detalle={`${num(mantenimientos.total)} registros`}>Historial de mantenimientos</TituloTarjeta>
+        {!mantenimientos.filas.length ? (
           <Vacio>Este bien aún no tiene mantenimientos registrados.</Vacio>
         ) : (
           <div className="overflow-x-auto">
@@ -97,7 +112,7 @@ export default async function FichaBien({ params }: PageProps<"/bienes/[id]">) {
                 </tr>
               </thead>
               <tbody>
-                {mantenimientos.map((m) => (
+                {mantenimientos.filas.map((m) => (
                   <tr key={m.id}>
                     <td>{fecha(m.fecha)}</td>
                     <td>{TIPOS_MANTENIMIENTO[m.tipo]}</td>
@@ -111,6 +126,15 @@ export default async function FichaBien({ params }: PageProps<"/bienes/[id]">) {
             </table>
           </div>
         )}
+        <Paginacion
+          ruta={`/bienes/${id}`}
+          searchParams={sp}
+          pagina={mantenimientos.pagina.pagina}
+          tamano={mantenimientos.pagina.tamano}
+          total={mantenimientos.total}
+          etiqueta="Páginas del historial de mantenimientos"
+          ancla="mantenimientos"
+        />
       </Tarjeta>
     </div>
   );

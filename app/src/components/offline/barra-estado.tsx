@@ -4,6 +4,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { CloudOff, RefreshCw, Wifi } from "lucide-react";
 import { fechaHora } from "@/lib/offline/resumen";
+import { esAvisoDeEspera } from "@/lib/offline/cliente";
 import type { Problema } from "./hooks";
 
 export function BarraEstado({
@@ -48,7 +49,13 @@ export function BarraEstado({
         </button>
       </div>
       {problema && problema.tipo !== "sin-conexion" && (
-        <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-800">
+        <p
+          role={esAvisoDeEspera(problema.texto) ? "status" : "alert"}
+          className={clsx(
+            "mt-3 rounded-xl p-3 text-sm font-semibold",
+            esAvisoDeEspera(problema.texto) ? "bg-amber-50 text-amber-800" : "bg-red-50 text-red-800",
+          )}
+        >
           {problema.texto}
           {problema.tipo === "sin-sesion" && (
             <Link href="/login" className="ml-1 underline underline-offset-4">

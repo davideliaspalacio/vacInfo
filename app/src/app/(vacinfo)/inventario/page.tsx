@@ -3,7 +3,9 @@ import { obtenerSesion, ROLES_GESTORES, type Sesion } from "@/lib/sesion";
 import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, hoyISO, num, pesos } from "@/lib/formato";
+import { consultarPagina, leerPagina } from "@/lib/paginacion";
 import { Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { Paginacion } from "@/components/paginacion";
 import { fechaValida, fincaElegida, uno } from "@/components/inventario/comun";
 import { TablaSaldos, type Saldo } from "@/components/inventario/tabla-saldos";
 import { FormularioMovimiento } from "@/components/inventario/formulario-movimiento";
@@ -13,6 +15,8 @@ import type { ReglaConsumo } from "@/components/inventario/consumo";
 import type { Insumo } from "@/components/inventario/opciones";
 
 export const metadata = { title: "Inventario" };
+
+const POR_PAGINA = 30;
 
 /** Corte por defecto: el de la finca, pero sin dejar por fuera movimientos o consumos registrados después. */
 async function corteInventario(supabase: Sesion["supabase"], fincaId: string, hoy: string) {
@@ -46,7 +50,7 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
   const gestor = ROLES_GESTORES.includes(rol);
   const lectura = soloLectura(rol);
 
-  const [{ data: saldosData, error: errorSaldos }, { data: insumosData }, { data: movimientos }, { data: consumos }, { data: reglasData }, { data: animalesDia }] =
+  const [{ data: saldosData, error: errorSaldos }, { data: insumosData }, movimientos, consumos, { data: reglasData }, { data: animalesDia }] =
     await Promise.all([
       supabase.rpc("saldo_insumos", { p_finca: finca.id, p_corte: corte }),
       supabase
@@ -54,21 +58,31 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
         .select("id, nombre, categoria, unidad, contenido, precio, stock_minimo, consumo_diario_fuente")
         .eq("organizacion_id", organizacionId)
         .order("nombre"),
-      supabase
-        .from("movimientos_insumos")
-        .select("id, insumo_id, producto, fecha, hora, tipo, cantidad, entrega, recibe")
-        .eq("finca_id", finca.id)
-        .lte("fecha", corte)
-        .order("fecha", { ascending: false })
-        .order("registrado_en", { ascending: false })
-        .limit(30),
-      supabase
-        .from("consumos_diarios")
-        .select("id, fecha, kg_concentrado_vacas, kg_sal_vacas, kg_concentrado_terneras, kg_sal_terneras")
-        .eq("finca_id", finca.id)
-        .lte("fecha", corte)
-        .order("fecha", { ascending: false })
-        .limit(30),
+      consultarPagina(
+        (desde, hasta) =>
+          supabase
+            .from("movimientos_insumos")
+            .select("id, insumo_id, producto, fecha, hora, tipo, cantidad, entrega, recibe", { count: "exact" })
+            .eq("finca_id", finca.id)
+            .lte("fecha", corte)
+            .order("fecha", { ascending: false })
+            .order("registrado_en", { ascending: false })
+            .order("id")
+            .range(desde, hasta),
+        leerPagina(sp, { param: "pmov", tamano: POR_PAGINA }),
+      ),
+      consultarPagina(
+        (desde, hasta) =>
+          supabase
+            .from("consumos_diarios")
+            .select("id, fecha, kg_concentrado_vacas, kg_sal_vacas, kg_concentrado_terneras, kg_sal_terneras", { count: "exact" })
+            .eq("finca_id", finca.id)
+            .lte("fecha", corte)
+            .order("fecha", { ascending: false })
+            .order("id")
+            .range(desde, hasta),
+        leerPagina(sp, { param: "pcons", tamano: POR_PAGINA }),
+      ),
       supabase
         .from("consumos_programados")
         .select("id, insumo_id, modo, cantidad, en_kg, periodo, grupo, desde, hasta, activo, notas")
@@ -191,9 +205,9 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
           </Tarjeta>
         )}
 
-        <Tarjeta>
-          <TituloTarjeta detalle="Últimos 30">Movimientos recientes</TituloTarjeta>
-          {!movimientos?.length ? (
+        <Tarjeta id="movimientos" className="scroll-mt-6">
+          <TituloTarjeta detalle={`${num(movimientos.total)} hasta el ${fecha(corte)}`}>Movimientos</TituloTarjeta>
+          {!movimientos.filas.length ? (
             <Vacio>No hay movimientos hasta el {fecha(corte, true)}.</Vacio>
           ) : (
             <div className="max-h-[28rem] overflow-auto">
@@ -208,7 +222,7 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
                   </tr>
                 </thead>
                 <tbody>
-                  {movimientos.map((m) => (
+                  {movimientos.filas.map((m) => (
                     <tr key={m.id} className="border-b border-tinta/10">
                       <td className="py-2 pr-2 tabular-nums">
                         {fecha(m.fecha)}
@@ -229,12 +243,23 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
               </table>
             </div>
           )}
+          <Paginacion
+            ruta="/inventario"
+            searchParams={sp}
+            param="pmov"
+            pagina={movimientos.pagina.pagina}
+            tamano={movimientos.pagina.tamano}
+            total={movimientos.total}
+            unidad="movimientos"
+            etiqueta="Páginas de movimientos"
+            ancla="movimientos"
+          />
         </Tarjeta>
       </div>
 
-      <Tarjeta>
-        <TituloTarjeta detalle="Kilos registrados en VacDaTa · últimos 30 días con registro">Consumos diarios</TituloTarjeta>
-        {!consumos?.length ? (
+      <Tarjeta id="consumos" className="scroll-mt-6">
+        <TituloTarjeta detalle={`Kilos registrados en VacDaTa · ${num(consumos.total)} días con registro`}>Consumos diarios</TituloTarjeta>
+        {!consumos.filas.length ? (
           <Vacio>No hay consumos diarios registrados hasta el {fecha(corte, true)}.</Vacio>
         ) : (
           <div className="max-h-80 overflow-auto">
@@ -249,7 +274,7 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
                 </tr>
               </thead>
               <tbody>
-                {consumos.map((c) => (
+                {consumos.filas.map((c) => (
                   <tr key={c.id} className="border-b border-tinta/10 tabular-nums">
                     <td className="py-1.5 pr-2">{fecha(c.fecha)}</td>
                     <td className="px-2 py-1.5 text-right">{kg(c.kg_concentrado_vacas)}</td>
@@ -262,6 +287,17 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
             </table>
           </div>
         )}
+        <Paginacion
+          ruta="/inventario"
+          searchParams={sp}
+          param="pcons"
+          pagina={consumos.pagina.pagina}
+          tamano={consumos.pagina.tamano}
+          total={consumos.total}
+          unidad="días"
+          etiqueta="Páginas de consumos diarios"
+          ancla="consumos"
+        />
       </Tarjeta>
 
       {gestor && (

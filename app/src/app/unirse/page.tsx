@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { REGLAS, ipCliente, limitar, mensajeLimite } from "@/lib/limites";
 import { ETIQUETA_ROL, type Rol } from "@/components/equipo/roles";
 import { MarcoPublico } from "@/components/registro/marco";
 import { MensajeError } from "@/components/fincas/campo";
@@ -39,12 +40,15 @@ export default async function UnirsePage({ searchParams }: PageProps<"/unirse">)
   const codigo = (typeof crudo === "string" ? crudo : "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
 
   const supabase = await createClient();
+  // Cada búsqueda de código cuenta por IP: así no se pueden adivinar códigos probando muchos.
+  const limite = codigo ? await limitar(supabase, await ipCliente(), REGLAS.invitacionIp) : null;
+  const buscar = codigo && limite?.permitido;
   const [
     {
       data: { user },
     },
     consulta,
-  ] = await Promise.all([supabase.auth.getUser(), codigo ? supabase.rpc("ver_invitacion", { p_codigo: codigo }) : null]);
+  ] = await Promise.all([supabase.auth.getUser(), buscar ? supabase.rpc("ver_invitacion", { p_codigo: codigo }) : null]);
   const invitacion = consulta?.data?.[0] ?? null;
 
   const { data: membresia } = user
@@ -58,6 +62,16 @@ export default async function UnirsePage({ searchParams }: PageProps<"/unirse">)
         <h2 className="font-display text-2xl font-bold text-bosque">Tengo un código</h2>
         <p className="mt-1 text-sm text-tinta-suave">Son 6 letras y números. También puedes escanear el QR que te muestren.</p>
         <FormularioCodigo />
+      </>
+    );
+  } else if (limite && !limite.permitido) {
+    contenido = (
+      <>
+        <h2 className="font-display text-2xl font-bold text-bosque">Espera un momento</h2>
+        <div className="mt-4">
+          <MensajeError>{mensajeLimite(limite.reintentarEn)}</MensajeError>
+        </div>
+        <FormularioCodigo codigo={codigo} />
       </>
     );
   } else if (!invitacion || !invitacion.valida) {

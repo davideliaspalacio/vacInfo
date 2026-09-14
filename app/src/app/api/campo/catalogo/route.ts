@@ -4,6 +4,7 @@ import { corteDeFinca } from "@/lib/datos";
 import { hoyISO } from "@/lib/formato";
 import { gruposDeFinca } from "@/components/potreros/rotacion";
 import { leerBandeja } from "@/lib/offline/mensajes";
+import { REGLAS, limitar, respuestaLimite } from "@/lib/limites";
 import type { AnimalCatalogo, BandejaMensajes, Catalogo, FincaResumen } from "@/lib/offline/tipos";
 
 const SIN_CACHE = { "Cache-Control": "no-store" };
@@ -16,6 +17,9 @@ export async function GET(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Tu sesión se cerró. Vuelve a entrar." }, { status: 401, headers: SIN_CACHE });
+
+  const limite = await limitar(supabase, user.id, REGLAS.catalogo);
+  if (!limite.permitido) return respuestaLimite(limite, SIN_CACHE);
 
   const [{ data: filasFincas, error: errorFincas }, mensajes] = await Promise.all([
     supabase.from("fincas").select("id, nombre, municipio, organizacion_id, dias_descanso_objetivo").order("nombre"),

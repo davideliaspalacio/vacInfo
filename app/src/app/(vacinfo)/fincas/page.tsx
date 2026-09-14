@@ -3,23 +3,34 @@ import { ArrowRight, Calculator, FileSpreadsheet, MapPin, Plus, Search } from "l
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { resumenAlCorte } from "@/components/fincas/consultas";
 import { litros, num, pct } from "@/lib/formato";
+import { consultarPagina, leerPagina } from "@/lib/paginacion";
 import { BotonVolver, Encabezado, Etiqueta, Metrica, Vacio } from "@/components/ui";
+import { Paginacion } from "@/components/paginacion";
+
+const POR_PAGINA = 12;
 
 export default async function Fincas({ searchParams }: PageProps<"/fincas">) {
-  const { q } = await searchParams;
-  const busqueda = typeof q === "string" ? q.trim() : "";
+  const sp = await searchParams;
+  const busqueda = typeof sp.q === "string" ? sp.q.trim() : "";
   const { supabase, rol } = await obtenerSesion();
   const gestor = ROLES_GESTORES.includes(rol);
 
-  let consulta = supabase.from("fincas").select("id, nombre, municipio, departamento, vereda, area_cuadras, empresa_compradora").order("nombre");
-  if (busqueda) {
-    const patron = `%${busqueda.replace(/[%,()]/g, " ")}%`;
-    consulta = consulta.or(`nombre.ilike.${patron},municipio.ilike.${patron},vereda.ilike.${patron}`);
-  }
-  const { data: fincas } = await consulta;
+  // Solo se calcula el resumen de las fincas de la página visible.
+  const { filas: fincas, total, pagina } = await consultarPagina((desde, hasta) => {
+    let consulta = supabase
+      .from("fincas")
+      .select("id, nombre, municipio, departamento, vereda, area_cuadras, empresa_compradora", { count: "exact" })
+      .order("nombre")
+      .order("id");
+    if (busqueda) {
+      const patron = `%${busqueda.replace(/[%,()]/g, " ")}%`;
+      consulta = consulta.or(`nombre.ilike.${patron},municipio.ilike.${patron},vereda.ilike.${patron}`);
+    }
+    return consulta.range(desde, hasta);
+  }, leerPagina(sp, { tamano: POR_PAGINA }));
 
   const tarjetas = await Promise.all(
-    (fincas ?? []).map(async (f) => {
+    fincas.map(async (f) => {
       const { resumen } = await resumenAlCorte(supabase, f.id);
       const vientres = (resumen?.vacas_ordeno ?? 0) + (resumen?.vacas_horras ?? 0);
       return { f, resumen, produciendo: vientres ? (resumen?.vacas_ordeno ?? 0) / vientres : null };
@@ -52,7 +63,7 @@ export default async function Fincas({ searchParams }: PageProps<"/fincas">) {
             )}
             {gestor && (
               <Link
-                href={fincas?.length === 1 ? `/importar?finca=${fincas[0].id}` : "/importar"}
+                href={total === 1 && fincas.length === 1 ? `/importar?finca=${fincas[0].id}` : "/importar"}
                 className="inline-flex items-center gap-2 self-center rounded-xl border border-white/30 bg-[rgba(8,26,16,0.42)] px-5 py-3 font-bold text-leche hover:bg-[rgba(8,26,16,0.7)]"
               >
                 <FileSpreadsheet className="h-5 w-5" aria-hidden />
@@ -65,7 +76,7 @@ export default async function Fincas({ searchParams }: PageProps<"/fincas">) {
 
       {busqueda && (
         <p className="text-leche/80">
-          {tarjetas.length} resultado{tarjetas.length === 1 ? "" : "s"} para “{busqueda}” ·{" "}
+          {total} resultado{total === 1 ? "" : "s"} para “{busqueda}” ·{" "}
           <Link href="/fincas" className="font-bold text-lima underline">
             ver todas
           </Link>
@@ -77,7 +88,7 @@ export default async function Fincas({ searchParams }: PageProps<"/fincas">) {
           <Vacio>{busqueda ? "Ninguna finca coincide con la búsqueda." : "Aún no hay fincas registradas."}</Vacio>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div id="fincas" className="scroll-mt-6 space-y-6">
           {tarjetas.map(({ f, resumen, produciendo }) => (
             <article
               key={f.id}
@@ -116,6 +127,17 @@ export default async function Fincas({ searchParams }: PageProps<"/fincas">) {
               </div>
             </article>
           ))}
+          <Paginacion
+            ruta="/fincas"
+            searchParams={sp}
+            pagina={pagina.pagina}
+            tamano={pagina.tamano}
+            total={total}
+            unidad="fincas"
+            etiqueta="Páginas de fincas"
+            ancla="fincas"
+            tono="fondo"
+          />
         </div>
       )}
     </div>

@@ -6,6 +6,7 @@ import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { leerLibro } from "@/lib/importador/leer";
 import { combinarHojas } from "@/lib/importador/combinar";
 import { aplicarPlan, previsualizar, type ResultadoImportacion, type VistaPrevia } from "@/lib/importador/aplicar";
+import { REGLAS, limitar, mensajeLimite, type Regla } from "@/lib/limites";
 
 const MAX_BYTES = 15 * 1024 * 1024;
 
@@ -20,9 +21,13 @@ const esquema = z.object({
 
 export type Respuesta<T> = { ok: true; datos: T } | { ok: false; mensaje: string };
 
-async function prepararPlan(formData: FormData) {
+async function prepararPlan(formData: FormData, regla: Regla) {
   const sesion = await obtenerSesion();
   if (!ROLES_GESTORES.includes(sesion.rol)) throw new Error("Solo propietarios y administradores pueden importar planillas.");
+
+  // Leer un libro de Excel es la operación más pesada de la app.
+  const limite = await limitar(sesion.supabase, sesion.user.id, regla);
+  if (!limite.permitido) throw new Error(mensajeLimite(limite.reintentarEn));
 
   const r = esquema.safeParse({ finca: formData.get("finca"), archivo: formData.get("archivo") });
   if (!r.success) throw new Error(r.error.issues[0]?.message ?? "Datos inválidos");
@@ -43,7 +48,7 @@ const mensaje = (e: unknown) => (e instanceof Error ? e.message : "Ocurrió un e
 
 export async function analizarExcel(formData: FormData): Promise<Respuesta<VistaPrevia>> {
   try {
-    const { sesion, fincaId, plan } = await prepararPlan(formData);
+    const { sesion, fincaId, plan } = await prepararPlan(formData, REGLAS.analizarExcel);
     return { ok: true, datos: await previsualizar(sesion.supabase, fincaId, plan) };
   } catch (e) {
     return { ok: false, mensaje: mensaje(e) };
@@ -52,7 +57,7 @@ export async function analizarExcel(formData: FormData): Promise<Respuesta<Vista
 
 export async function importarExcel(formData: FormData): Promise<Respuesta<ResultadoImportacion>> {
   try {
-    const { sesion, fincaId, archivo, plan } = await prepararPlan(formData);
+    const { sesion, fincaId, archivo, plan } = await prepararPlan(formData, REGLAS.importarExcel);
     const resultado = await aplicarPlan(sesion.supabase, fincaId, plan, archivo);
     revalidatePath("/", "layout");
     return { ok: true, datos: resultado };
