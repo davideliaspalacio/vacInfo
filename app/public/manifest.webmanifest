@@ -2,10 +2,10 @@
   "id": "/campo/rapido",
   "name": "VacDaTa",
   "short_name": "VacDaTa",
-  "description": "Registro rápido de ordeño, salud y reproducción. Funciona sin señal.",
+  "description": "Registro de ordeño, salud, reproducción y la finca. Funciona con o sin señal.",
   "lang": "es",
   "dir": "ltr",
-  "start_url": "/campo/rapido",
+  "start_url": "/campo/registrar",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
@@ -19,7 +19,8 @@
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ],
   "shortcuts": [
-    { "name": "Ordeño por lista", "url": "/campo/rapido?vista=lista", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Pendientes", "url": "/campo/rapido?vista=pendientes", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Ordeño por lista", "url": "/campo/registrar?vista=lista", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Pendientes", "url": "/campo/registrar?vista=pendientes", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Mensajes", "url": "/campo/mensajes", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
   ]
 }

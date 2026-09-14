@@ -1,9 +1,7 @@
-import type { Metadata } from "next";
-import { RegistroRapido } from "@/components/offline/registro-rapido";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: { absolute: "Registro rápido · VacDaTa" } };
-
+/** Registro rápido y Registrar datos ahora son una sola opción. */
 export default async function RegistroRapidoPage({ searchParams }: PageProps<"/campo/rapido">) {
   const { vista } = await searchParams;
-  return <RegistroRapido vistaInicial={typeof vista === "string" ? vista : undefined} />;
+  redirect(typeof vista === "string" ? `/campo/registrar?${new URLSearchParams({ vista })}` : "/campo/registrar");
 }

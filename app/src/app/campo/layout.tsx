@@ -1,18 +1,23 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowLeft, House, LogOut } from "lucide-react";
 import { obtenerSesion, type Rol } from "@/lib/sesion";
+import { soloLectura } from "@/lib/permisos";
 import { cerrarSesion } from "@/app/login/actions";
+import { InsigniaMensajes } from "@/components/offline/mensajes";
 import { InsigniaPendientes } from "@/components/offline/insignia-pendientes";
 import { RegistrarSW } from "@/components/offline/registrar-sw";
 
 export const metadata: Metadata = { title: { absolute: "VacDaTa" } };
 export const viewport: Viewport = { themeColor: "#2563eb" };
 
-const ROLES_VACINFO: Rol[] = ["propietario", "administrador", "consultor", "veterinario"];
+const ROLES_VACINFO: Rol[] = ["propietario", "administrador", "veterinario"];
 
 export default async function CampoLayout({ children }: LayoutProps<"/campo">) {
-  const { nombre, rol } = await obtenerSesion();
+  const { nombre, rol, user } = await obtenerSesion();
+  // El consultor solo consulta: VacDaTa es para registrar.
+  if (soloLectura(rol)) redirect("/");
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 via-slate-50 to-white px-3 pb-32 text-slate-800">
@@ -24,6 +29,7 @@ export default async function CampoLayout({ children }: LayoutProps<"/campo">) {
               <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-900">VacDaTa</span>
             </Link>
             <div className="flex min-w-0 items-center gap-1">
+              <InsigniaMensajes usuarioId={user.id} />
               <InsigniaPendientes />
               <span className="truncate text-sm font-semibold text-slate-600">{nombre}</span>
               <form action={cerrarSesion}>

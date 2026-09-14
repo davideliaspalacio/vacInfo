@@ -1,18 +1,23 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Crosshair } from "lucide-react";
-import { obtenerSesion } from "@/lib/sesion";
+import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
+import { puedeRegistrar } from "@/lib/permisos";
 import { corteDeFinca } from "@/lib/datos";
-import { fecha } from "@/lib/formato";
+import { fecha, hoyISO } from "@/lib/formato";
 import { Encabezado, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { BotonImprimir } from "@/components/informes/boton-imprimir";
 import { fincaElegida, mesLargo, sumarMeses, uno } from "@/components/inventario/comun";
 import { AgendaMes, CuadriculaMes } from "@/components/calendario/mes";
 import { enlaceCalendario, FiltroTipos } from "@/components/calendario/filtros";
 import { TIPOS, type Evento } from "@/components/calendario/tipos";
+import { aEvento, SELECT_PROGRAMADO, type EventoProgramado } from "@/components/calendario/programados";
+import { ProgramarEvento } from "@/components/calendario/programar";
+import { DetalleEvento } from "@/components/calendario/detalle-evento";
 
 export const metadata = { title: "Calendario" };
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Días de la cuadrícula: de lunes anterior al 1 hasta el domingo posterior al último día. */
 function diasCuadricula(mes: string) {
@@ -31,7 +36,7 @@ function diasCuadricula(mes: string) {
 export default async function CalendarioPage(props: PageProps<"/calendario">) {
   const sp = await props.searchParams;
   const sesion = await obtenerSesion();
-  const { supabase, fincas } = sesion;
+  const { supabase, fincas, rol } = sesion;
 
   if (fincas.length === 0) {
     return (
@@ -49,27 +54,50 @@ export default async function CalendarioPage(props: PageProps<"/calendario">) {
   const pedido = uno(sp.mes);
   const mes = pedido && /^\d{4}-(0[1-9]|1[0-2])$/.test(pedido) ? pedido : corte.slice(0, 7);
   const activos = (uno(sp.tipos) ?? "").split(",").filter((t) => t in TIPOS);
+  const eventoId = uno(sp.evento);
+  const puedeEditar = puedeRegistrar(rol);
 
   const dias = diasCuadricula(mes);
-  const { data, error } = await supabase.rpc("eventos_calendario", {
-    p_finca: finca.id,
-    p_desde: dias[0],
-    p_hasta: dias.at(-1)!,
-    p_corte: corte,
-  });
+  const [{ data, error }, { data: programadosData }, { data: animales }] = await Promise.all([
+    supabase.rpc("eventos_calendario", { p_finca: finca.id, p_desde: dias[0], p_hasta: dias.at(-1)!, p_corte: corte }),
+    supabase
+      .from("eventos_programados")
+      .select(SELECT_PROGRAMADO)
+      .eq("finca_id", finca.id)
+      .gte("fecha", dias[0])
+      .lte("fecha", dias.at(-1)!)
+      .order("fecha")
+      .order("hora", { nullsFirst: true }),
+    puedeEditar
+      ? supabase.from("animales").select("id, nombre, chapeta, categoria").eq("finca_id", finca.id).eq("estado", "activo").order("nombre")
+      : Promise.resolve({ data: null }),
+  ]);
 
-  const todos = (data ?? []) as Evento[];
+  const programados = (programadosData ?? []) as EventoProgramado[];
+  let seleccionado = eventoId ? programados.find((e) => e.id === eventoId) : undefined;
+  if (eventoId && !seleccionado && UUID.test(eventoId)) {
+    const { data: unico } = await supabase.from("eventos_programados").select(SELECT_PROGRAMADO).eq("id", eventoId).eq("finca_id", finca.id).maybeSingle();
+    seleccionado = (unico as EventoProgramado | null) ?? undefined;
+  }
+
+  // Lo agendado se toma de la tabla (trae id, hora y estado); el resto viene de eventos_calendario.
+  const todos: Evento[] = [...((data ?? []) as Evento[]).filter((e) => e.tipo !== "programado"), ...programados.map(aEvento)].sort((a, b) =>
+    a.fecha.localeCompare(b.fecha),
+  );
   const eventos = activos.length ? todos.filter((e) => activos.includes(e.tipo)) : todos;
 
-  const delMes = todos.filter((e) => e.fecha.startsWith(mes));
+  const delMes = todos.filter((e) => e.fecha.startsWith(mes) && e.estado !== "cancelado");
   const conteo: Record<string, number> = {};
   for (const e of delMes) conteo[e.tipo] = (conteo[e.tipo] ?? 0) + 1;
-  const filtradosMes = eventos.filter((e) => e.fecha.startsWith(mes));
+  const filtradosMes = eventos.filter((e) => e.fecha.startsWith(mes) && e.estado !== "cancelado");
   const realizados = filtradosMes.filter((e) => e.realizado).length;
   const vencidos = filtradosMes.filter((e) => !e.realizado && e.fecha < corte).length;
-  const programados = filtradosMes.length - realizados - vencidos;
+  const programadosPendientes = filtradosMes.length - realizados - vencidos;
 
   const titulo = mesLargo(`${mes}-01`);
+  const base = enlaceCalendario(finca.id, mes, activos);
+  const detalle = (id: string) => `${base}&evento=${id}#evento`;
+  const hoy = hoyISO();
 
   return (
     <div className="space-y-6 print:space-y-3">
@@ -84,7 +112,7 @@ export default async function CalendarioPage(props: PageProps<"/calendario">) {
       <Encabezado
         eyebrow={`Calendario · ${finca.nombre}`}
         titulo="Calendario de la finca"
-        descripcion={`Lo realizado y lo programado. Las fechas programadas se calculan al corte del ${fecha(corte, true)}.`}
+        descripcion={`Lo realizado, lo programado y lo agendado por el equipo. Las fechas programadas se calculan al corte del ${fecha(corte, true)}.`}
         acciones={<BotonImprimir />}
       />
 
@@ -131,6 +159,23 @@ export default async function CalendarioPage(props: PageProps<"/calendario">) {
         </nav>
       </div>
 
+      {seleccionado && (
+        <DetalleEvento
+          evento={seleccionado}
+          corte={corte}
+          volver={`${base}&evento=${seleccionado.id}`}
+          cerrar={base}
+          puedeEditar={puedeEditar}
+          puedeBorrar={ROLES_GESTORES.includes(rol)}
+        />
+      )}
+
+      {puedeEditar && (
+        <Tarjeta className="print:hidden">
+          <ProgramarEvento key={finca.id} fincaId={finca.id} fechaInicial={hoy.startsWith(mes) ? hoy : `${mes}-01`} animales={animales ?? []} />
+        </Tarjeta>
+      )}
+
       <Tarjeta>
         <TituloTarjeta detalle={activos.length ? `Filtrado: ${activos.map((t) => TIPOS[t].etiqueta).join(", ")}` : undefined}>
           <span className="capitalize">{titulo}</span>
@@ -142,13 +187,13 @@ export default async function CalendarioPage(props: PageProps<"/calendario">) {
           <div className="space-y-5">
             <div className="grid gap-3 sm:grid-cols-3">
               <Metrica valor={realizados} etiqueta="Realizados en el mes" />
-              <Metrica tono="crema" valor={programados} etiqueta="Programados pendientes" />
+              <Metrica tono="crema" valor={programadosPendientes} etiqueta="Programados pendientes" />
               <Metrica tono={vencidos ? "alerta" : "lima"} valor={vencidos} etiqueta="Programados vencidos (antes del corte)" />
             </div>
             <div className="print:hidden">
               <FiltroTipos fincaId={finca.id} mes={mes} activos={activos} conteo={conteo} />
             </div>
-            <CuadriculaMes dias={dias} mes={mes} corte={corte} eventos={eventos} />
+            <CuadriculaMes dias={dias} mes={mes} corte={corte} eventos={eventos} detalle={detalle} />
           </div>
         )}
       </Tarjeta>
@@ -156,7 +201,7 @@ export default async function CalendarioPage(props: PageProps<"/calendario">) {
       {!error && (
         <Tarjeta className="print:break-before-page">
           <TituloTarjeta detalle={`${filtradosMes.length} eventos`}>Agenda del mes</TituloTarjeta>
-          <AgendaMes mes={mes} corte={corte} eventos={eventos} />
+          <AgendaMes mes={mes} corte={corte} eventos={eventos} detalle={detalle} />
         </Tarjeta>
       )}
     </div>

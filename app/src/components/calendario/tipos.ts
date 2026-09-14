@@ -1,3 +1,5 @@
+import { etiquetaProgramado } from "./programados";
+
 export type Evento = {
   fecha: string;
   tipo: string;
@@ -6,11 +8,18 @@ export type Evento = {
   nombre: string | null;
   chapeta: string | null;
   detalle: string | null;
+  /** Solo eventos programados por el equipo (tabla eventos_programados) */
+  id?: string;
+  hora?: string | null;
+  subtipo?: string;
+  estado?: string;
 };
 
 type Tipo = {
   etiqueta: string;
   realizado: boolean;
+  /** Evento agendado a mano por el equipo */
+  agenda?: boolean;
   /** Chip lleno (evento realizado) */
   solido: string;
   /** Chip con borde (evento programado) */
@@ -33,20 +42,33 @@ export const TIPOS: Record<string, Tipo> = {
   vacuna: { etiqueta: "Vacuna", realizado: false, solido: "", contorno: "border-teal-700 bg-white text-teal-800", punto: "border-2 border-teal-700" },
   fin_retiro: { etiqueta: "Fin de retiro", realizado: false, solido: "", contorno: "border-orange-600 bg-white text-orange-800", punto: "border-2 border-orange-600" },
   destetar: { etiqueta: "Destetar", realizado: false, solido: "", contorno: "border-pasto-oscuro bg-white text-pasto-oscuro", punto: "border-2 border-pasto-oscuro" },
+  programado: {
+    etiqueta: "Agendado por el equipo",
+    realizado: false,
+    agenda: true,
+    solido: "border-dashed border-indigo-700 bg-indigo-700 text-white",
+    contorno: "border-dashed border-indigo-600 bg-indigo-50 text-indigo-900",
+    punto: "border-2 border-dashed border-indigo-600 bg-indigo-50",
+  },
 };
 
 export const TIPO_DESCONOCIDO: Tipo = { etiqueta: "Evento", realizado: true, solido: "border-tinta-suave bg-tinta-suave text-white", contorno: "border-tinta-suave bg-white text-tinta", punto: "bg-tinta-suave" };
 
 export const VENCIDO = "border-alerta bg-[#fbe9e5] text-alerta";
+export const CANCELADO = "border-dashed border-tinta/20 bg-white text-tinta-suave line-through";
 
 export const tipoDe = (t: string) => TIPOS[t] ?? TIPO_DESCONOCIDO;
 
-/** Clases del chip según si se hizo, está programado o ya se pasó la fecha. */
+/** Clases del chip según si se hizo, está programado, se canceló o ya se pasó la fecha. */
 export function claseEvento(e: Evento, corte: string) {
   const t = tipoDe(e.tipo);
+  if (e.estado === "cancelado") return CANCELADO;
   if (e.realizado) return t.solido || t.contorno;
   if (e.fecha < corte) return VENCIDO;
   return t.contorno || t.solido;
 }
+
+/** "Parto", "Palpar"… o, para lo agendado, su tipo ("Vacunación"). */
+export const etiquetaEvento = (e: Evento) => (e.id ? etiquetaProgramado(e.subtipo) : tipoDe(e.tipo).etiqueta);
 
 export const nombreAnimal = (e: Evento) => e.nombre || e.chapeta || "Animal";

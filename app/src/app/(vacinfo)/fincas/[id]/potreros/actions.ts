@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import type { EstadoAccion } from "@/components/fincas/formulario-accion";
 import { datosDe, numeroOpcional } from "@/components/fincas/validacion";
@@ -32,7 +33,8 @@ export async function moverGrupo(fincaId: string, _: EstadoAccion, formData: For
     .safeParse(datosDe(formData));
   if (!leido.success) return { error: leido.error.issues[0]?.message ?? "Revisa los datos." };
 
-  const { supabase } = await obtenerSesion();
+  const { supabase, rol } = await obtenerSesion();
+  if (soloLectura(rol)) return { error: MENSAJE_SOLO_LECTURA };
   const d = leido.data;
   const r = await mover(supabase, {
     finca_id: fincaId,
@@ -49,7 +51,8 @@ export async function sacarGrupo(fincaId: string, _: EstadoAccion, formData: For
   const leido = z.object({ grupo, fecha }).safeParse(datosDe(formData));
   if (!leido.success) return { error: leido.error.issues[0]?.message ?? "Revisa los datos." };
 
-  const { supabase } = await obtenerSesion();
+  const { supabase, rol } = await obtenerSesion();
+  if (soloLectura(rol)) return { error: MENSAJE_SOLO_LECTURA };
   const r = await sacar(supabase, { finca_id: fincaId, ...leido.data });
   return resultado(r, fincaId, `«${leido.data.grupo}» salió del potrero`);
 }

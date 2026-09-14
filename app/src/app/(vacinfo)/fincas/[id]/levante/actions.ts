@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
 import { obtenerSesion } from "@/lib/sesion";
 import type { EstadoAccion } from "@/components/fincas/formulario-accion";
 import { datosDe, numeroOpcional } from "@/components/fincas/validacion";
@@ -27,7 +28,13 @@ async function animalDeFinca(fincaId: string, animalId: string) {
   return { supabase, animal: data };
 }
 
+async function esConsultor() {
+  const { rol } = await obtenerSesion();
+  return soloLectura(rol);
+}
+
 export async function registrarPesaje(fincaId: string, _: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
+  if (await esConsultor()) return { error: MENSAJE_SOLO_LECTURA };
   const leido = esquemaPesaje.safeParse(datosDe(formData));
   if (!leido.success) return { error: leido.error.issues[0]?.message ?? "Revisa los datos del pesaje." };
 
@@ -47,6 +54,7 @@ export async function registrarPesaje(fincaId: string, _: EstadoAccion, formData
 }
 
 export async function registrarDestete(fincaId: string, _: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
+  if (await esConsultor()) return { error: MENSAJE_SOLO_LECTURA };
   const leido = z.object({ animal_id: uuid, fecha }).safeParse(datosDe(formData));
   if (!leido.success) return { error: leido.error.issues[0]?.message ?? "Revisa los datos del destete." };
 

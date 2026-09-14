@@ -1,6 +1,6 @@
 import Link from "next/link";
 import clsx from "clsx";
-import { ArrowLeft, ChevronRight, CircleCheck, TriangleAlert, type LucideIcon } from "lucide-react";
+import { ArrowLeft, CircleCheck, TriangleAlert } from "lucide-react";
 import { hoyISO } from "@/lib/formato";
 
 export const control =
@@ -55,59 +55,6 @@ export function Aviso({ ok, error }: { ok?: string; error?: string }) {
       <CircleCheck className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
       {ok}
     </p>
-  );
-}
-
-export function OpcionGrande({
-  href,
-  icono: Icono,
-  titulo,
-  detalle,
-  activa,
-}: {
-  href: string;
-  icono: LucideIcon;
-  titulo: string;
-  detalle?: string;
-  activa?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-current={activa ? "page" : undefined}
-      className={clsx(
-        "flex min-h-[88px] items-center justify-between gap-3 rounded-2xl border p-4 text-left transition hover:-translate-y-0.5",
-        activa ? "border-campo bg-blue-50 text-campo-oscuro" : "border-slate-200 bg-white text-slate-800 hover:border-blue-300",
-      )}
-    >
-      <span className="flex items-center gap-4">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-campo-oscuro">
-          <Icono className="h-[22px] w-[22px]" aria-hidden />
-        </span>
-        <span>
-          <span className="block text-lg font-bold">{titulo}</span>
-          {detalle && <span className="mt-0.5 block text-sm text-slate-500">{detalle}</span>}
-        </span>
-      </span>
-      <ChevronRight className="h-5 w-5 shrink-0 text-slate-400" aria-hidden />
-    </Link>
-  );
-}
-
-export function BotonRegistro({ href, icono: Icono, titulo, detalle }: { href: string; icono: LucideIcon; titulo: string; detalle?: string }) {
-  return (
-    <Link
-      href={href}
-      className="flex min-h-[132px] flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left text-slate-800 transition hover:-translate-y-0.5 hover:border-blue-300"
-    >
-      <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-campo-oscuro">
-        <Icono className="h-6 w-6" aria-hidden />
-      </span>
-      <span>
-        <span className="block font-bold leading-tight">{titulo}</span>
-        {detalle && <span className="mt-1 block text-xs text-slate-500">{detalle}</span>}
-      </span>
-    </Link>
   );
 }
 

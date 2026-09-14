@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
+import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
 
 export type EstadoMensaje = { ok?: boolean; error?: string };
 
@@ -18,7 +19,8 @@ export async function enviarMensaje(_: EstadoMensaje, formData: FormData): Promi
   });
   if (!datos.success) return { error: datos.error.issues[0]?.message ?? "Revisa el formulario." };
 
-  const { supabase, user, organizacionId } = await obtenerSesion();
+  const { supabase, user, organizacionId, rol } = await obtenerSesion();
+  if (soloLectura(rol)) return { error: MENSAJE_SOLO_LECTURA };
   const { destinatario, texto } = datos.data;
 
   if (destinatario) {

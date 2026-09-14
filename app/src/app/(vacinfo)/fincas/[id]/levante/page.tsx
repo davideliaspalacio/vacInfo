@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CalendarDays, LineChart, Scale, Settings2 } from "lucide-react";
+import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, num } from "@/lib/formato";
@@ -116,34 +117,36 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
         </Tarjeta>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Tarjeta>
-          <TituloTarjeta>
-            <span className="inline-flex items-center gap-2">
-              <Scale className="h-5 w-5" aria-hidden />
-              Registrar pesaje
-            </span>
-          </TituloTarjeta>
-          {filas.length ? (
-            <FormularioPesaje accion={registrarPesaje.bind(null, id)} animales={filas} corte={corte} animal={elegido?.animal_id} />
-          ) : (
-            <Vacio>No hay animales de levante.</Vacio>
-          )}
-        </Tarjeta>
-        <Tarjeta>
-          <TituloTarjeta detalle={`${sinDestetar.length} sin destetar`}>Registrar destete</TituloTarjeta>
-          <FormularioDestete accion={registrarDestete.bind(null, id)} animales={sinDestetar} corte={corte} animal={elegido?.animal_id} />
-          {gestor && (
-            <div className="mt-6 border-t border-black/10 pt-4">
-              <p className="mb-3 flex items-center gap-2 text-sm font-bold text-bosque">
-                <Settings2 className="h-4 w-4" aria-hidden />
-                Reglas de la finca
-              </p>
-              <FormularioReglasLevante accion={guardarReglasFinca.bind(null, id)} finca={finca} />
-            </div>
-          )}
-        </Tarjeta>
-      </div>
+      {puedeRegistrar(rol) && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Tarjeta>
+            <TituloTarjeta>
+              <span className="inline-flex items-center gap-2">
+                <Scale className="h-5 w-5" aria-hidden />
+                Registrar pesaje
+              </span>
+            </TituloTarjeta>
+            {filas.length ? (
+              <FormularioPesaje accion={registrarPesaje.bind(null, id)} animales={filas} corte={corte} animal={elegido?.animal_id} />
+            ) : (
+              <Vacio>No hay animales de levante.</Vacio>
+            )}
+          </Tarjeta>
+          <Tarjeta>
+            <TituloTarjeta detalle={`${sinDestetar.length} sin destetar`}>Registrar destete</TituloTarjeta>
+            <FormularioDestete accion={registrarDestete.bind(null, id)} animales={sinDestetar} corte={corte} animal={elegido?.animal_id} />
+            {gestor && (
+              <div className="mt-6 border-t border-black/10 pt-4">
+                <p className="mb-3 flex items-center gap-2 text-sm font-bold text-bosque">
+                  <Settings2 className="h-4 w-4" aria-hidden />
+                  Reglas de la finca
+                </p>
+                <FormularioReglasLevante accion={guardarReglasFinca.bind(null, id)} finca={finca} />
+              </div>
+            )}
+          </Tarjeta>
+        </div>
+      )}
 
       {GRUPOS.map((g) => {
         const grupo = filas.filter((f) => g.estados.includes(f.estado as EstadoLevante));

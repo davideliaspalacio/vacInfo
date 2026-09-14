@@ -80,3 +80,17 @@ insert into aplicaciones_campo (finca_id, fecha, tipo, producto, cantidad, unida
 insert into invitaciones (organizacion_id, finca_id, rol, codigo, usos_max, expira_en, creado_por) values
   ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000101', 'trabajador', 'TONELE', 50, '2027-12-31',
    '10000000-0000-4000-8000-000000000002');
+
+-- ─────────────── Consumo automático (ejemplo) ───────────────
+-- Premex: 50 g por vaca en ordeño por día, sin registrar cada salida.
+insert into movimientos_insumos (finca_id, producto, fecha, hora, tipo, cantidad, entrega, recibe)
+select '00000000-0000-4000-8000-000000000101', 'Premex', '2026-04-01', '09:00', 'ingreso', 20, 'Colanta', 'Nelson'
+where not exists (
+  select 1 from movimientos_insumos where finca_id = '00000000-0000-4000-8000-000000000101' and producto = 'Premex' and fecha = '2026-04-01'
+);
+
+insert into consumos_programados (finca_id, insumo_id, modo, cantidad, en_kg, periodo, grupo, desde, notas)
+select '00000000-0000-4000-8000-000000000101', i.id, 'por_animal', 0.05, true, 'dia', 'vacas_ordeno', '2026-04-01', 'Dato de demostración'
+from insumos i
+where i.organizacion_id = '00000000-0000-4000-8000-000000000001' and i.nombre = 'Premex'
+  and not exists (select 1 from consumos_programados c where c.finca_id = '00000000-0000-4000-8000-000000000101' and c.insumo_id = i.id);

@@ -11,6 +11,7 @@ export type Saldo = {
   ingresos: number;
   salidas: number;
   consumo_registrado: number;
+  consumo_automatico: number;
   saldo: number;
   consumo_diario: number | null;
   dias_alcanza: number | null;
@@ -48,6 +49,7 @@ export function TablaSaldos({ saldos }: { saldos: Saldo[] }) {
           {saldos.map((s) => {
             const estado = ESTADO[s.estado as keyof typeof ESTADO] ?? ESTADO.ok;
             const dias = s.dias_alcanza;
+            const automatico = Number(s.consumo_automatico) > 0;
             return (
               <tr key={s.insumo_id ?? s.producto} className={clsx("border-b border-tinta/10", s.estado === "agotado" && "bg-[#fbe9e5]/60")}>
                 <td className="py-2.5 pr-2">
@@ -59,12 +61,16 @@ export function TablaSaldos({ saldos }: { saldos: Saldo[] }) {
                   <strong className={clsx(s.saldo <= 0 && "text-alerta")}>
                     {num(s.saldo)} {s.unidad}
                   </strong>
-                  <span className="block text-xs text-tinta-suave" title="Ingresos − salidas − consumo diario registrado">
+                  <span className="block text-xs text-tinta-suave" title="Ingresos − salidas − consumo diario registrado − consumo automático">
                     +{num(s.ingresos)} −{num(s.salidas)}
                     {s.consumo_registrado > 0 && ` −${num(s.consumo_registrado)} consumo`}
                   </span>
+                  {automatico && <span className="block text-xs font-bold text-indigo-800">−{num(s.consumo_automatico)} automático</span>}
                 </td>
-                <td className="px-2 py-2.5 text-right tabular-nums">{s.consumo_diario ? `${num(s.consumo_diario)} / día` : "—"}</td>
+                <td className="px-2 py-2.5 text-right tabular-nums">
+                  {s.consumo_diario ? `${num(s.consumo_diario)} / día` : "—"}
+                  {automatico && <span className="block text-xs text-indigo-800">incluye consumo automático</span>}
+                </td>
                 <td className="px-2 py-2.5">
                   {dias == null ? (
                     <span className="text-tinta-suave">Sin consumo reciente</span>

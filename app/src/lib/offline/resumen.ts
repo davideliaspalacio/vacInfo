@@ -11,9 +11,17 @@ export const ETIQUETA_ACCION: Record<Accion, string> = {
   parto: "Parto",
   secado: "Secado",
   salud: "Salud",
+  destete: "Destete",
+  baja: "Muerte / venta / retiro",
   pesaje: "Pesaje",
   carro_tanque: "Carro tanque",
   consumo_diario: "Consumo del día",
+  mantenimiento: "Mantenimiento",
+  aplicacion: "Fumigación y abonos",
+  control_calidad: "Agua y tanque",
+  movimiento_insumo: "Insumos",
+  visita: "Visitantes",
+  rotacion: "Rotación de potrero",
 };
 
 export const formatoNumero = (v: number) => numero.format(v);
@@ -44,6 +52,9 @@ export function resumir(accion: Accion, datos: Record<string, unknown>, animal?:
     partes.push(`${items.length} vacas · ${formatoNumero(items.reduce((s, i) => s + i.litros, 0))} L`);
   } else if (typeof datos.litros === "number") partes.push(`${formatoNumero(datos.litros)} L`);
   else if (typeof datos.peso_kg === "number") partes.push(`${formatoNumero(datos.peso_kg)} kg`);
+  else if (typeof datos.cantidad === "number" && typeof datos.producto === "string") partes.push(`${datos.producto} ${formatoNumero(datos.cantidad)}`);
+  else if (typeof datos.grupo === "string") partes.push(datos.grupo);
+  else if (typeof datos.nombre === "string") partes.push(datos.nombre);
   else if (typeof datos.tipo === "string") partes.push(datos.tipo.replaceAll("_", " "));
   else if (typeof datos.resultado === "string") partes.push(datos.resultado === "prenada" ? "preñada" : "vacía");
 

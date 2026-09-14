@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { obtenerSesion } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, sumarDias } from "@/lib/formato";
@@ -7,6 +8,7 @@ import { FiltrosInforme, PESTANAS, PestanasInforme, type Pestana } from "@/compo
 import { InformeOperativo } from "@/components/informes/operativo";
 import { InformeAdministrativo } from "@/components/informes/administrativo";
 import { InformeContable } from "@/components/informes/contable";
+import { EsqueletoInforme } from "@/components/informes/esqueleto";
 
 export const metadata = { title: "Informes" };
 
@@ -24,6 +26,7 @@ type Sesion = Awaited<ReturnType<typeof obtenerSesion>>;
 
 /** Sin finca elegida, se abre la que más animales activos tiene (no una finca vacía por orden alfabético). */
 async function fincaConMasAnimales(supabase: Sesion["supabase"], fincas: Sesion["fincas"]) {
+  if (fincas.length === 1) return fincas[0];
   const conteos = await Promise.all(
     fincas.map((f) =>
       supabase.from("animales").select("id", { count: "exact", head: true }).eq("finca_id", f.id).eq("estado", "activo"),
@@ -85,9 +88,11 @@ export default async function InformesPage(props: PageProps<"/informes">) {
         <FiltrosInforme fincas={fincas} fincaId={finca.id} desde={desde} hasta={hasta} pestana={pestana} />
       </div>
 
-      {pestana === "operativo" && <InformeOperativo supabase={supabase} rango={rango} finca={finca} />}
-      {pestana === "administrativo" && <InformeAdministrativo supabase={supabase} rango={rango} finca={finca} />}
-      {pestana === "contable" && <InformeContable supabase={supabase} rango={rango} finca={finca} />}
+      <Suspense key={`${pestana}-${finca.id}-${desde}-${hasta}`} fallback={<EsqueletoInforme />}>
+        {pestana === "operativo" && <InformeOperativo supabase={supabase} rango={rango} finca={finca} />}
+        {pestana === "administrativo" && <InformeAdministrativo supabase={supabase} rango={rango} finca={finca} />}
+        {pestana === "contable" && <InformeContable supabase={supabase} rango={rango} finca={finca} />}
+      </Suspense>
     </div>
   );
 }

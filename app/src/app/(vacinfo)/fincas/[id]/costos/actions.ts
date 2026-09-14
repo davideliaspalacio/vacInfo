@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { Json } from "@/lib/database.types";
+import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import type { ParametrosCostos } from "@/lib/finanzas";
 import type { EstadoFormulario } from "@/components/fincas/campo";
@@ -42,6 +43,7 @@ const esquemaParametros = z.object({
 
 export async function guardarCostos(fincaId: string, periodo: string, _: EstadoFormulario, formData: FormData): Promise<EstadoFormulario> {
   const { supabase, rol, user } = await obtenerSesion();
+  if (soloLectura(rol)) return { mensaje: MENSAJE_SOLO_LECTURA };
   if (!ROLES_GESTORES.includes(rol)) return { mensaje: "Solo propietarios y administradores pueden cambiar los parámetros de costos." };
   if (!/^\d{4}-\d{2}-01$/.test(periodo)) return { mensaje: "Periodo inválido." };
 

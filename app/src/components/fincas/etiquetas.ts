@@ -120,7 +120,25 @@ export const TIPOS_ALERTA: Record<string, string> = {
   vacuna: "Vacuna",
 };
 
-export const METODOS_ADQUISICION = ["Nacido en la finca", "Producido", "Comprado", "Donado", "Otro"];
+/** La especie se deduce de la categoría: el formulario solo pide la categoría. */
+export const ESPECIE_DE_CATEGORIA: Record<E["categoria_animal"], E["especie"]> = {
+  vaca: "bovino",
+  novilla: "bovino",
+  ternerona: "bovino",
+  ternera: "bovino",
+  ternero: "bovino",
+  toro: "bovino",
+  caballo: "equino",
+  perro: "canino",
+  otro: "otro",
+};
+
+export const GRUPOS_CATEGORIA: { titulo: string; categorias: E["categoria_animal"][] }[] = [
+  { titulo: "Bovinos", categorias: ["vaca", "novilla", "ternerona", "ternera", "ternero", "toro"] },
+  { titulo: "Otros animales", categorias: ["caballo", "perro", "otro"] },
+];
+
+export const METODOS_ADQUISICION = ["Nacido en la finca", "Compra", "Donación / regalo", "Traslado desde otra finca", "Otro"];
 
 /** Prefijo de códigos de una finca: el más usado en sus códigos, o las 3 primeras letras del nombre. */
 export function prefijoFinca(nombre: string, codigos: string[] = []) {

@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { obtenerSesion, ROLES_GESTORES, type Sesion } from "@/lib/sesion";
+import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, hoyISO, num, pesos } from "@/lib/formato";
 import { Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
@@ -7,6 +8,8 @@ import { fechaValida, fincaElegida, uno } from "@/components/inventario/comun";
 import { TablaSaldos, type Saldo } from "@/components/inventario/tabla-saldos";
 import { FormularioMovimiento } from "@/components/inventario/formulario-movimiento";
 import { CatalogoInsumos } from "@/components/inventario/catalogo-insumos";
+import { ConsumoAutomatico } from "@/components/inventario/consumo-automatico";
+import type { ReglaConsumo } from "@/components/inventario/consumo";
 import type { Insumo } from "@/components/inventario/opciones";
 
 export const metadata = { title: "Inventario" };
@@ -41,34 +44,46 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
   const hoy = hoyISO();
   const corte = fechaValida(uno(sp.corte)) ?? (await corteInventario(supabase, finca.id, hoy));
   const gestor = ROLES_GESTORES.includes(rol);
+  const lectura = soloLectura(rol);
 
-  const [{ data: saldosData, error: errorSaldos }, { data: insumosData }, { data: movimientos }, { data: consumos }] = await Promise.all([
-    supabase.rpc("saldo_insumos", { p_finca: finca.id, p_corte: corte }),
-    supabase
-      .from("insumos")
-      .select("id, nombre, categoria, unidad, contenido, precio, stock_minimo, consumo_diario_fuente")
-      .eq("organizacion_id", organizacionId)
-      .order("nombre"),
-    supabase
-      .from("movimientos_insumos")
-      .select("id, insumo_id, producto, fecha, hora, tipo, cantidad, entrega, recibe")
-      .eq("finca_id", finca.id)
-      .lte("fecha", corte)
-      .order("fecha", { ascending: false })
-      .order("registrado_en", { ascending: false })
-      .limit(30),
-    supabase
-      .from("consumos_diarios")
-      .select("id, fecha, kg_concentrado_vacas, kg_sal_vacas, kg_concentrado_terneras, kg_sal_terneras")
-      .eq("finca_id", finca.id)
-      .lte("fecha", corte)
-      .order("fecha", { ascending: false })
-      .limit(30),
-  ]);
+  const [{ data: saldosData, error: errorSaldos }, { data: insumosData }, { data: movimientos }, { data: consumos }, { data: reglasData }, { data: animalesDia }] =
+    await Promise.all([
+      supabase.rpc("saldo_insumos", { p_finca: finca.id, p_corte: corte }),
+      supabase
+        .from("insumos")
+        .select("id, nombre, categoria, unidad, contenido, precio, stock_minimo, consumo_diario_fuente")
+        .eq("organizacion_id", organizacionId)
+        .order("nombre"),
+      supabase
+        .from("movimientos_insumos")
+        .select("id, insumo_id, producto, fecha, hora, tipo, cantidad, entrega, recibe")
+        .eq("finca_id", finca.id)
+        .lte("fecha", corte)
+        .order("fecha", { ascending: false })
+        .order("registrado_en", { ascending: false })
+        .limit(30),
+      supabase
+        .from("consumos_diarios")
+        .select("id, fecha, kg_concentrado_vacas, kg_sal_vacas, kg_concentrado_terneras, kg_sal_terneras")
+        .eq("finca_id", finca.id)
+        .lte("fecha", corte)
+        .order("fecha", { ascending: false })
+        .limit(30),
+      supabase
+        .from("consumos_programados")
+        .select("id, insumo_id, modo, cantidad, en_kg, periodo, grupo, desde, hasta, activo, notas")
+        .eq("finca_id", finca.id)
+        .order("activo", { ascending: false })
+        .order("desde", { ascending: false }),
+      supabase.rpc("animales_por_dia", { p_finca: finca.id, p_desde: corte, p_hasta: corte }),
+    ]);
 
   const saldos = (saldosData ?? []) as Saldo[];
   const insumos = (insumosData ?? []) as Insumo[];
+  const reglas = (reglasData ?? []) as ReglaConsumo[];
   const porId = new Map(insumos.map((i) => [i.id, i]));
+  const dia = animalesDia?.[0];
+  const conteos = dia ? { vacas_ordeno: dia.vacas_ordeno, vacas_horras: dia.vacas_horras, levante: dia.levante, todos: dia.todos } : null;
 
   const alertas = saldos.filter((s) => s.estado !== "ok");
   const valor = saldos.reduce((t, s) => t + Math.max(Number(s.saldo), 0) * Number((s.insumo_id && porId.get(s.insumo_id)?.precio) ?? 0), 0);
@@ -82,7 +97,7 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
       <Encabezado
         eyebrow={`Inventario · ${finca.nombre}`}
         titulo="Inventario con saldo"
-        descripcion={`Saldo al ${fecha(corte, true)}: lo que ha entrado, menos las salidas, menos el consumo diario registrado en VacDaTa.`}
+        descripcion={`Saldo al ${fecha(corte, true)}: lo que ha entrado, menos las salidas, menos el consumo diario registrado en VacDaTa y el consumo automático programado.`}
       />
 
       <form action="/inventario" className="papel flex flex-wrap items-end gap-3 rounded-2xl p-4">
@@ -141,18 +156,40 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
           <>
             <TablaSaldos saldos={saldos} />
             <p className="mt-3 text-xs text-tinta-suave">
-              El consumo diario es el promedio de salidas y consumos de los últimos 30 días. Queda <strong>bajo</strong> si alcanza para menos de 7
-              días o está por debajo del mínimo.
+              El consumo diario es el promedio de salidas y consumos de los últimos 30 días, más el consumo automático. Queda <strong>bajo</strong> si
+              alcanza para menos de 7 días o está por debajo del mínimo.
             </p>
           </>
         )}
       </Tarjeta>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.3fr]">
-        <Tarjeta>
-          <TituloTarjeta>Registrar movimiento</TituloTarjeta>
-          <FormularioMovimiento fincaId={finca.id} hoy={hoy} catalogo={insumos.map(({ nombre, unidad, contenido }) => ({ nombre, unidad, contenido }))} />
-        </Tarjeta>
+      <Tarjeta>
+        <TituloTarjeta detalle={`${reglas.filter((r) => r.activo).length} activas`}>Consumo automático</TituloTarjeta>
+        <p className="mb-4 text-sm text-tinta-suave">
+          Para no registrar cada salida: asigna un gasto fijo por día, mes o año, o uno que aumenta con la cantidad de animales. Se descuenta
+          del saldo día por día desde la fecha de inicio; en las reglas por animal se usa el número de animales del grupo en cada día.
+          {lectura && ` ${MENSAJE_SOLO_LECTURA}`}
+        </p>
+        <ConsumoAutomatico
+          key={finca.id}
+          fincaId={finca.id}
+          hoy={hoy}
+          corte={corte}
+          reglas={reglas}
+          insumos={insumos.map(({ id, nombre, unidad, contenido }) => ({ id, nombre, unidad, contenido }))}
+          conteos={conteos}
+          puedeEditar={!lectura}
+          puedeBorrar={gestor}
+        />
+      </Tarjeta>
+
+      <div className={clsx("grid gap-6", !lectura && "lg:grid-cols-[1fr_1.3fr]")}>
+        {!lectura && (
+          <Tarjeta>
+            <TituloTarjeta>Registrar movimiento</TituloTarjeta>
+            <FormularioMovimiento fincaId={finca.id} hoy={hoy} catalogo={insumos.map(({ nombre, unidad, contenido }) => ({ nombre, unidad, contenido }))} />
+          </Tarjeta>
+        )}
 
         <Tarjeta>
           <TituloTarjeta detalle="Últimos 30">Movimientos recientes</TituloTarjeta>

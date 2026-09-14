@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { soloLectura } from "@/lib/permisos";
 import { obtenerSesion } from "@/lib/sesion";
 import { BotonVolver, Encabezado, Tarjeta, Vacio } from "@/components/ui";
 import { FormularioBien } from "@/components/fincas/formulario-bien";
@@ -8,8 +10,9 @@ export default async function NuevoBien({ searchParams }: PageProps<"/bienes/nue
   const { finca } = await searchParams;
   const sesion = await obtenerSesion();
   const fincaInicial = typeof finca === "string" && sesion.fincas.some((f) => f.id === finca) ? finca : undefined;
-  const fincas = await fincasConCodigos(sesion);
   const volver = fincaInicial ? `/fincas/${fincaInicial}?tab=bienes` : "/fincas";
+  if (soloLectura(sesion.rol)) redirect(volver);
+  const fincas = await fincasConCodigos(sesion);
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">

@@ -1,3 +1,5 @@
+import type { Database } from "@/lib/database.types";
+
 export const ACCIONES = [
   "ordeno",
   "ordeno_lista",
@@ -6,9 +8,18 @@ export const ACCIONES = [
   "parto",
   "secado",
   "salud",
+  "destete",
+  "baja",
+  // Ya no se ofrece en VacDaTa; se conserva para registros que quedaron en cola.
   "pesaje",
   "carro_tanque",
   "consumo_diario",
+  "mantenimiento",
+  "aplicacion",
+  "control_calidad",
+  "movimiento_insumo",
+  "visita",
+  "rotacion",
 ] as const;
 
 export type Accion = (typeof ACCIONES)[number];
@@ -22,6 +33,7 @@ export type AnimalCatalogo = {
   nombre: string;
   categoria: string;
   sexo: string;
+  fecha_destete: string | null;
   en_ordeno: boolean;
   prenada: boolean | null;
   dias_ordeno: number | null;
@@ -34,15 +46,33 @@ export type AnimalCatalogo = {
   litros_pm: number | null;
 };
 
+export type PotreroCatalogo = Database["public"]["Functions"]["estado_potreros"]["Returns"][number];
+
 export type Catalogo = {
   finca_id: string;
   finca: FincaResumen;
   corte: string;
   animales: AnimalCatalogo[];
-  potreros: { id: string; numero: number; nombre: string | null }[];
+  potreros_estado: PotreroCatalogo[];
+  dias_descanso_objetivo: number;
+  grupos: string[];
+  rotaciones_abiertas: { grupo: string; potrero_id: string; fecha_entrada: string; animales: number | null }[];
+  bienes: { id: string; nombre: string; codigo: string }[];
   insumos: { nombre: string; categoria: string; unidad: string }[];
+  toros: string[];
   descargado_en: string;
 };
+
+export type MensajeCampo = {
+  id: string;
+  texto: string;
+  remitente: string;
+  destinatario_id: string | null;
+  leido: boolean;
+  creado_en: string;
+};
+
+export type BandejaMensajes = { usuario_id: string; mensajes: MensajeCampo[]; descargado_en: string };
 
 export type RegistroCola = {
   cliente_id: string;

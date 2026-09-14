@@ -3,16 +3,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   CLAVE_FINCAS,
+  CLAVE_MENSAJES,
   CLAVE_ULTIMO_SYNC,
   SinConexionError,
   SinSesionError,
+  claveLeidos,
+  descargarMensajes,
   escucharCambios,
   listarCola,
   listarHistorial,
+  marcarMensajesLeidos,
   sincronizar,
   type ResumenSync,
 } from "@/lib/offline/cliente";
-import type { FincaResumen, RegistroCola, RegistroHistorial } from "@/lib/offline/tipos";
+import type { BandejaMensajes, FincaResumen, MensajeCampo, RegistroCola, RegistroHistorial } from "@/lib/offline/tipos";
 
 function suscribirConexion(alCambiar: () => void) {
   window.addEventListener("online", alCambiar);
@@ -56,6 +60,58 @@ export function useFincas(): FincaResumen[] {
       return [];
     }
   }, [crudo]);
+}
+
+const CINCO_MINUTOS = 5 * 60_000;
+
+/** Bandeja de mensajes guardada en el teléfono; se actualiza al abrir la app, al volver la señal y cada 5 minutos. */
+export function useMensajes(usuarioId: string) {
+  const crudo = useLocal(CLAVE_MENSAJES);
+  const leidosCrudo = useLocal(claveLeidos(usuarioId));
+
+  const bandeja = useMemo(() => {
+    try {
+      const leida = crudo ? (JSON.parse(crudo) as BandejaMensajes) : null;
+      return leida?.usuario_id === usuarioId ? leida : null;
+    } catch {
+      return null;
+    }
+  }, [crudo, usuarioId]);
+  const mensajes = useMemo(() => bandeja?.mensajes ?? [], [bandeja]);
+
+  const leidos = useMemo(() => {
+    try {
+      return new Set(JSON.parse(leidosCrudo ?? "[]") as string[]);
+    } catch {
+      return new Set<string>();
+    }
+  }, [leidosCrudo]);
+
+  useEffect(() => {
+    const actualizar = () => {
+      if (navigator.onLine) descargarMensajes().catch(() => undefined);
+    };
+    actualizar();
+    const reloj = window.setInterval(actualizar, CINCO_MINUTOS);
+    window.addEventListener("online", actualizar);
+    return () => {
+      window.clearInterval(reloj);
+      window.removeEventListener("online", actualizar);
+    };
+  }, []);
+
+  const noLeido = useCallback(
+    (m: MensajeCampo) => !leidos.has(m.id) && !(m.destinatario_id === usuarioId && m.leido),
+    [leidos, usuarioId],
+  );
+
+  return {
+    mensajes,
+    descargada: bandeja !== null,
+    noLeido,
+    noLeidos: mensajes.filter(noLeido).length,
+    marcar: (lista: MensajeCampo[]) => marcarMensajesLeidos(usuarioId, lista),
+  };
 }
 
 export function useCola() {

@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { AlertTriangle, BellRing, CheckCheck, MessageSquareText } from "lucide-react";
 import { obtenerSesion, ETIQUETA_ROL, ROLES_GESTORES, type Rol } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
+import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
 import { fecha } from "@/lib/formato";
 import { Encabezado, Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { cambiarEstadoComentario, marcarMensajeLeido } from "./actions";
@@ -197,7 +198,7 @@ export default async function MensajesPage() {
               </ul>
             )}
             <div className="mt-5">
-              <FormularioMensaje miembros={opciones} />
+              {soloLectura(rol) ? <p className="text-sm text-tinta-suave">{MENSAJE_SOLO_LECTURA}</p> : <FormularioMensaje miembros={opciones} />}
             </div>
           </Tarjeta>
         </div>

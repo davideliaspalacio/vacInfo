@@ -8,6 +8,12 @@ function enlace(fincaId: string, mes: string, tipos: string[]) {
   return `/calendario?${p}`;
 }
 
+const GRUPOS = [
+  { titulo: "Realizado", incluye: (t: (typeof TIPOS)[string]) => t.realizado && !t.agenda },
+  { titulo: "Programado", incluye: (t: (typeof TIPOS)[string]) => !t.realizado && !t.agenda },
+  { titulo: "Agenda", incluye: (t: (typeof TIPOS)[string]) => !!t.agenda },
+];
+
 /** Chips de tipo: sirven de filtro y de leyenda a la vez. */
 export function FiltroTipos({ fincaId, mes, activos, conteo }: { fincaId: string; mes: string; activos: string[]; conteo: Record<string, number> }) {
   const todos = activos.length === 0;
@@ -17,42 +23,42 @@ export function FiltroTipos({ fincaId, mes, activos, conteo }: { fincaId: string
     return enlace(fincaId, mes, nuevos.length === Object.keys(TIPOS).length ? [] : nuevos);
   };
 
-  const grupo = (realizado: boolean) => (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="w-24 text-xs font-bold uppercase text-tinta-suave">{realizado ? "Realizado" : "Programado"}</span>
-      {Object.entries(TIPOS)
-        .filter(([, t]) => t.realizado === realizado)
-        .map(([clave, t]) => {
-          const activo = todos || activos.includes(clave);
-          return (
-            <Link
-              key={clave}
-              href={alternar(clave)}
-              aria-pressed={activo}
-              className={clsx(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold",
-                activo ? "border-tinta/20 bg-white text-bosque" : "border-dashed border-tinta/20 text-tinta-suave/70 line-through",
-              )}
-            >
-              <span className={clsx("h-3 w-3 rounded-sm", t.punto)} aria-hidden />
-              {t.etiqueta}
-              {conteo[clave] ? <span className="tabular-nums text-tinta-suave">{conteo[clave]}</span> : null}
-            </Link>
-          );
-        })}
-    </div>
-  );
-
   return (
     <div className="space-y-2">
-      {grupo(true)}
-      {grupo(false)}
+      {GRUPOS.map((g) => (
+        <div key={g.titulo} className="flex flex-wrap items-center gap-2">
+          <span className="w-24 text-xs font-bold uppercase text-tinta-suave">{g.titulo}</span>
+          {Object.entries(TIPOS)
+            .filter(([, t]) => g.incluye(t))
+            .map(([clave, t]) => {
+              const activo = todos || activos.includes(clave);
+              return (
+                <Link
+                  key={clave}
+                  href={alternar(clave)}
+                  aria-pressed={activo}
+                  className={clsx(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold",
+                    activo ? "border-tinta/20 bg-white text-bosque" : "border-dashed border-tinta/20 text-tinta-suave/70 line-through",
+                  )}
+                >
+                  <span className={clsx("h-3 w-3 rounded-sm", t.punto)} aria-hidden />
+                  {t.etiqueta}
+                  {conteo[clave] ? <span className="tabular-nums text-tinta-suave">{conteo[clave]}</span> : null}
+                </Link>
+              );
+            })}
+        </div>
+      ))}
       <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-tinta-suave">
         <span className="inline-flex items-center gap-1.5">
           <span className="h-3 w-5 rounded-sm bg-sky-700" aria-hidden /> Lleno: ya se hizo
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-3 w-5 rounded-sm border-2 border-sky-700 bg-white" aria-hidden /> Con borde: programado
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className={clsx("h-3 w-5 rounded-sm", TIPOS.programado.punto)} aria-hidden /> Punteado: agendado por el equipo
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className={clsx("h-3 w-5 rounded-sm border", VENCIDO)} aria-hidden /> Rojo: programado y vencido

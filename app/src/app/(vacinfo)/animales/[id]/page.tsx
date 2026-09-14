@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
+import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, litros, num, sumarDias } from "@/lib/formato";
@@ -228,9 +229,11 @@ export default async function FichaAnimal({ params }: PageProps<"/animales/[id]"
         <Tarjeta>
           <TituloTarjeta
             detalle={
-              <Link href={`/fincas/${animal.finca_id}/levante?animal=${id}#crecimiento`} className="font-bold text-bosque hover:underline">
-                Registrar pesaje o destete
-              </Link>
+              puedeRegistrar(rol) && (
+                <Link href={`/fincas/${animal.finca_id}/levante?animal=${id}#crecimiento`} className="font-bold text-bosque hover:underline">
+                  Registrar pesaje o destete
+                </Link>
+              )
             }
           >
             Crecimiento

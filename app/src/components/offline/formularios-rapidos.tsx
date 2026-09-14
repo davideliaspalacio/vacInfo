@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import clsx from "clsx";
-import { CircleAlert, Save } from "lucide-react";
+import { ChevronDown, CircleAlert, Save } from "lucide-react";
 import { Campo, CampoFecha, Casilla, JORNADAS, Opciones, SI_NO, control } from "@/components/campo/ui";
+import { esLevante } from "@/components/levante/etiquetas";
 import { CUARTOS, TIPOS_SALUD, validarDatos } from "@/lib/offline/esquemas";
 import { ETIQUETA_ACCION } from "@/lib/offline/resumen";
-import type { Accion, Catalogo } from "@/lib/offline/tipos";
+import type { Accion, AnimalCatalogo, Catalogo } from "@/lib/offline/tipos";
 
 export type Guardar = (accion: Accion, datos: Record<string, unknown>) => Promise<void>;
 
@@ -20,7 +21,7 @@ function leerFormulario(form: HTMLFormElement) {
   return datos;
 }
 
-const jornadaActual = () => (new Date().getHours() < 12 ? "am" : "pm");
+export const jornadaActual = () => (new Date().getHours() < 12 ? "am" : "pm");
 
 export function Chip({ activo, onClick, children }: { activo: boolean; onClick: () => void; children: ReactNode }) {
   return (
@@ -38,17 +39,24 @@ export function Chip({ activo, onClick, children }: { activo: boolean; onClick: 
   );
 }
 
-function FormaRapida({
+export function FormaRapida({
   accion,
   fijos,
   alGuardar,
+  titulo,
   descripcion,
+  boton,
+  revisar,
   children,
 }: {
   accion: Accion;
   fijos: Record<string, string>;
   alGuardar: Guardar;
+  titulo?: string;
   descripcion?: string;
+  boton?: string;
+  /** Validación adicional con los datos ya limpios; devuelve el mensaje de error o null. */
+  revisar?: (datos: Record<string, unknown>) => string | null;
   children: ReactNode;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -58,10 +66,10 @@ function FormaRapida({
     e.preventDefault();
     const form = e.currentTarget;
     const leido = validarDatos(accion, { ...leerFormulario(form), ...fijos });
-    if (!leido.ok) {
-      setError(leido.mensaje);
-      return;
-    }
+    if (!leido.ok) return setError(leido.mensaje);
+    const problema = revisar?.(leido.datos);
+    if (problema) return setError(problema);
+
     setGuardando(true);
     try {
       await alGuardar(accion, leido.datos);
@@ -76,7 +84,7 @@ function FormaRapida({
 
   return (
     <form onSubmit={enviar} className="space-y-4">
-      <h2 className="font-display text-xl font-bold text-slate-900">{ETIQUETA_ACCION[accion]}</h2>
+      <h2 className="font-display text-xl font-bold text-slate-900">{titulo ?? ETIQUETA_ACCION[accion]}</h2>
       {descripcion && <p className="-mt-2 text-sm text-slate-500">{descripcion}</p>}
       {children}
       {error && (
@@ -91,37 +99,66 @@ function FormaRapida({
         className="flex min-h-16 w-full items-center justify-center gap-2 rounded-2xl bg-campo text-lg font-bold text-white shadow-lg shadow-campo/25 disabled:opacity-60"
       >
         <Save className="h-5 w-5" aria-hidden />
-        {guardando ? "Guardando…" : "Guardar en el teléfono"}
+        {guardando ? "Guardando…" : (boton ?? "Guardar")}
       </button>
+      <p className="-mt-2 text-center text-xs text-slate-500">Queda guardado en el teléfono y se envía cuando haya señal.</p>
     </form>
   );
 }
 
-function Texto({ etiqueta, name, placeholder, lista }: { etiqueta: string; name: string; placeholder?: string; lista?: string }) {
+export function Texto({
+  etiqueta,
+  name,
+  placeholder,
+  lista,
+  requerido,
+  tipo = "text",
+}: {
+  etiqueta: string;
+  name: string;
+  placeholder?: string;
+  lista?: string;
+  requerido?: boolean;
+  tipo?: "text" | "tel" | "time";
+}) {
   return (
     <Campo etiqueta={etiqueta}>
-      <input name={name} placeholder={placeholder} list={lista} className={control} />
+      <input type={tipo} name={name} placeholder={placeholder} list={lista} required={requerido} autoComplete="off" className={control} />
     </Campo>
   );
 }
 
-function Observaciones() {
+export function Observaciones({ name = "observaciones", etiqueta = "Observaciones", requerido }: { name?: string; etiqueta?: string; requerido?: boolean }) {
   return (
-    <Campo etiqueta="Observaciones">
-      <textarea name="observaciones" rows={2} className={`${control} resize-none`} />
+    <Campo etiqueta={etiqueta}>
+      <textarea name={name} rows={2} required={requerido} className={`${control} resize-none`} />
     </Campo>
   );
 }
 
-function Numero({ etiqueta, name, requerido, grande, paso = "0.1" }: { etiqueta: string; name: string; requerido?: boolean; grande?: boolean; paso?: string }) {
+export function Numero({
+  etiqueta,
+  name,
+  requerido,
+  grande,
+  paso = "0.1",
+  min = "0",
+}: {
+  etiqueta: string;
+  name: string;
+  requerido?: boolean;
+  grande?: boolean;
+  paso?: string;
+  min?: string;
+}) {
   return (
     <Campo etiqueta={etiqueta}>
       <input
         name={name}
         type="number"
-        inputMode="decimal"
+        inputMode={paso === "1" ? "numeric" : "decimal"}
         step={paso}
-        min="0"
+        min={min}
         required={requerido}
         placeholder="0"
         className={clsx(control, grande && "text-2xl font-bold")}
@@ -130,9 +167,59 @@ function Numero({ etiqueta, name, requerido, grande, paso = "0.1" }: { etiqueta:
   );
 }
 
+export function Selector({
+  etiqueta,
+  name,
+  opciones,
+  requerido,
+  vacio = "Ninguno",
+}: {
+  etiqueta: string;
+  name: string;
+  opciones: { valor: string; etiqueta: string }[];
+  requerido?: boolean;
+  vacio?: string;
+}) {
+  return (
+    <Campo etiqueta={etiqueta}>
+      <select name={name} required={requerido} defaultValue="" className={control}>
+        <option value="" disabled={requerido}>
+          {requerido ? "Elige una opción" : vacio}
+        </option>
+        {opciones.map((o) => (
+          <option key={o.valor} value={o.valor}>
+            {o.etiqueta}
+          </option>
+        ))}
+      </select>
+    </Campo>
+  );
+}
+
 // ─────────────────────────── Animal ───────────────────────────
-export const ACCIONES_ANIMAL = ["ordeno", "servicio", "palpacion", "parto", "secado", "salud", "pesaje"] as const;
+export const ACCIONES_ANIMAL = ["ordeno", "servicio", "palpacion", "parto", "secado", "destete", "salud", "baja"] as const;
 export type AccionAnimal = (typeof ACCIONES_ANIMAL)[number];
+
+const SOLO_HEMBRAS: AccionAnimal[] = ["ordeno", "servicio", "palpacion", "parto", "secado"];
+
+export const ETIQUETA_ACCION_ANIMAL: Record<AccionAnimal, string> = {
+  ordeno: "Ordeño",
+  servicio: "Servicio",
+  palpacion: "Palpación",
+  parto: "Parto / cría",
+  secado: "Secado",
+  destete: "Destete",
+  salud: "Salud",
+  baja: "Muerte / venta / retiro",
+};
+
+export function accionesDe(animal: AnimalCatalogo): AccionAnimal[] {
+  return ACCIONES_ANIMAL.filter((a) => {
+    if (SOLO_HEMBRAS.includes(a)) return animal.sexo === "hembra";
+    if (a === "destete") return esLevante(animal.categoria) && !animal.fecha_destete;
+    return true;
+  });
+}
 
 const ETIQUETA_SALUD: Record<(typeof TIPOS_SALUD)[number], string> = {
   vacuna: "Vacuna",
@@ -147,12 +234,24 @@ const ETIQUETA_SALUD: Record<(typeof TIPOS_SALUD)[number], string> = {
   desparasitacion: "Desparasitación",
 };
 
+const NOMBRE_CUARTO: Record<(typeof CUARTOS)[number], string> = {
+  TDD: "TDD · trasero derecho",
+  TDI: "TDI · trasero izquierdo",
+  TTD: "TTD · delantero derecho",
+  TTI: "TTI · delantero izquierdo",
+};
+
 function FormularioSalud({ animalId, insumos, alGuardar }: { animalId: string; insumos: Catalogo["insumos"]; alGuardar: Guardar }) {
   const [tipo, setTipo] = useState<(typeof TIPOS_SALUD)[number]>("vacuna");
   const medicamentos = insumos.filter((i) => i.categoria === "medicamento");
 
   return (
-    <FormaRapida accion="salud" fijos={{ animal_id: animalId, tipo }} alGuardar={alGuardar}>
+    <FormaRapida
+      accion="salud"
+      fijos={{ animal_id: animalId, tipo }}
+      alGuardar={alGuardar}
+      revisar={(d) => ((tipo === "vacuna" || tipo === "tratamiento") && !d.producto ? "Escribe el producto aplicado." : null)}
+    >
       <div className="flex flex-wrap gap-2">
         {TIPOS_SALUD.map((t) => (
           <Chip key={t} activo={t === tipo} onClick={() => setTipo(t)}>
@@ -164,9 +263,9 @@ function FormularioSalud({ animalId, insumos, alGuardar }: { animalId: string; i
       {tipo === "mastitis" && (
         <fieldset>
           <legend className="mb-2 font-bold text-slate-800">Cuartos afectados</legend>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2">
             {CUARTOS.map((c) => (
-              <Casilla key={c} name="cuartos" value={c} etiqueta={c} />
+              <Casilla key={c} name="cuartos" value={c} etiqueta={NOMBRE_CUARTO[c]} />
             ))}
           </div>
         </fieldset>
@@ -179,27 +278,102 @@ function FormularioSalud({ animalId, insumos, alGuardar }: { animalId: string; i
         ))}
       </datalist>
       <div className="grid grid-cols-2 gap-3">
+        <Texto etiqueta="Lote" name="lote" />
+        <Texto etiqueta="Registro ICA" name="registro_ica" />
         <Texto etiqueta="Dosis" name="dosis" placeholder="5 ml" />
-        <Numero etiqueta="Días de retiro" name="dias_retiro" paso="1" />
+        <Texto etiqueta="Vía" name="via_administracion" lista="vacdata-vias" />
       </div>
+      <datalist id="vacdata-vias">
+        {["Intramuscular", "Subcutánea", "Intravenosa", "Intramamaria", "Oral", "Tópica"].map((v) => (
+          <option key={v} value={v} />
+        ))}
+      </datalist>
+      {tipo === "vacuna" ? (
+        <CampoFecha etiqueta="Próxima dosis" name="proxima_fecha" defecto="" requerido={false} />
+      ) : (
+        <Numero etiqueta="Días de retiro de leche" name="dias_retiro" paso="1" />
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <Texto etiqueta="Veterinario" name="veterinario" />
+        <Texto etiqueta="T.P. veterinario" name="tarjeta_profesional" />
+      </div>
+      <Texto etiqueta="Operario" name="operario" />
       <Observaciones />
     </FormaRapida>
   );
 }
 
+/** Nombre del toro: lista de toros conocidos que se despliega, o un nombre nuevo escrito a mano. */
+function CampoToro({ toros }: { toros: string[] }) {
+  const entrada = useRef<HTMLInputElement>(null);
+  const [abierta, setAbierta] = useState(false);
+  const [elegido, setElegido] = useState("");
+
+  return (
+    <div>
+      <Campo etiqueta="Nombre del toro">
+        <input
+          ref={entrada}
+          name="toro_nombre"
+          list="vacdata-toros"
+          autoComplete="off"
+          onChange={(e) => setElegido(e.target.value)}
+          placeholder={toros.length ? "Elige de la lista o escribe uno nuevo" : undefined}
+          className={control}
+        />
+      </Campo>
+      <datalist id="vacdata-toros">
+        {toros.map((t) => (
+          <option key={t} value={t} />
+        ))}
+      </datalist>
+      {toros.length > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setAbierta(!abierta)}
+            aria-expanded={abierta}
+            className="mt-1 inline-flex min-h-11 items-center gap-1.5 text-sm font-bold text-campo"
+          >
+            <ChevronDown className={clsx("h-4 w-4 transition", abierta && "rotate-180")} aria-hidden />
+            {abierta ? "Ocultar toros conocidos" : `Ver toros conocidos (${toros.length})`}
+          </button>
+          {abierta && (
+            <div className="mt-1 flex flex-wrap gap-2">
+              {toros.map((t) => (
+                <Chip
+                  key={t}
+                  activo={t === elegido}
+                  onClick={() => {
+                    if (entrada.current) entrada.current.value = t;
+                    setElegido(t);
+                    setAbierta(false);
+                  }}
+                >
+                  {t}
+                </Chip>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function FormularioAnimalRapido({
   accion,
-  animalId,
+  animal,
   catalogo,
   alGuardar,
 }: {
   accion: AccionAnimal;
-  animalId: string;
+  animal: AnimalCatalogo;
   catalogo: Catalogo;
   alGuardar: Guardar;
 }) {
   const [jornada] = useState(jornadaActual);
-  const fijos = { animal_id: animalId };
+  const fijos = { animal_id: animal.id };
 
   switch (accion) {
     case "ordeno":
@@ -225,7 +399,7 @@ export function FormularioAnimalRapido({
             requerido
           />
           <Opciones etiqueta="Jornada" name="jornada" opciones={JORNADAS} />
-          <Texto etiqueta="Nombre del toro" name="toro_nombre" />
+          <CampoToro toros={catalogo.toros} />
           <Texto etiqueta="Raza del toro" name="toro_raza" placeholder="Holstein, Jersey…" />
           <Texto etiqueta="Inseminador" name="inseminador" />
           <Observaciones />
@@ -251,7 +425,7 @@ export function FormularioAnimalRapido({
       );
     case "parto":
       return (
-        <FormaRapida accion="parto" fijos={fijos} alGuardar={alGuardar}>
+        <FormaRapida accion="parto" fijos={fijos} alGuardar={alGuardar} titulo="Parto / cría">
           <CampoFecha />
           <Opciones
             etiqueta="Sexo de la cría"
@@ -262,10 +436,31 @@ export function FormularioAnimalRapido({
             ]}
           />
           <Texto etiqueta="Raza de la cría" name="cria_raza" />
+          <Opciones
+            etiqueta="¿Parió de día o de noche?"
+            name="en_la_noche"
+            opciones={[
+              { valor: "no", etiqueta: "De día" },
+              { valor: "si", etiqueta: "De noche" },
+            ]}
+          />
           <Opciones etiqueta="¿Nació viva?" name="nacido_vivo" opciones={SI_NO} defecto="si" />
-          <Opciones etiqueta="¿Tomó calostro?" name="toma_calostro" opciones={SI_NO} />
           <Casilla name="aborto" etiqueta="Fue un aborto" />
+          <Opciones etiqueta="¿Tomó calostro?" name="toma_calostro" opciones={SI_NO} />
+          <Texto etiqueta="Persona que la vio tomar calostro" name="persona_calostro" />
+          <Opciones etiqueta="¿Expulsó la placenta?" name="placenta_expulsada" opciones={SI_NO} />
+          <Opciones etiqueta="¿Se hizo lavado?" name="lavado" opciones={SI_NO} />
           <Observaciones />
+          <fieldset className="space-y-3 rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
+            <Casilla name="registrar_cria" etiqueta="Registrar la cría" defecto />
+            <p className="text-sm text-slate-600">Crea la ficha de la ternera o ternero al enviar. No se crea si fue aborto o nació muerta. Elige el sexo arriba.</p>
+            <Campo etiqueta="Nombre de la cría">
+              <input name="cria_nombre" defaultValue={`Cría de ${animal.nombre}`} className={control} />
+            </Campo>
+            <Campo etiqueta="Chapeta de la cría (opcional)">
+              <input name="cria_chapeta" inputMode="numeric" autoComplete="off" className={control} />
+            </Campo>
+          </fieldset>
         </FormaRapida>
       );
     case "secado":
@@ -280,53 +475,33 @@ export function FormularioAnimalRapido({
           </datalist>
         </FormaRapida>
       );
-    case "salud":
-      return <FormularioSalud animalId={animalId} insumos={catalogo.insumos} alGuardar={alGuardar} />;
-    case "pesaje":
+    case "destete":
       return (
-        <FormaRapida accion="pesaje" fijos={fijos} alGuardar={alGuardar}>
+        <FormaRapida accion="destete" fijos={fijos} alGuardar={alGuardar} descripcion="La cría deja de tomar leche y pasa a levante." boton="Registrar destete">
+          <CampoFecha etiqueta="Fecha del destete" />
+        </FormaRapida>
+      );
+    case "salud":
+      return <FormularioSalud animalId={animal.id} insumos={catalogo.insumos} alGuardar={alGuardar} />;
+    case "baja":
+      return (
+        <FormaRapida accion="baja" fijos={fijos} alGuardar={alGuardar} descripcion="El animal quedará fuera del inventario activo." boton="Registrar salida">
           <CampoFecha />
-          <Numero etiqueta="Peso (kg)" name="peso_kg" requerido grande />
+          <Opciones
+            etiqueta="Tipo"
+            name="tipo"
+            columnas={3}
+            opciones={[
+              { valor: "muerte", etiqueta: "Muerte" },
+              { valor: "venta", etiqueta: "Venta" },
+              { valor: "retiro", etiqueta: "Retiro" },
+            ]}
+            requerido
+          />
+          <Texto etiqueta="Causa o motivo" name="causa" placeholder="Enfermedad, baja producción…" />
+          <Texto etiqueta="Quién lo lleva" name="responsable_traslado" />
+          <Numero etiqueta="Valor de venta (opcional)" name="valor" paso="1" />
         </FormaRapida>
       );
   }
-}
-
-// ─────────────────────────── Finca ───────────────────────────
-export function FormulariosFinca({ fincaId, alGuardar }: { fincaId: string; alGuardar: Guardar }) {
-  const [accion, setAccion] = useState<"carro_tanque" | "consumo_diario">("carro_tanque");
-  const fijos = { finca_id: fincaId };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Chip activo={accion === "carro_tanque"} onClick={() => setAccion("carro_tanque")}>
-          Carro tanque
-        </Chip>
-        <Chip activo={accion === "consumo_diario"} onClick={() => setAccion("consumo_diario")}>
-          Consumo del día
-        </Chip>
-      </div>
-      {accion === "carro_tanque" ? (
-        <FormaRapida accion="carro_tanque" fijos={fijos} alGuardar={alGuardar} descripcion="Leche que recogió el carro tanque.">
-          <CampoFecha />
-          <Numero etiqueta="Litros entregados" name="litros" requerido grande />
-          <div className="grid grid-cols-2 gap-3">
-            <Texto etiqueta="Placa" name="placa" placeholder="ABC123" />
-            <Texto etiqueta="Conductor" name="conductor" />
-          </div>
-        </FormaRapida>
-      ) : (
-        <FormaRapida accion="consumo_diario" fijos={fijos} alGuardar={alGuardar} descripcion="Kilos que se dieron hoy. Llena al menos uno.">
-          <CampoFecha />
-          <div className="grid grid-cols-2 gap-3">
-            <Numero etiqueta="Concentrado vacas" name="kg_concentrado_vacas" />
-            <Numero etiqueta="Sal vacas" name="kg_sal_vacas" />
-            <Numero etiqueta="Concentrado terneras" name="kg_concentrado_terneras" />
-            <Numero etiqueta="Sal terneras" name="kg_sal_terneras" />
-          </div>
-        </FormaRapida>
-      )}
-    </div>
-  );
 }

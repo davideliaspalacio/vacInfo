@@ -9,7 +9,7 @@ export function InsigniaPendientes() {
   if (!total) return null;
   return (
     <Link
-      href="/campo/rapido?vista=pendientes"
+      href="/campo/registrar?vista=pendientes"
       title="Registros guardados en el teléfono que aún no se envían"
       className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full bg-amber-100 px-3 text-xs font-bold text-amber-900"
     >

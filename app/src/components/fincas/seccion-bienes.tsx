@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion } from "@/lib/sesion";
 import { fecha, hoyISO } from "@/lib/formato";
 import { Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { ESTADOS_BIEN, TIPOS_BIEN } from "@/components/fincas/etiquetas";
 
 export async function SeccionBienes({ fincaId }: { fincaId: string }) {
-  const { supabase } = await obtenerSesion();
+  const { supabase, rol } = await obtenerSesion();
   const { data: bienes } = await supabase
     .from("bienes")
     .select("id, codigo, nombre, tipo, marca, estado, garantia_hasta, recordatorio")
@@ -17,9 +18,11 @@ export async function SeccionBienes({ fincaId }: { fincaId: string }) {
     <Tarjeta>
       <TituloTarjeta
         detalle={
-          <Link href={`/bienes/nuevo?finca=${fincaId}`} className="font-bold text-pasto-oscuro hover:underline">
-            + Nueva ficha de bien
-          </Link>
+          puedeRegistrar(rol) && (
+            <Link href={`/bienes/nuevo?finca=${fincaId}`} className="font-bold text-pasto-oscuro hover:underline">
+              + Nueva ficha de bien
+            </Link>
+          )
         }
       >
         Bienes y equipos

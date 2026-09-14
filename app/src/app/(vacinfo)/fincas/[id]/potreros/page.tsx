@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { ArrowRightLeft, CalendarDays, Lightbulb, LogOut, Settings2 } from "lucide-react";
+import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, num } from "@/lib/formato";
@@ -171,32 +172,34 @@ export default async function PotrerosFinca({ params, searchParams }: PageProps<
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Tarjeta>
-          <TituloTarjeta>
-            <span className="inline-flex items-center gap-2">
-              <ArrowRightLeft className="h-5 w-5" aria-hidden />
-              Mover grupo
-            </span>
-          </TituloTarjeta>
-          <p className="mb-3 text-sm text-tinta-suave">Cierra la estadía actual del grupo y lo entra al potrero destino en la misma fecha.</p>
-          {potreros.length ? (
-            <FormularioMoverGrupo accion={moverGrupo.bind(null, id)} potreros={potreros} grupos={grupos} objetivo={objetivo} corte={corte} />
-          ) : (
-            <Vacio>Primero hay que crear los potreros.</Vacio>
-          )}
-        </Tarjeta>
-        <Tarjeta>
-          <TituloTarjeta>
-            <span className="inline-flex items-center gap-2">
-              <LogOut className="h-5 w-5" aria-hidden />
-              Sacar grupo
-            </span>
-          </TituloTarjeta>
-          <p className="mb-3 text-sm text-tinta-suave">Registra la salida sin entrar a otro potrero (establo, venta, otra finca).</p>
-          <FormularioSacarGrupo accion={sacarGrupo.bind(null, id)} grupos={gruposActivos} corte={corte} />
-        </Tarjeta>
-      </div>
+      {puedeRegistrar(rol) && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Tarjeta>
+            <TituloTarjeta>
+              <span className="inline-flex items-center gap-2">
+                <ArrowRightLeft className="h-5 w-5" aria-hidden />
+                Mover grupo
+              </span>
+            </TituloTarjeta>
+            <p className="mb-3 text-sm text-tinta-suave">Cierra la estadía actual del grupo y lo entra al potrero destino en la misma fecha.</p>
+            {potreros.length ? (
+              <FormularioMoverGrupo accion={moverGrupo.bind(null, id)} potreros={potreros} grupos={grupos} objetivo={objetivo} corte={corte} />
+            ) : (
+              <Vacio>Primero hay que crear los potreros.</Vacio>
+            )}
+          </Tarjeta>
+          <Tarjeta>
+            <TituloTarjeta>
+              <span className="inline-flex items-center gap-2">
+                <LogOut className="h-5 w-5" aria-hidden />
+                Sacar grupo
+              </span>
+            </TituloTarjeta>
+            <p className="mb-3 text-sm text-tinta-suave">Registra la salida sin entrar a otro potrero (establo, venta, otra finca).</p>
+            <FormularioSacarGrupo accion={sacarGrupo.bind(null, id)} grupos={gruposActivos} corte={corte} />
+          </Tarjeta>
+        </div>
+      )}
 
       <Tarjeta>
         <TituloTarjeta detalle="Últimas 40">Historial de rotaciones</TituloTarjeta>

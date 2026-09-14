@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Calculator, FileSpreadsheet, MapPin, Plus, Search } from "lucide-react";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
-import { corteDeFinca } from "@/lib/datos";
+import { resumenAlCorte } from "@/components/fincas/consultas";
 import { litros, num, pct } from "@/lib/formato";
 import { BotonVolver, Encabezado, Etiqueta, Metrica, Vacio } from "@/components/ui";
 
@@ -20,8 +20,7 @@ export default async function Fincas({ searchParams }: PageProps<"/fincas">) {
 
   const tarjetas = await Promise.all(
     (fincas ?? []).map(async (f) => {
-      const corte = await corteDeFinca(supabase, f.id);
-      const { data: resumen } = await supabase.rpc("resumen_finca", { p_finca: f.id, p_corte: corte }).single();
+      const { resumen } = await resumenAlCorte(supabase, f.id);
       const vientres = (resumen?.vacas_ordeno ?? 0) + (resumen?.vacas_horras ?? 0);
       return { f, resumen, produciendo: vientres ? (resumen?.vacas_ordeno ?? 0) / vientres : null };
     }),

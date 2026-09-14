@@ -348,6 +348,70 @@ export type Database = {
           },
         ]
       }
+      consumos_programados: {
+        Row: {
+          activo: boolean
+          cantidad: number
+          desde: string
+          en_kg: boolean
+          finca_id: string
+          grupo: string | null
+          hasta: string | null
+          id: string
+          insumo_id: string
+          modo: string
+          notas: string | null
+          periodo: string
+          registrado_en: string
+          registrado_por: string | null
+        }
+        Insert: {
+          activo?: boolean
+          cantidad: number
+          desde?: string
+          en_kg?: boolean
+          finca_id: string
+          grupo?: string | null
+          hasta?: string | null
+          id?: string
+          insumo_id: string
+          modo: string
+          notas?: string | null
+          periodo: string
+          registrado_en?: string
+          registrado_por?: string | null
+        }
+        Update: {
+          activo?: boolean
+          cantidad?: number
+          desde?: string
+          en_kg?: boolean
+          finca_id?: string
+          grupo?: string | null
+          hasta?: string | null
+          id?: string
+          insumo_id?: string
+          modo?: string
+          notas?: string | null
+          periodo?: string
+          registrado_en?: string
+          registrado_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consumos_programados_finca_id_fkey"
+            columns: ["finca_id"]
+            referencedRelation: "fincas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consumos_programados_insumo_id_fkey"
+            columns: ["insumo_id"]
+            referencedRelation: "insumos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       controles_calidad: {
         Row: {
           cloro: number | null
@@ -400,6 +464,64 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "controles_calidad_finca_id_fkey"
+            columns: ["finca_id"]
+            referencedRelation: "fincas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      eventos_programados: {
+        Row: {
+          animal_id: string | null
+          descripcion: string | null
+          estado: string
+          fecha: string
+          finca_id: string
+          hora: string | null
+          id: string
+          recordar_dias: number
+          registrado_en: string
+          registrado_por: string | null
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          animal_id?: string | null
+          descripcion?: string | null
+          estado?: string
+          fecha: string
+          finca_id: string
+          hora?: string | null
+          id?: string
+          recordar_dias?: number
+          registrado_en?: string
+          registrado_por?: string | null
+          tipo?: string
+          titulo: string
+        }
+        Update: {
+          animal_id?: string | null
+          descripcion?: string | null
+          estado?: string
+          fecha?: string
+          finca_id?: string
+          hora?: string | null
+          id?: string
+          recordar_dias?: number
+          registrado_en?: string
+          registrado_por?: string | null
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eventos_programados_animal_id_fkey"
+            columns: ["animal_id"]
+            referencedRelation: "animales"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eventos_programados_finca_id_fkey"
             columns: ["finca_id"]
             referencedRelation: "fincas"
             referencedColumns: ["id"]
@@ -1512,6 +1634,16 @@ export type Database = {
           tipo: string
         }[]
       }
+      animales_por_dia: {
+        Args: { p_desde: string; p_finca: string; p_hasta: string }
+        Returns: {
+          dia: string
+          levante: number
+          todos: number
+          vacas_horras: number
+          vacas_ordeno: number
+        }[]
+      }
       crear_organizacion: {
         Args: { p_nit?: string; p_nombre: string }
         Returns: string
@@ -1633,6 +1765,9 @@ export type Database = {
         }[]
       }
       puede_gestionar_finca: { Args: { f: string }; Returns: boolean }
+      puede_registrar_animal: { Args: { a: string }; Returns: boolean }
+      puede_registrar_finca: { Args: { f: string }; Returns: boolean }
+      puede_registrar_organizacion: { Args: { org: string }; Returns: boolean }
       puede_ver_animal: { Args: { a: string }; Returns: boolean }
       puede_ver_finca: { Args: { f: string }; Returns: boolean }
       registrar_destete: {
@@ -1663,6 +1798,7 @@ export type Database = {
         Args: { p_corte?: string; p_finca: string }
         Returns: {
           categoria: Database["public"]["Enums"]["categoria_insumo"]
+          consumo_automatico: number
           consumo_diario: number
           consumo_registrado: number
           contenido: number
@@ -1676,6 +1812,12 @@ export type Database = {
           stock_minimo: number
           ultimo_ingreso: string
           unidad: string
+        }[]
+      }
+      ultimo_ordeno: {
+        Args: { p_corte: string; p_finca: string }
+        Returns: {
+          fecha: string
         }[]
       }
       ver_invitacion: {

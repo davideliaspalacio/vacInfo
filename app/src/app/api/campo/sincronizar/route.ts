@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
+import type { Rol } from "@/lib/sesion";
 import { MAX_REGISTROS, leerLote, procesarRegistros } from "@/lib/offline/servidor";
 
 const SIN_CACHE = { "Cache-Control": "no-store" };
@@ -16,6 +18,11 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Tu sesión se cerró. Vuelve a entrar." }, { status: 401, headers: SIN_CACHE });
+
+  const { data: membresia } = await supabase.from("miembros").select("rol").eq("usuario_id", user.id).limit(1).maybeSingle();
+  if (membresia && soloLectura(membresia.rol as Rol)) {
+    return NextResponse.json({ error: `${MENSAJE_SOLO_LECTURA} Los registros no se enviaron.` }, { status: 403, headers: SIN_CACHE });
+  }
 
   const cuerpo: unknown = await request.json().catch(() => null);
   const registros = leerLote(cuerpo);

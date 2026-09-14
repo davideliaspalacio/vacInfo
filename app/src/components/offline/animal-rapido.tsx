@@ -1,14 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronRight, Search, X } from "lucide-react";
+import { ChevronRight, ScanLine, Search, TriangleAlert, X } from "lucide-react";
 import { control } from "@/components/campo/ui";
+import { EscanerChapeta, leerCodigoChapeta } from "@/components/campo/escaner-qr";
 import { fecha } from "@/lib/formato";
-import { ETIQUETA_ACCION } from "@/lib/offline/resumen";
 import type { Accion, AnimalCatalogo, Catalogo } from "@/lib/offline/tipos";
-import { ACCIONES_ANIMAL, Chip, FormularioAnimalRapido, type AccionAnimal } from "./formularios-rapidos";
+import { Chip, ETIQUETA_ACCION_ANIMAL, FormularioAnimalRapido, accionesDe, type AccionAnimal } from "./formularios-rapidos";
 
-const normalizar = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const normalizar = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
 function Etiquetas({ animal }: { animal: AnimalCatalogo }) {
   const etiquetas: { texto: string; clase: string }[] = [];
@@ -29,14 +29,25 @@ function Etiquetas({ animal }: { animal: AnimalCatalogo }) {
 
 export function AnimalRapido({
   catalogo,
+  animalInicial,
   alGuardar,
 }: {
   catalogo: Catalogo;
+  /** Animal preseleccionado desde un enlace (?animal=). */
+  animalInicial?: string | null;
   alGuardar: (accion: Accion, datos: Record<string, unknown>, animal: AnimalCatalogo) => Promise<void>;
 }) {
   const [busqueda, setBusqueda] = useState("");
-  const [animalId, setAnimalId] = useState<string | null>(null);
+  const [animalId, setAnimalId] = useState<string | null>(() =>
+    animalInicial && catalogo.animales.some((a) => a.id === animalInicial) ? animalInicial : null,
+  );
   const [accion, setAccion] = useState<AccionAnimal>("ordeno");
+  const [escaneando, setEscaneando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(() =>
+    animalInicial && !catalogo.animales.some((a) => a.id === animalInicial)
+      ? `El animal del enlace no está en los datos de ${catalogo.finca.nombre}. Puede ser de otra finca o haber salido del inventario.`
+      : null,
+  );
 
   const indice = useMemo(
     () =>
@@ -47,16 +58,32 @@ export function AnimalRapido({
   );
 
   const resultados = useMemo(() => {
-    const t = normalizar(busqueda.trim());
+    const t = normalizar(busqueda);
     if (!t) return indice.map((i) => i.a);
     const exactos = indice.filter(({ a }) => a.chapeta === t || normalizar(a.codigo) === t).map((i) => i.a);
     const parciales = indice.filter(({ a, texto }) => texto.includes(t) && !exactos.includes(a)).map((i) => i.a);
     return [...exactos, ...parciales];
   }, [indice, busqueda]);
 
+  function alLeer(valor: string) {
+    setEscaneando(false);
+    const { animalId: id, codigo } = leerCodigoChapeta(valor);
+    const t = normalizar(codigo);
+    const encontrado = catalogo.animales.find((a) => a.id === id) ?? catalogo.animales.find((a) => normalizar(a.codigo) === t || a.chapeta === codigo);
+    if (encontrado) {
+      setAviso(null);
+      setAnimalId(encontrado.id);
+    } else {
+      setBusqueda(codigo);
+      setAviso(`La chapeta «${codigo}» no está en los datos de ${catalogo.finca.nombre}. Revisa la finca o descarga los datos de nuevo.`);
+    }
+  }
+
   const animal = animalId ? catalogo.animales.find((a) => a.id === animalId) : undefined;
 
   if (animal) {
+    const disponibles = accionesDe(animal);
+    const actual = disponibles.includes(accion) ? accion : disponibles[0];
     return (
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
@@ -83,17 +110,17 @@ export function AnimalRapido({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {ACCIONES_ANIMAL.map((a) => (
-            <Chip key={a} activo={a === accion} onClick={() => setAccion(a)}>
-              {ETIQUETA_ACCION[a]}
+          {disponibles.map((a) => (
+            <Chip key={a} activo={a === actual} onClick={() => setAccion(a)}>
+              {ETIQUETA_ACCION_ANIMAL[a]}
             </Chip>
           ))}
         </div>
 
         <FormularioAnimalRapido
-          key={`${animal.id}-${accion}`}
-          accion={accion}
-          animalId={animal.id}
+          key={`${animal.id}-${actual}`}
+          accion={actual}
+          animal={animal}
           catalogo={catalogo}
           alGuardar={async (acc, datos) => {
             await alGuardar(acc, datos, animal);
@@ -107,6 +134,29 @@ export function AnimalRapido({
 
   return (
     <div className="space-y-3">
+      {escaneando ? (
+        <EscanerChapeta alLeer={alLeer} alCancelar={() => setEscaneando(false)} />
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setAviso(null);
+            setEscaneando(true);
+          }}
+          className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border-2 border-campo bg-white text-lg font-bold text-campo-oscuro"
+        >
+          <ScanLine className="h-6 w-6" aria-hidden />
+          Escanear chapeta
+        </button>
+      )}
+
+      {aviso && (
+        <p role="alert" className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+          <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
+          {aviso}
+        </p>
+      )}
+
       <label className="relative block">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" aria-hidden />
         <span className="sr-only">Buscar animal</span>
@@ -130,7 +180,14 @@ export function AnimalRapido({
       <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200">
         {resultados.slice(0, 60).map((a) => (
           <li key={a.id}>
-            <button type="button" onClick={() => setAnimalId(a.id)} className="flex min-h-16 w-full items-center justify-between gap-3 px-4 py-2 text-left hover:bg-slate-50">
+            <button
+              type="button"
+              onClick={() => {
+                setAviso(null);
+                setAnimalId(a.id);
+              }}
+              className="flex min-h-16 w-full items-center justify-between gap-3 px-4 py-2 text-left hover:bg-slate-50"
+            >
               <span className="min-w-0">
                 <span className="mr-2 text-lg font-bold text-slate-900">{a.chapeta ?? a.codigo}</span>
                 <span className="text-slate-700">{a.nombre}</span>

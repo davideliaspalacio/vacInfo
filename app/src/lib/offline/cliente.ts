@@ -1,6 +1,16 @@
 import { borrar, contar, guardar, leer, leerTodos, transaccion } from "./idb";
 import { resumir } from "./resumen";
-import type { Accion, AnimalCatalogo, Catalogo, FincaResumen, RegistroCola, RegistroHistorial, ResultadoRegistro } from "./tipos";
+import type {
+  Accion,
+  AnimalCatalogo,
+  BandejaMensajes,
+  Catalogo,
+  FincaResumen,
+  MensajeCampo,
+  RegistroCola,
+  RegistroHistorial,
+  ResultadoRegistro,
+} from "./tipos";
 
 export const CLAVE_FINCA = "vacdata:finca";
 export const CLAVE_FINCAS = "vacdata:fincas";
@@ -81,21 +91,98 @@ export function elegirFinca(id: string) {
 
 // ─────────────────────────── Catálogo ───────────────────────────
 export async function descargarFincas(): Promise<FincaResumen[]> {
-  const { fincas } = await pedirJSON<{ fincas: FincaResumen[] }>("/api/campo/catalogo");
+  const { fincas, mensajes } = await pedirJSON<{ fincas: FincaResumen[]; mensajes: BandejaMensajes | null }>("/api/campo/catalogo");
   guardarLocal(CLAVE_FINCAS, JSON.stringify(fincas));
+  if (mensajes) guardarBandeja(mensajes);
   return fincas;
 }
 
 export async function descargarCatalogo(fincaId: string): Promise<Catalogo> {
-  const { fincas, catalogo } = await pedirJSON<{ fincas: FincaResumen[]; catalogo: Catalogo }>(
+  const { fincas, catalogo, mensajes } = await pedirJSON<{ fincas: FincaResumen[]; catalogo: Catalogo; mensajes: BandejaMensajes | null }>(
     `/api/campo/catalogo?finca=${encodeURIComponent(fincaId)}`,
   );
   await guardar("catalogo", catalogo);
   guardarLocal(CLAVE_FINCAS, JSON.stringify(fincas));
+  if (mensajes) guardarBandeja(mensajes);
   return catalogo;
 }
 
-export const leerCatalogo = (fincaId: string) => leer<Catalogo>("catalogo", fincaId);
+/** Los catálogos descargados con una versión anterior no traen todos los campos. */
+function completarCatalogo(c: Catalogo): Catalogo {
+  return {
+    ...c,
+    animales: c.animales.map((a) => ({ ...a, fecha_destete: a.fecha_destete ?? null })),
+    potreros_estado: c.potreros_estado ?? [],
+    dias_descanso_objetivo: c.dias_descanso_objetivo ?? 35,
+    grupos: c.grupos ?? [],
+    rotaciones_abiertas: c.rotaciones_abiertas ?? [],
+    bienes: c.bienes ?? [],
+    insumos: c.insumos ?? [],
+    toros: c.toros ?? [],
+  };
+}
+
+export async function leerCatalogo(fincaId: string) {
+  const c = await leer<Catalogo>("catalogo", fincaId);
+  return c && completarCatalogo(c);
+}
+
+/** Refleja en el teléfono un destete o una salida antes de volver a descargar. null = el animal sale del inventario. */
+export async function actualizarAnimalLocal(fincaId: string, animalId: string, cambios: Partial<AnimalCatalogo> | null) {
+  const c = await leerCatalogo(fincaId);
+  if (!c) return undefined;
+  const animales = cambios === null ? c.animales.filter((a) => a.id !== animalId) : c.animales.map((a) => (a.id === animalId ? { ...a, ...cambios } : a));
+  const nuevo = { ...c, animales };
+  await guardar("catalogo", nuevo);
+  return nuevo;
+}
+
+// ─────────────────────────── Mensajes ───────────────────────────
+export const CLAVE_MENSAJES = "vacdata:mensajes";
+export const claveLeidos = (usuarioId: string) => `vacdata:mensajes-leidos:${usuarioId}`;
+let descargandoMensajes: Promise<void> | null = null;
+
+function guardarBandeja(bandeja: BandejaMensajes) {
+  guardarLocal(CLAVE_MENSAJES, JSON.stringify(bandeja));
+  const leidos = leerLeidos(bandeja.usuario_id);
+  // Mensajes para mí que marqué sin señal: se avisa al servidor ahora.
+  const porMarcar = bandeja.mensajes.filter((m) => m.destinatario_id === bandeja.usuario_id && !m.leido && leidos.has(m.id)).map((m) => m.id);
+  if (porMarcar.length) void enviarLeidos(porMarcar).catch(() => undefined);
+  // Solo se conservan las marcas de los mensajes que siguen en la bandeja.
+  const vigentes = bandeja.mensajes.filter((m) => leidos.has(m.id)).map((m) => m.id);
+  if (vigentes.length !== leidos.size) guardarLocal(claveLeidos(bandeja.usuario_id), JSON.stringify(vigentes));
+}
+
+export function leerLeidos(usuarioId: string): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(claveLeidos(usuarioId)) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Descarga la bandeja; varias pantallas pueden pedirla a la vez y se hace una sola petición. */
+export function descargarMensajes(): Promise<void> {
+  descargandoMensajes ??= pedirJSON<BandejaMensajes>("/api/campo/mensajes")
+    .then(guardarBandeja)
+    .finally(() => {
+      descargandoMensajes = null;
+    });
+  return descargandoMensajes;
+}
+
+async function enviarLeidos(ids: string[]) {
+  await pedirJSON("/api/campo/mensajes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+}
+
+export function marcarMensajesLeidos(usuarioId: string, mensajes: MensajeCampo[]) {
+  const leidos = leerLeidos(usuarioId);
+  mensajes.forEach((m) => leidos.add(m.id));
+  guardarLocal(claveLeidos(usuarioId), JSON.stringify([...leidos]));
+  const propios = mensajes.filter((m) => m.destinatario_id === usuarioId && !m.leido).map((m) => m.id);
+  // Sin señal queda marcado en el teléfono y se envía en la próxima descarga de mensajes.
+  if (propios.length && navigator.onLine) void enviarLeidos(propios).catch(() => undefined);
+}
 
 // ─────────────────────────── Cola ───────────────────────────
 function nuevoId() {

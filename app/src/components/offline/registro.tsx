@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { CircleCheck, Download, MapPin } from "lucide-react";
 import { TarjetaCampo, Titulo } from "@/components/campo/ui";
 import {
   CLAVE_FINCA,
+  actualizarAnimalLocal,
   descargarCatalogo,
   descargarFincas,
   descartar,
@@ -18,7 +20,7 @@ import { fechaHora } from "@/lib/offline/resumen";
 import type { Accion, AnimalCatalogo, Catalogo, RegistroCola } from "@/lib/offline/tipos";
 import { AnimalRapido } from "./animal-rapido";
 import { BarraEstado } from "./barra-estado";
-import { FormulariosFinca } from "./formularios-rapidos";
+import { FormulariosFinca } from "./formularios-finca";
 import { useCola, useEnLinea, useFincas, useLocal, useSincronizacion } from "./hooks";
 import { OrdenoLista } from "./ordeno-lista";
 import { Pendientes } from "./pendientes";
@@ -33,7 +35,12 @@ type Vista = (typeof VISTAS)[number]["id"];
 
 const SEIS_HORAS = 6 * 60 * 60 * 1000;
 
-export function RegistroRapido({ vistaInicial }: { vistaInicial?: string }) {
+/** Registro de VacDaTa: todo se guarda en el teléfono y se envía cuando hay señal. */
+export function Registro() {
+  const parametros = useSearchParams();
+  const fincaEnlace = parametros.get("finca");
+  const animalEnlace = parametros.get("animal");
+
   const enLinea = useEnLinea();
   const { cola, historial } = useCola();
   const sync = useSincronizacion();
@@ -41,11 +48,12 @@ export function RegistroRapido({ vistaInicial }: { vistaInicial?: string }) {
   const fincas = useFincas();
   const fincaId = useLocal(CLAVE_FINCA);
 
-  const [vista, setVista] = useState<Vista>(VISTAS.find((v) => v.id === vistaInicial)?.id ?? "animal");
+  const [vista, setVista] = useState<Vista>(() => VISTAS.find((v) => v.id === parametros.get("vista"))?.id ?? "animal");
   const [cambiandoFinca, setCambiandoFinca] = useState(false);
   const [cargado, setCargado] = useState<{ finca: string; catalogo: Catalogo | null } | null>(null);
   const [descarga, setDescarga] = useState<{ activa: boolean; error?: string }>({ activa: false });
   const [aviso, setAviso] = useState<{ id: number; texto: string } | null>(null);
+  const enlaceAplicado = useRef(false);
 
   const catalogo = cargado && cargado.finca === fincaId ? cargado.catalogo : undefined;
   const finca = catalogo?.finca ?? fincas.find((f) => f.id === fincaId);
@@ -59,6 +67,13 @@ export function RegistroRapido({ vistaInicial }: { vistaInicial?: string }) {
       setDescarga({ activa: false, error: e instanceof Error ? e.message : "No se pudieron descargar los datos." });
     }
   }, []);
+
+  // Un enlace con ?finca= (p. ej. desde la ficha de un animal) elige esa finca una sola vez.
+  useEffect(() => {
+    if (enlaceAplicado.current || !fincaEnlace || !fincas.some((f) => f.id === fincaEnlace)) return;
+    enlaceAplicado.current = true;
+    if (fincaEnlace !== fincaId) elegirFinca(fincaEnlace);
+  }, [fincaEnlace, fincas, fincaId]);
 
   useEffect(() => {
     if (!fincaId) return;
@@ -94,6 +109,11 @@ export function RegistroRapido({ vistaInicial }: { vistaInicial?: string }) {
     async (accion: Accion, datos: Record<string, unknown>, animal?: AnimalCatalogo) => {
       if (!fincaId) throw new Error("Sin finca");
       await encolar(accion, datos, fincaId, animal);
+      if (animal && (accion === "destete" || accion === "baja")) {
+        const cambios = accion === "baja" ? null : { fecha_destete: String(datos.fecha) };
+        const nuevo = await actualizarAnimalLocal(fincaId, animal.id, cambios).catch(() => undefined);
+        if (nuevo) setCargado({ finca: fincaId, catalogo: nuevo });
+      }
       setAviso({ id: Date.now(), texto: "Guardado en el teléfono" });
       void ejecutar("evento");
     },
@@ -126,7 +146,7 @@ export function RegistroRapido({ vistaInicial }: { vistaInicial?: string }) {
 
       {elegir ? (
         <TarjetaCampo>
-          <Titulo kicker="Registro rápido" titulo="¿En qué finca estás?" descripcion="Los animales de la finca quedan guardados en el teléfono para anotar sin señal." />
+          <Titulo kicker="Registrar" titulo="¿En qué finca estás?" descripcion="Los datos de la finca quedan guardados en el teléfono para anotar con o sin señal." />
           {fincas.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-slate-300 p-5 text-center text-slate-500">
               {enLinea ? "Buscando tus fincas…" : "Conéctate a internet una vez para descargar tus fincas."}
@@ -183,7 +203,7 @@ export function RegistroRapido({ vistaInicial }: { vistaInicial?: string }) {
               className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-campo bg-white font-bold text-campo-oscuro disabled:border-slate-200 disabled:text-slate-400"
             >
               <Download className={clsx("h-5 w-5", descarga.activa && "animate-bounce")} aria-hidden />
-              {descarga.activa ? "Descargando…" : enLinea ? "Descargar datos de la finca" : "Descargar datos (necesita señal)"}
+              {descarga.activa ? "Descargando…" : enLinea ? "Actualizar datos de la finca" : "Actualizar datos (necesita señal)"}
             </button>
           </section>
 
@@ -209,7 +229,7 @@ export function RegistroRapido({ vistaInicial }: { vistaInicial?: string }) {
             {vista === "pendientes" ? (
               <Pendientes cola={cola} historial={historial} alReintentar={alReintentar} alDescartar={alDescartar} />
             ) : vista === "finca" && fincaId ? (
-              <FormulariosFinca fincaId={fincaId} alGuardar={(accion, datos) => guardar(accion, datos)} />
+              <FormulariosFinca fincaId={fincaId} catalogo={catalogo ?? null} alGuardar={(accion, datos) => guardar(accion, datos)} />
             ) : catalogo === undefined ? (
               <p className="p-5 text-center text-slate-500">Cargando datos del teléfono…</p>
             ) : catalogo === null ? (
@@ -219,7 +239,7 @@ export function RegistroRapido({ vistaInicial }: { vistaInicial?: string }) {
             ) : vista === "lista" ? (
               <OrdenoLista catalogo={catalogo} alGuardar={(accion, datos) => guardar(accion, datos)} />
             ) : (
-              <AnimalRapido catalogo={catalogo} alGuardar={guardar} />
+              <AnimalRapido key={catalogo.finca_id} catalogo={catalogo} animalInicial={animalEnlace} alGuardar={guardar} />
             )}
           </TarjetaCampo>
         </>

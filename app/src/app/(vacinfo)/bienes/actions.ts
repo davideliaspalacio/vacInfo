@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Constants } from "@/lib/database.types";
+import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import type { EstadoFormulario } from "@/components/fincas/campo";
 import { datosDe, fechaOpcional, mensajeErrorBD, textoOpcional, textoRequerido } from "@/components/fincas/validacion";
@@ -24,7 +25,8 @@ const esquemaBien = z.object({
 
 export async function guardarBien(id: string | null, _: EstadoFormulario, formData: FormData): Promise<EstadoFormulario> {
   const { supabase, rol, fincas } = await obtenerSesion();
-  if (id && !ROLES_GESTORES.includes(rol)) return { mensaje: "Solo propietarios y administradores pueden editar fichas." };
+  if (soloLectura(rol)) return { mensaje: MENSAJE_SOLO_LECTURA };
+  if (id &&!ROLES_GESTORES.includes(rol)) return { mensaje: "Solo propietarios y administradores pueden editar fichas." };
 
   const resultado = esquemaBien.safeParse(datosDe(formData));
   if (!resultado.success) return { errores: z.flattenError(resultado.error).fieldErrors, mensaje: "Revisa los campos marcados." };

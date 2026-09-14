@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import type { EstadoFormulario } from "@/components/fincas/campo";
 import type { EstadoAccion } from "@/components/fincas/formulario-accion";
@@ -21,6 +22,7 @@ const esquemaReglas = z.object({
 /** Edición rápida de las reglas de levante y potreros desde sus propias pantallas. */
 export async function guardarReglasFinca(id: string, _: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
   const { supabase, rol } = await obtenerSesion();
+  if (soloLectura(rol)) return { error: MENSAJE_SOLO_LECTURA };
   if (!ROLES_GESTORES.includes(rol)) return { error: "Solo propietarios y administradores pueden cambiar las reglas." };
 
   const resultado = esquemaReglas.safeParse(datosDe(formData));
@@ -64,6 +66,7 @@ const esquemaFinca = z.object({
 
 export async function guardarFinca(id: string | null, _: EstadoFormulario, formData: FormData): Promise<EstadoFormulario> {
   const { supabase, rol, organizacionId } = await obtenerSesion();
+  if (soloLectura(rol)) return { mensaje: MENSAJE_SOLO_LECTURA };
   if (!ROLES_GESTORES.includes(rol)) return { mensaje: "Solo propietarios y administradores pueden editar fincas." };
 
   const resultado = esquemaFinca.safeParse(datosDe(formData));

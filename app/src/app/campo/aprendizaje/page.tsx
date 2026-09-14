@@ -49,20 +49,14 @@ export default async function AprendizajePage({ searchParams }: PageProps<"/camp
             const lista = tareas.filter((t) => t.frecuencia === frecuencia);
             return (
               <section key={frecuencia} className="mb-6 last:mb-0">
-                <h2 className="font-display mb-3 text-xl font-bold text-slate-900">
-                  {frecuencia === "diaria" ? "Tareas diarias" : "Tareas frecuentes"}
-                  <span className="ml-2 text-sm font-semibold text-slate-400">{lista.length}</span>
-                </h2>
-                <ul className="space-y-2">
+                <h2 className="font-display mb-3 text-xl font-bold text-slate-900">{frecuencia === "diaria" ? "Diarias" : "Frecuentes"}</h2>
+                <ol className="list-decimal space-y-3 pl-7 text-[1.05rem] leading-relaxed text-slate-800 marker:font-bold marker:text-campo">
                   {lista.map((t) => (
-                    <li key={t.id}>
-                      <label className="flex min-h-14 cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 has-checked:border-emerald-200 has-checked:bg-emerald-50 has-checked:text-slate-500">
-                        <input type="checkbox" className="mt-0.5 h-6 w-6 shrink-0 accent-emerald-600" />
-                        <span className="leading-snug">{t.descripcion}</span>
-                      </label>
+                    <li key={t.id} className="pl-1">
+                      {t.descripcion}
                     </li>
                   ))}
-                </ul>
+                </ol>
               </section>
             );
           })}

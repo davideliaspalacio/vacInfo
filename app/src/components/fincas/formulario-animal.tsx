@@ -5,16 +5,19 @@ import Link from "next/link";
 import type { Database } from "@/lib/database.types";
 import { BotonPrimario } from "@/components/ui";
 import { Campo, MensajeError, type EstadoFormulario } from "@/components/fincas/campo";
-import { CATEGORIAS, ESPECIES, METODOS_ADQUISICION, SEXOS } from "@/components/fincas/etiquetas";
-import type { FincaConCodigos } from "@/components/fincas/consultas";
+import { CATEGORIAS, GRUPOS_CATEGORIA, METODOS_ADQUISICION, SEXOS } from "@/components/fincas/etiquetas";
+import type { FincaConCodigos, Toro } from "@/components/fincas/consultas";
 
 type Animal = Database["public"]["Tables"]["animales"]["Row"];
 export type Hembra = { id: string; nombre: string; chapeta: string | null; finca_id: string };
+
+const PADRE_OTRO = "__otro__";
 
 export function FormularioAnimal({
   accion,
   fincas,
   hembras,
+  toros,
   animal,
   fincaInicial,
   cancelar,
@@ -22,6 +25,7 @@ export function FormularioAnimal({
   accion: (estado: EstadoFormulario, datos: FormData) => Promise<EstadoFormulario>;
   fincas: FincaConCodigos[];
   hembras: Hembra[];
+  toros: Toro[];
   animal?: Animal;
   fincaInicial?: string;
   cancelar: string;
@@ -35,11 +39,31 @@ export function FormularioAnimal({
   const [codigoManual, setCodigoManual] = useState(Boolean(animal));
   const [madreId, setMadreId] = useState(animal?.madre_id ?? "");
 
+  const torosFinca = toros.filter((t) => t.finca_id === fincaId);
+  const padreInicial = animal?.padre_nombre ?? "";
+  const [padre, setPadre] = useState(!padreInicial || torosFinca.some((t) => t.nombre === padreInicial) ? padreInicial : PADRE_OTRO);
+
   const prefijo = fincas.find((f) => f.id === fincaId)?.prefijo ?? "";
   const sugerido = chapeta.trim() ? `${prefijo}-${chapeta.trim()}` : "";
   const codigoMostrado = codigoManual ? codigo : sugerido;
   const madres = hembras.filter((h) => h.finca_id === fincaId && h.id !== animal?.id);
+  const metodoGuardado = animal?.metodo_adquisicion;
+  const metodos = metodoGuardado && !METODOS_ADQUISICION.includes(metodoGuardado) ? [...METODOS_ADQUISICION, metodoGuardado] : METODOS_ADQUISICION;
   const v = (x: string | number | null | undefined) => (x == null ? "" : String(x));
+
+  const grupoToros = (origen: Toro["origen"], titulo: string) => {
+    const lista = torosFinca.filter((t) => t.origen === origen);
+    return lista.length ? (
+      <optgroup label={titulo}>
+        {lista.map((t) => (
+          <option key={`${origen}-${t.nombre}`} value={t.nombre}>
+            {t.nombre}
+            {t.chapeta ? ` · ${t.chapeta}` : ""}
+          </option>
+        ))}
+      </optgroup>
+    ) : null;
+  };
 
   return (
     <form action={enviar} className="space-y-8">
@@ -55,6 +79,7 @@ export function FormularioAnimal({
               onChange={(ev) => {
                 setFincaId(ev.target.value);
                 setMadreId("");
+                if (padre !== PADRE_OTRO) setPadre("");
               }}
               className="campo-control"
               required
@@ -97,18 +122,22 @@ export function FormularioAnimal({
           <Campo etiqueta="Nombre *" error={e.nombre}>
             <input name="nombre" required defaultValue={v(animal?.nombre)} className="campo-control" />
           </Campo>
-          <Campo etiqueta="Especie" error={e.especie}>
-            <select name="especie" defaultValue={animal?.especie ?? "bovino"} className="campo-control">
-              {Object.entries(ESPECIES).map(([valor, texto]) => (
-                <option key={valor} value={valor}>
-                  {texto}
-                </option>
+          <Campo etiqueta="Categoría *" error={e.categoria}>
+            <select name="categoria" defaultValue={animal?.categoria ?? "vaca"} className="campo-control" required>
+              {GRUPOS_CATEGORIA.map((g) => (
+                <optgroup key={g.titulo} label={g.titulo}>
+                  {g.categorias.map((c) => (
+                    <option key={c} value={c}>
+                      {CATEGORIAS[c]}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </Campo>
-          <Campo etiqueta="Categoría" error={e.categoria}>
-            <select name="categoria" defaultValue={animal?.categoria ?? "vaca"} className="campo-control">
-              {Object.entries(CATEGORIAS).map(([valor, texto]) => (
+          <Campo etiqueta="Sexo" error={e.sexo}>
+            <select name="sexo" defaultValue={animal?.sexo ?? "hembra"} className="campo-control">
+              {Object.entries(SEXOS).map(([valor, texto]) => (
                 <option key={valor} value={valor}>
                   {texto}
                 </option>
@@ -121,15 +150,6 @@ export function FormularioAnimal({
       <fieldset>
         <legend className="font-display mb-4 text-xl font-bold text-bosque">Datos generales</legend>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Campo etiqueta="Sexo" error={e.sexo}>
-            <select name="sexo" defaultValue={animal?.sexo ?? "hembra"} className="campo-control">
-              {Object.entries(SEXOS).map(([valor, texto]) => (
-                <option key={valor} value={valor}>
-                  {texto}
-                </option>
-              ))}
-            </select>
-          </Campo>
           <Campo etiqueta="Raza" error={e.raza}>
             <input name="raza" defaultValue={v(animal?.raza)} className="campo-control" placeholder="Holstein, Jersey…" />
           </Campo>
@@ -143,12 +163,14 @@ export function FormularioAnimal({
             <input name="peso_kg" inputMode="decimal" defaultValue={v(animal?.peso_kg)} className="campo-control" />
           </Campo>
           <Campo etiqueta="Método de adquisición" error={e.metodo_adquisicion}>
-            <input name="metodo_adquisicion" list="metodos-adquisicion" defaultValue={v(animal?.metodo_adquisicion)} className="campo-control" />
-            <datalist id="metodos-adquisicion">
-              {METODOS_ADQUISICION.map((m) => (
-                <option key={m} value={m} />
+            <select name="metodo_adquisicion" defaultValue={v(metodoGuardado)} className="campo-control">
+              <option value="">— Sin especificar —</option>
+              {metodos.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
               ))}
-            </datalist>
+            </select>
           </Campo>
         </div>
       </fieldset>
@@ -156,9 +178,6 @@ export function FormularioAnimal({
       <fieldset>
         <legend className="font-display mb-4 text-xl font-bold text-bosque">Parientes</legend>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Campo etiqueta="Padre (toro)" error={e.padre_nombre}>
-            <input name="padre_nombre" defaultValue={v(animal?.padre_nombre)} className="campo-control" placeholder="Nombre o registro del toro" />
-          </Campo>
           <Campo etiqueta="Madre en la finca" error={e.madre_id}>
             <select name="madre_id" value={madreId} onChange={(ev) => setMadreId(ev.target.value)} className="campo-control">
               <option value="">— No está en la finca —</option>
@@ -170,9 +189,25 @@ export function FormularioAnimal({
               ))}
             </select>
           </Campo>
-          <Campo etiqueta="Nombre de la madre" error={e.madre_nombre} ayuda={madreId ? "Opcional: se toma de la madre elegida" : undefined}>
-            <input name="madre_nombre" defaultValue={v(animal?.madre_nombre)} className="campo-control" />
+          <Campo etiqueta="Padre (toro)" error={e.padre_nombre}>
+            <select name="padre_nombre" value={padre} onChange={(ev) => setPadre(ev.target.value)} className="campo-control">
+              <option value="">— Sin registrar —</option>
+              {grupoToros("finca", "Toros de la finca")}
+              {grupoToros("servicios", "Toros usados en servicios")}
+              <option value={PADRE_OTRO}>Otro (escribir nombre)</option>
+            </select>
           </Campo>
+          {padre === PADRE_OTRO && (
+            <Campo etiqueta="Nombre o registro del toro *" error={e.padre_otro}>
+              <input
+                name="padre_otro"
+                required
+                autoFocus={!animal}
+                defaultValue={padreInicial && !torosFinca.some((t) => t.nombre === padreInicial) ? padreInicial : ""}
+                className="campo-control"
+              />
+            </Campo>
+          )}
         </div>
       </fieldset>
 

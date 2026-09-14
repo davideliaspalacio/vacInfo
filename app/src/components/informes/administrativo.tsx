@@ -2,7 +2,7 @@ import { fecha, num, pesos } from "@/lib/formato";
 import type { PropsInforme } from "./consultas";
 
 type Celda = React.ReactNode;
-type Registro = { titulo: string; span: string; columnas: string[]; filas: Celda[][] };
+type Registro = { titulo: string; columnas: string[]; filas: Celda[][]; color?: string };
 
 const COLORES = ["bg-[#8fd04f]", "bg-[#61e4df]", "bg-[#fff000]"];
 
@@ -45,7 +45,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
   const registros: Registro[] = [
     {
       titulo: "Registro de ingreso y salida de medicamentos, concentrados, abonos y maquinarias",
-      span: "col-span-5",
       columnas: ["Fecha", "Nombre del producto", "Cant. ingresa", "Cant. sale", "Persona que entrega", "Persona que recibe", "Hora de entrega"],
       filas: (movimientos.data ?? []).map((m) => [
         fecha(m.fecha),
@@ -59,13 +58,11 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro de leche recogida diario",
-      span: "col-span-4",
       columnas: ["Fecha", "Litros recogidos", "Placa del carro", "Conductor", "Celular", "Persona que entrega"],
       filas: (recolecciones.data ?? []).map((r) => [fecha(r.fecha), num(r.litros), r.placa, r.conductor, r.celular_conductor, r.entregado_por]),
     },
     {
       titulo: "Registro vacas con mastitis",
-      span: "col-span-3",
       columnas: ["Fecha", "Chapeta", "Nombre", "TDD", "TDI", "TTD", "TTI", "Tratamiento"],
       filas: ev
         .filter((e) => e.tipo === "mastitis")
@@ -79,13 +76,11 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro de ingreso de personas a la finca",
-      span: "col-span-5",
       columnas: ["Fecha", "Hora", "Nombre", "Cédula", "Empresa", "Placa", "Motivo"],
       filas: (visitas.data ?? []).map((v) => [fecha(v.fecha), hora(v.hora_ingreso), v.nombre, v.cedula, v.empresa, v.placa, v.motivo]),
     },
     {
       titulo: "Registro de fumigación",
-      span: "col-span-4",
       columnas: ["Fecha", "Tipo", "Producto", "Cantidad por caneca", "Retiro vacas (días)", "Potreros", "Personas que fumigan"],
       filas: ap
         .filter((a) => a.tipo === "fumigacion" || a.tipo === "fertilizacion")
@@ -93,7 +88,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Consumo diario de concentrado y sal",
-      span: "col-span-3",
       columnas: ["Fecha", "Kg conc. vacas", "Kg sal vacas", "Kg conc. terneras", "Kg sal terneras"],
       filas: (consumos.data ?? []).map((c) => [
         fecha(c.fecha),
@@ -105,7 +99,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro de mantenimiento equipo de ordeño y tanque de enfriamiento",
-      span: "col-span-5",
       columnas: ["Fecha", "Equipo", "Persona que lo realiza", "Detalle del mantenimiento", "Celular del operario"],
       filas: mt
         .filter((m) => m.tipo === "equipo_ordeno" || m.tipo === "tanque")
@@ -113,7 +106,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro de abonada y encalada",
-      span: "col-span-4",
       columnas: ["Fecha", "Tipo", "Abono o cal", "Cantidad por potrero", "Retiro vacas (días)", "Potreros", "Personas"],
       filas: ap
         .filter((a) => a.tipo === "abonada" || a.tipo === "encalada")
@@ -121,13 +113,11 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro de pH y cloro en el agua",
-      span: "col-span-3",
       columnas: ["Fecha", "Toma del agua", "pH", "Cloro", "Tratamiento"],
       filas: ctl.filter((c) => c.tipo === "agua").map((c) => [fecha(c.fecha), c.muestra, num(c.ph), num(c.cloro), c.tratamiento]),
     },
     {
       titulo: "Registro de mantenimiento de alambrados, rieles, zanjas y riego",
-      span: "col-span-5",
       columnas: ["Fecha", "Persona que lo realiza", "Detalle del mantenimiento", "Potreros", "Materiales utilizados"],
       filas: mt
         .filter((m) => m.tipo === "cercas" || m.tipo === "general" || m.tipo === "equipos")
@@ -135,7 +125,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro de tratamiento de animales en la finca",
-      span: "col-span-7",
       columnas: [
         "Fecha",
         "Animal tratado",
@@ -169,7 +158,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro de animales vendidos o retirados de la finca",
-      span: "col-span-5",
       columnas: ["Fecha", "Chapeta", "Vaca, toro, ternero…", "Nombre", "Raza", "Lo lleva", "Motivo", "Valor"],
       filas: bj
         .filter((b) => b.tipo !== "muerte")
@@ -186,7 +174,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro de vacas que se secan",
-      span: "col-span-4",
       columnas: ["Fecha", "Chapeta", "Nombre de la vaca", "Fecha de servida", "Motivo"],
       filas: (secados.data ?? []).map((s) => {
         const servida = s.animales.servicios
@@ -199,7 +186,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro veneno mosca",
-      span: "col-span-3",
       columnas: ["Fecha", "Producto", "Cantidad", "Animales tratados", "Personas"],
       filas: ap
         .filter((a) => a.tipo === "veneno_mosca")
@@ -207,7 +193,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro de palpación en la finca",
-      span: "col-span-4",
       columnas: ["Fecha", "Chapeta", "Nombre de la vaca", "Preñada", "Días de preñez", "Vacía", "Palpador", "Observaciones"],
       filas: (palpaciones.data ?? []).map((p) => [
         fecha(p.fecha),
@@ -222,7 +207,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro de inseminación o monta",
-      span: "col-span-5",
       columnas: ["Fecha", "Chapeta", "Nombre de la vaca", "Nombre del toro", "Raza del toro", "AM", "PM", "Tipo", "Inseminador"],
       filas: (servicios.data ?? []).map((s) => [
         fecha(s.fecha),
@@ -238,7 +222,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro veneno roedores",
-      span: "col-span-3",
       columnas: ["Fecha", "Producto", "Cantidad", "Lugar", "Personas"],
       filas: ap
         .filter((a) => a.tipo === "veneno_roedores")
@@ -246,7 +229,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro de vacas criadas",
-      span: "col-span-5",
       columnas: ["Fecha", "Chapeta", "Nombre de la vaca", "Cría macho o hembra", "Raza", "Cría día", "Cría noche", "Toma calostro", "Persona que la ve tomar"],
       filas: (partos.data ?? []).map((p) => [
         fecha(p.fecha),
@@ -262,7 +244,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Registro temperatura del tanque de enfriamiento",
-      span: "col-span-4",
       columnas: ["Fecha", "Hora del día", "Grados", "Persona que lo hizo"],
       filas: ctl
         .filter((c) => c.tipo === "temperatura_tanque")
@@ -270,7 +251,6 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
     {
       titulo: "Animales muertos en la finca",
-      span: "col-span-3",
       columnas: ["Fecha", "Chapeta", "Nombre", "Enfermedad", "Vende"],
       filas: bj
         .filter((b) => b.tipo === "muerte")
@@ -278,15 +258,20 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
     },
   ];
 
-  const conDatos = registros.filter((r) => r.filas.length > 0).length;
+
+  const coloreados = registros.map((r, i) => ({ ...r, color: (i + 1) % 5 === 0 ? COLORES[2] : (i + 1) % 3 === 0 ? COLORES[1] : COLORES[0] }));
+  const conDatos = coloreados.filter((r) => r.filas.length > 0);
+  const vacios = coloreados.filter((r) => r.filas.length === 0);
+  const angostos = conDatos.filter((r) => r.columnas.length < COLUMNAS_ANCHO);
+  const anchos = conDatos.filter((r) => r.columnas.length >= COLUMNAS_ANCHO);
 
   return (
-    <section className="papel overflow-x-auto rounded-3xl p-4 sm:p-6 print:overflow-visible print:rounded-none print:p-0">
-      <div className="mb-5 flex min-w-[1100px] flex-wrap items-end justify-between gap-4">
+    <section className="papel rounded-3xl p-4 sm:p-6 print:rounded-none print:p-0">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
         <div>
           <h2 className="font-display text-2xl font-bold text-bosque">Informe administrativo · {finca.nombre}</h2>
           <p className="text-sm text-tinta-suave">
-            {conDatos} de {registros.length} registros con movimientos en el periodo
+            {conDatos.length} de {registros.length} registros con movimientos en el periodo
           </p>
         </div>
         <span className="text-sm font-bold text-tinta-suave">
@@ -294,52 +279,77 @@ export async function InformeAdministrativo({ supabase, rango, finca }: PropsInf
         </span>
       </div>
 
-      <div className="grid min-w-[1100px] grid-cols-12 items-start gap-2">
-        {registros.map((r, i) => (
-          <BloqueRegistro key={r.titulo} registro={r} color={(i + 1) % 5 === 0 ? COLORES[2] : (i + 1) % 3 === 0 ? COLORES[1] : COLORES[0]} />
-        ))}
-      </div>
+      {conDatos.length === 0 && (
+        <p className="mb-4 rounded-2xl border border-dashed border-tinta/20 p-6 text-center text-tinta-suave">
+          Ningún registro administrativo tiene movimientos en este periodo.
+        </p>
+      )}
+
+      {/* Mampostería: cada bloque ocupa solo su alto, sin huecos junto a las tablas largas */}
+      {angostos.length > 0 && (
+        <div className="columns-1 gap-3 lg:columns-2 print:columns-2 [&>*]:mb-3">
+          {angostos.map((r) => (
+            <BloqueRegistro key={r.titulo} registro={r} />
+          ))}
+        </div>
+      )}
+      {anchos.map((r) => (
+        <div key={r.titulo} className="mb-3">
+          <BloqueRegistro registro={r} />
+        </div>
+      ))}
+
+      {vacios.length > 0 && (
+        <div className="mt-2 break-inside-avoid rounded-2xl border border-tinta/10 bg-white/60 p-3">
+          <h3 className="mb-2 text-xs font-extrabold uppercase tracking-wide text-tinta-suave">
+            Registros sin movimientos en el periodo · {vacios.length}
+          </h3>
+          <ul className="flex flex-wrap gap-1.5">
+            {vacios.map((r) => (
+              <li key={r.titulo} className="inline-flex items-center gap-1.5 rounded-full border border-[#111]/15 bg-white px-2.5 py-1 text-[0.7rem] font-bold uppercase leading-tight text-tinta-suave">
+                <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-full border border-[#111]/40 ${r.color}`} />
+                {r.titulo}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }
 
-function BloqueRegistro({ registro, color }: { registro: Registro; color: string }) {
-  const { titulo, span, columnas, filas } = registro;
+/** Registros con muchas columnas van a lo ancho debajo de la mampostería. */
+const COLUMNAS_ANCHO = 9;
+
+function BloqueRegistro({ registro }: { registro: Registro }) {
+  const { titulo, columnas, filas, color } = registro;
   return (
-    <section className={`${span} break-inside-avoid overflow-hidden border-[3px] border-[#111] bg-white`}>
-      <h3 className={`${color} flex min-h-11 items-center justify-center px-1.5 py-2 text-center text-[0.8rem] font-extrabold uppercase leading-tight text-[#111]`}>
-        {titulo}
-      </h3>
-      <table className="w-full border-collapse text-[0.64rem] leading-tight">
-        <thead>
-          <tr>
-            {columnas.map((c) => (
-              <th key={c} className="border-2 border-[#111] bg-[#dedbc7] px-1 py-1.5 text-center font-extrabold uppercase">
-                {c}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filas.length === 0 ? (
+    <section className="break-inside-avoid border-[3px] border-[#111] bg-white">
+      <h3 className={`${color} px-2 py-1.5 text-center text-[0.78rem] font-extrabold uppercase leading-tight text-[#111]`}>{titulo}</h3>
+      <div className="overflow-x-auto print:overflow-visible">
+        <table className="w-full border-collapse text-[0.7rem] leading-tight">
+          <thead>
             <tr>
-              <td colSpan={columnas.length} className="h-8 border-2 border-[#111] text-center text-tinta/40">
-                Sin registros
-              </td>
+              {columnas.map((c) => (
+                <th key={c} className="border-2 border-[#111] bg-[#dedbc7] px-1 py-1 text-center text-[0.62rem] font-extrabold uppercase">
+                  {c}
+                </th>
+              ))}
             </tr>
-          ) : (
-            filas.map((fila, i) => (
+          </thead>
+          <tbody>
+            {filas.map((fila, i) => (
               <tr key={i}>
                 {fila.map((celda, j) => (
-                  <td key={j} className="h-8 border-2 border-[#111] px-1 py-1 text-center align-middle">
+                  <td key={j} className="border-2 border-[#111] px-1 py-1 text-center align-middle">
                     {celda ?? ""}
                   </td>
                 ))}
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
