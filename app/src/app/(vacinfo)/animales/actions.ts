@@ -3,14 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { Constants } from "@/lib/database.types";
 import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
+import { CATEGORIAS_FORMULARIO, errorMadre, especieDeCategoria, sexoDeCategoria } from "@/lib/parientes";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import type { EstadoFormulario } from "@/components/fincas/campo";
-import { ESPECIE_DE_CATEGORIA } from "@/components/fincas/etiquetas";
 import { datosDe, fechaOpcional, mensajeErrorBD, numeroOpcional, textoOpcional, textoRequerido } from "@/components/fincas/validacion";
 
-const enums = Constants.public.Enums;
 const PADRE_OTRO = "__otro__";
 
 const esquemaAnimal = z
@@ -19,8 +17,8 @@ const esquemaAnimal = z
     codigo: textoRequerido("Escribe el código del animal"),
     chapeta: textoOpcional,
     nombre: textoRequerido("Escribe el nombre"),
-    categoria: z.enum(enums.categoria_animal, "Elige la categoría"),
-    sexo: z.enum(enums.sexo, "Elige el sexo"),
+    categoria: z.enum(CATEGORIAS_FORMULARIO, "Elige la categoría"),
+    sexo: z.enum(["hembra", "macho"], "Elige el sexo").optional(),
     raza: textoOpcional,
     color: textoOpcional,
     fecha_nacimiento: fechaOpcional,
@@ -35,10 +33,13 @@ const esquemaAnimal = z
       .pipe(z.uuid().nullable()),
     notas: textoOpcional,
   })
-  .refine((d) => d.padre_nombre !== PADRE_OTRO || d.padre_otro, { path: ["padre_otro"], message: "Escribe el nombre del toro" })
-  .transform(({ padre_otro, ...d }) => ({
+  .refine((d) => d.padre_nombre !== PADRE_OTRO || d.padre_otro, { path: ["padre_otro"], message: "Escribe el nombre del padre" })
+  .refine((d) => sexoDeCategoria(d.categoria) || d.sexo, { path: ["sexo"], message: "Elige el sexo" })
+  .transform(({ padre_otro, sexo, ...d }) => ({
     ...d,
-    especie: ESPECIE_DE_CATEGORIA[d.categoria],
+    // En bovinos el sexo lo define la categoría (ternera/novilla/vaca hembra; ternero/novillo/toro macho).
+    sexo: sexoDeCategoria(d.categoria) ?? sexo!,
+    especie: especieDeCategoria(d.categoria),
     padre_nombre: d.padre_nombre === PADRE_OTRO ? padre_otro : d.padre_nombre,
   }));
 
@@ -52,13 +53,13 @@ export async function guardarAnimal(id: string | null, _: EstadoFormulario, form
 
   const base = resultado.data;
   if (!fincas.some((f) => f.id === base.finca_id)) return { errores: { finca_id: ["Finca no disponible"] } };
-  if (id && base.madre_id === id) return { errores: { madre_id: ["Un animal no puede ser su propia madre"] } };
 
   let madre_nombre: string | null = null;
   if (base.madre_id) {
-    const { data: madre } = await supabase.from("animales").select("nombre, finca_id").eq("id", base.madre_id).maybeSingle();
-    if (!madre || madre.finca_id !== base.finca_id) return { errores: { madre_id: ["La madre debe ser de la misma finca"] } };
-    madre_nombre = madre.nombre;
+    const { data: madre } = await supabase.from("animales").select("id, nombre, finca_id, sexo, especie").eq("id", base.madre_id).maybeSingle();
+    const error = errorMadre(madre, { fincaId: base.finca_id, categoria: base.categoria, excluirId: id });
+    if (error) return { errores: { madre_id: [error] }, mensaje: "Revisa los campos marcados." };
+    madre_nombre = madre!.nombre;
   }
   const datos = { ...base, madre_nombre };
 

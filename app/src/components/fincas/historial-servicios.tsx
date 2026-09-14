@@ -2,6 +2,7 @@ import Link from "next/link";
 import { obtenerSesion } from "@/lib/sesion";
 import { fecha, litros, num } from "@/lib/formato";
 import { leerPagina, paginarUnion, type Params } from "@/lib/paginacion";
+import { textoRango, type Rango } from "@/lib/rango";
 import { Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
 import { TIPOS_APLICACION, TIPOS_MANTENIMIENTO } from "@/components/fincas/etiquetas";
@@ -17,19 +18,21 @@ const POR_PAGINA = 25;
 const CLAVES = "id, fecha, registrado_en";
 const DESC = { ascending: false } as const;
 
-export async function HistorialServicios({ fincaId, searchParams }: { fincaId: string; searchParams: Params }) {
+/** Historial de la finca con fecha entre `rango.desde` y `rango.hasta` (incluidas). */
+export async function HistorialServicios({ fincaId, searchParams, rango }: { fincaId: string; searchParams: Params; rango: Rango }) {
   const { supabase } = await obtenerSesion();
+  const { desde, hasta } = rango;
 
   const { claves, total, pagina, ids } = await paginarUnion(
     {
       aplicaciones: (a, b) =>
-        supabase.from("aplicaciones_campo").select(CLAVES, { count: "exact" }).eq("finca_id", fincaId).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+        supabase.from("aplicaciones_campo").select(CLAVES, { count: "exact" }).eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
       mantenimientos: (a, b) =>
-        supabase.from("mantenimientos").select(CLAVES, { count: "exact" }).eq("finca_id", fincaId).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+        supabase.from("mantenimientos").select(CLAVES, { count: "exact" }).eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
       controles: (a, b) =>
-        supabase.from("controles_calidad").select(CLAVES, { count: "exact" }).eq("finca_id", fincaId).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+        supabase.from("controles_calidad").select(CLAVES, { count: "exact" }).eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
       recolecciones: (a, b) =>
-        supabase.from("recolecciones_leche").select(CLAVES, { count: "exact" }).eq("finca_id", fincaId).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+        supabase.from("recolecciones_leche").select(CLAVES, { count: "exact" }).eq("finca_id", fincaId).gte("fecha", desde).lte("fecha", hasta).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
     },
     leerPagina(searchParams, { tamano: POR_PAGINA }),
   );
@@ -102,9 +105,9 @@ export async function HistorialServicios({ fincaId, searchParams }: { fincaId: s
 
   return (
     <Tarjeta id="historial" className="scroll-mt-6">
-      <TituloTarjeta detalle={`${num(total)} registros`}>Historial de servicios</TituloTarjeta>
+      <TituloTarjeta detalle={`${num(total)} registros · ${textoRango(rango).toLowerCase()}`}>Historial de servicios</TituloTarjeta>
       {registros.length === 0 ? (
-        <Vacio>Aún no hay fumigaciones, mantenimientos, controles ni recolecciones registrados.</Vacio>
+        <Vacio>No hay fumigaciones, mantenimientos, controles ni recolecciones registrados en este rango de fechas.</Vacio>
       ) : (
         <div className="overflow-x-auto">
           <table className="matriz w-full border-collapse bg-white text-sm">

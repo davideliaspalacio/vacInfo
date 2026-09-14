@@ -9,7 +9,7 @@ export const ESTADOS_LEVANTE = {
 
 export type EstadoLevante = keyof typeof ESTADOS_LEVANTE;
 
-export const CATEGORIAS_LEVANTE = ["ternera", "ternero", "ternerona", "novilla"] as const;
+export const CATEGORIAS_LEVANTE = ["ternera", "ternero", "novilla", "novillo"] as const;
 
 export const esLevante = (categoria: string) => (CATEGORIAS_LEVANTE as readonly string[]).includes(categoria);
 

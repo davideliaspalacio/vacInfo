@@ -2,29 +2,32 @@ import { cache } from "react";
 import { obtenerSesion, type Sesion } from "@/lib/sesion";
 import { hoyISO } from "@/lib/formato";
 import { prefijoFinca } from "@/components/fincas/etiquetas";
+import type { Candidato, ToroServicio } from "@/lib/parientes";
 import { todasLasFilas } from "@/components/informes/consultas";
 
-export type Toro = { finca_id: string; nombre: string; chapeta: string | null; origen: "finca" | "servicios" };
+/**
+ * Candidatos a madre o padre en el formulario de ser vivo: todos los animales de las fincas de la sesión
+ * (activos o dados de baja) con especie, sexo y categoría. El formulario filtra con `lib/parientes.ts`.
+ */
+export async function candidatosParientes({ supabase }: Sesion): Promise<Candidato[]> {
+  return todasLasFilas((a, b) =>
+    supabase.from("animales").select("id, nombre, chapeta, finca_id, categoria, especie, sexo, estado").order("id").range(a, b),
+  );
+}
 
-/** Toros de cada finca: animales de categoría toro y nombres ya usados en servicios (sin repetir). */
-export async function torosDeFincas({ supabase }: Sesion): Promise<Toro[]> {
-  const [{ data: animales }, servicios] = await Promise.all([
-    supabase.from("animales").select("finca_id, nombre, chapeta").eq("categoria", "toro").order("nombre"),
-    todasLasFilas((a, b) =>
-      supabase.from("servicios").select("id, toro_nombre, animales!inner(finca_id)").not("toro_nombre", "is", null).order("id").range(a, b),
-    ),
-  ]);
-
-  const toros: Toro[] = (animales ?? []).map((t) => ({ ...t, origen: "finca" }));
-  const vistos = new Set(toros.map((t) => `${t.finca_id}|${t.nombre.trim().toLowerCase()}`));
-  const usados = new Map<string, Toro>();
+/** Nombres de toros usados en servicios de cada finca (sin repetir, por nombre). Solo aplican a bovinos. */
+export async function torosDeServicios({ supabase }: Sesion): Promise<ToroServicio[]> {
+  const servicios = await todasLasFilas((a, b) =>
+    supabase.from("servicios").select("id, toro_nombre, animales!inner(finca_id)").not("toro_nombre", "is", null).order("id").range(a, b),
+  );
+  const usados = new Map<string, ToroServicio>();
   for (const s of servicios) {
     const nombre = s.toro_nombre?.trim();
     if (!nombre) continue;
     const clave = `${s.animales.finca_id}|${nombre.toLowerCase()}`;
-    if (!vistos.has(clave) && !usados.has(clave)) usados.set(clave, { finca_id: s.animales.finca_id, nombre, chapeta: null, origen: "servicios" });
+    if (!usados.has(clave)) usados.set(clave, { finca_id: s.animales.finca_id, nombre });
   }
-  return [...toros, ...[...usados.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))];
+  return [...usados.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 }
 
 /** Alertas de la finca al corte, una sola llamada por petición aunque las pidan la insignia y la sección. */

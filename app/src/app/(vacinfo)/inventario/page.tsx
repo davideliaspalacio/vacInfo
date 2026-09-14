@@ -4,9 +4,11 @@ import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, hoyISO, num, pesos } from "@/lib/formato";
 import { consultarPagina, leerPagina } from "@/lib/paginacion";
+import { atajosDias, completarRango, leerRangoPedido, textoRango } from "@/lib/rango";
 import { Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
-import { fechaValida, fincaElegida, uno } from "@/components/inventario/comun";
+import { RangoFechas } from "@/components/rango-fechas";
+import { fincaElegida, uno } from "@/components/inventario/comun";
 import { TablaSaldos, type Saldo } from "@/components/inventario/tabla-saldos";
 import { FormularioMovimiento } from "@/components/inventario/formulario-movimiento";
 import { CatalogoInsumos } from "@/components/inventario/catalogo-insumos";
@@ -46,7 +48,11 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
 
   const finca = await fincaElegida(sesion, uno(sp.finca));
   const hoy = hoyISO();
-  const corte = fechaValida(uno(sp.corte)) ?? (await corteInventario(supabase, finca.id, hoy));
+  // hasta (antes «Saldo al», ?corte= heredado) = fecha del saldo; desde–hasta filtra movimientos y consumos diarios.
+  const pedido = leerRangoPedido(sp);
+  const referencia = await corteInventario(supabase, finca.id, hoy);
+  const rango = completarRango(pedido, referencia);
+  const corte = rango.hasta;
   const gestor = ROLES_GESTORES.includes(rol);
   const lectura = soloLectura(rol);
 
@@ -64,6 +70,7 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
             .from("movimientos_insumos")
             .select("id, insumo_id, producto, fecha, hora, tipo, cantidad, entrega, recibe", { count: "exact" })
             .eq("finca_id", finca.id)
+            .gte("fecha", rango.desde)
             .lte("fecha", corte)
             .order("fecha", { ascending: false })
             .order("registrado_en", { ascending: false })
@@ -77,6 +84,7 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
             .from("consumos_diarios")
             .select("id, fecha, kg_concentrado_vacas, kg_sal_vacas, kg_concentrado_terneras, kg_sal_terneras", { count: "exact" })
             .eq("finca_id", finca.id)
+            .gte("fecha", rango.desde)
             .lte("fecha", corte)
             .order("fecha", { ascending: false })
             .order("id")
@@ -114,23 +122,34 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
         descripcion={`Saldo al ${fecha(corte, true)}: lo que ha entrado, menos las salidas, menos el consumo diario registrado en VacDaTa y el consumo automático programado.`}
       />
 
-      <form action="/inventario" className="papel flex flex-wrap items-end gap-3 rounded-2xl p-4">
-        <label className="text-sm font-bold text-bosque">
-          Finca
-          <select name="finca" defaultValue={finca.id} className="campo-control mt-1 min-w-44">
-            {fincas.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm font-bold text-bosque">
-          Saldo al
-          <input type="date" name="corte" defaultValue={corte} className="campo-control mt-1" />
-        </label>
-        <button className="boton-accion rounded-xl bg-lima px-4 py-3 font-bold text-bosque">Ver saldo</button>
-      </form>
+      <div className="papel space-y-4 rounded-2xl p-4">
+        <form action="/inventario" className="flex flex-wrap items-end gap-3">
+          {pedido.todo ? <input type="hidden" name="desde" value="todo" /> : pedido.desde && <input type="hidden" name="desde" value={pedido.desde} />}
+          {pedido.hasta && <input type="hidden" name="hasta" value={pedido.hasta} />}
+          <label className="text-sm font-bold text-bosque">
+            Finca
+            <select name="finca" defaultValue={finca.id} className="campo-control mt-1 min-w-44">
+              {fincas.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="boton-accion rounded-xl bg-lima px-4 py-3 font-bold text-bosque">Ver finca</button>
+        </form>
+        <RangoFechas
+          ruta="/inventario"
+          searchParams={sp}
+          desde={rango.todo ? "" : rango.desde}
+          hasta={corte}
+          texto={textoRango(rango)}
+          atajos={atajosDias(referencia, rango)}
+          referencia={referencia}
+          nota="El saldo se calcula a la fecha «hasta»; los movimientos y consumos diarios se filtran por el rango."
+          className="border-t border-black/10 pt-4"
+        />
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Metrica
@@ -206,9 +225,9 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
         )}
 
         <Tarjeta id="movimientos" className="scroll-mt-6">
-          <TituloTarjeta detalle={`${num(movimientos.total)} hasta el ${fecha(corte)}`}>Movimientos</TituloTarjeta>
+          <TituloTarjeta detalle={`${num(movimientos.total)} · ${textoRango(rango).toLowerCase()}`}>Movimientos</TituloTarjeta>
           {!movimientos.filas.length ? (
-            <Vacio>No hay movimientos hasta el {fecha(corte, true)}.</Vacio>
+            <Vacio>No hay movimientos en este rango ({textoRango(rango).toLowerCase()}).</Vacio>
           ) : (
             <div className="max-h-[28rem] overflow-auto">
               <table className="w-full min-w-[520px] text-sm">
@@ -258,9 +277,9 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
       </div>
 
       <Tarjeta id="consumos" className="scroll-mt-6">
-        <TituloTarjeta detalle={`Kilos registrados en VacDaTa · ${num(consumos.total)} días con registro`}>Consumos diarios</TituloTarjeta>
+        <TituloTarjeta detalle={`Kilos registrados en VacDaTa · ${num(consumos.total)} días con registro en el rango`}>Consumos diarios</TituloTarjeta>
         {!consumos.filas.length ? (
-          <Vacio>No hay consumos diarios registrados hasta el {fecha(corte, true)}.</Vacio>
+          <Vacio>No hay consumos diarios registrados en este rango ({textoRango(rango).toLowerCase()}).</Vacio>
         ) : (
           <div className="max-h-80 overflow-auto">
             <table className="w-full min-w-[560px] text-sm">

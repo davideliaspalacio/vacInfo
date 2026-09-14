@@ -9,7 +9,7 @@
 
 | Fuente | Qué es | Qué nos dice |
 |---|---|---|
-| `FINCA TONELES INFORME OPERATIVO (24 PLA TONELES).xlsx` | 50 hojas quincenales (15/06/24 → 30/04/26). Una fila por vaca | **El corazón operativo**: chapeta, nombre, parto anterior, fecha crío, días en ordeño, mora de preñez (>40 días), servicio (toro, raza, IA/monta), palpación (33 días), preñada, secar (servicio + 210 d), cría (secado + 65 d), leche AM/PM, mastitis por cuarto (TDD, TDI, TTD, TTI), cojera, fiebre, entamborada, sexo cría. Resumen: vacas preñadas/servidas/vacías/horras, inventario de concentrados y abonos, personal, contrato EPM, tanque y ruta Colanta |
+| `FINCA TONELES INFORME OPERATIVO (24 PLA TONELES).xlsx` | 50 hojas quincenales (15/06/24 → 30/04/26). Una fila por vaca | **El corazón operativo**: chapeta, nombre, parto anterior, fecha crío, días en ordeño, mora de preñez (>40 días), servicio (toro, raza, IA/monta), palpación (33 días), preñada, secar (servicio + 210 d), cría (secado + 65 d), leche AM/PM, mastitis por cuarto (TDD, TDI, TTD, TTI), cojera, fiebre, entamborada, sexo cría. Resumen: vacas preñadas/servidas/vacías/secas, inventario de concentrados y abonos, personal, contrato EPM, tanque y ruta Colanta |
 | Fotos `INFORME OPERATIVO (Datos Manuales).jpeg` | La misma planilla impresa y llenada a mano en la finca | Confirma el flujo real: se imprime, se llena con esfero (leche de la tarde en rojo), y alguien la transcribe al Excel |
 | `INFORME ADMINISTRATIVO (Cuadro Finca)` + `PLANILLA INFORME ADMINISTRATIVO.xlsx` | 20 registros tipo bitácora (formato ICA) | Ingreso/salida de insumos, leche recogida (placa, conductor), visitantes, fumigación, abonada/encalada, pH y cloro del agua, mantenimiento equipo de ordeño y cercas, tratamientos (lote, registro ICA, dosis, vía, días de retiro, veterinario con T.P.), palpación, inseminación, crías y calostro, secado, ventas/retiros, muertes, temperatura del tanque, veneno mosca/roedores, consumo diario de concentrado y sal |
 | `MANEJO FINANZAS (PII 2026).xlsx` + PDFs `INFORME CONTABLE` (Finca de prueba y Amarilla) | Modelo de costos del consultor **Juan Carlos Patiño** | Parámetros (precios de insumos, consumo g/animal/día, nómina con prestaciones colombianas, fijos) → costo diario/mensual por 15 categorías → utilidad, costo por litro, punto de equilibrio, valorización de terneras/novillas, flujo de caja y semáforo (**Rentable ≥8% / Ajustada ≥3% / En riesgo**). La finca de prueba da **1% de margen: EN RIESGO** |
@@ -86,7 +86,7 @@ tareas_manual, plan_sanitario (catálogos globales sembrados desde el manual y e
 
 **Vistas calculadas** (reemplazan las fórmulas del Excel):
 - `v_estado_reproductivo`: días en ordeño, mora preñez (>40 d sin servicio), palpar el (servicio + 33), secar el (servicio + 210), parto esperado (secado + 65), días secas.
-- `v_resumen_finca`: vacas en ordeño / horras / preñadas / servidas / vacías, litros del día, promedio por vaca.
+- `v_resumen_finca`: vacas en ordeño / secas / preñadas / servidas / vacías, litros del día, promedio por vaca.
 - `v_retiros_activos`: animales con leche en retiro por tratamiento.
 
 **Alertas automáticas:** palpar, secar, parto próximo, mora de preñez, retiro de leche vigente, vacuna próxima, prueba de mastitis cada 7 días, revisión de chapetas cada 15 días, medición de leche los días 15 y 30.
@@ -125,7 +125,7 @@ tareas_manual, plan_sanitario (catálogos globales sembrados desde el manual y e
 | # | Entregable | Estado |
 |---|---|---|
 | F0 | Next.js + Supabase local en Docker, puertos propios, variables de entorno | en curso |
-| F1 | Migraciones (esquema + RLS + vistas) y seed con datos reales de Toneles (43 vacas en ordeño + 8 horras de la hoja 30/04/26), manual y plan sanitario | |
+| F1 | Migraciones (esquema + RLS + vistas) y seed con datos reales de Toneles (43 vacas en ordeño + 8 secas de la hoja 30/04/26), manual y plan sanitario | |
 | F2 | Auth (correo/contraseña), organización, roles, usuarios demo | |
 | F3 | VacDaTa: registro por código/QR, formularios de eventos, comentarios, aprendizaje | |
 | F4 | VacInfo: inicio, fincas, fichas, árbol de elementos | |

@@ -1,20 +1,22 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
-import { calcularInforme, type Estado, type ParametrosCostos } from "@/lib/finanzas";
-import { litros, num, pct, pesos } from "@/lib/formato";
+import Link from "next/link";
+import { ChevronDown, Info, Lock, Plus, Trash2 } from "lucide-react";
+import { calcularInforme, type ConteoAnimales, type Estado, type ParametrosCostos } from "@/lib/finanzas";
+import { fecha, litros, num, pct, pesos } from "@/lib/formato";
 import { BotonPrimario, Etiqueta, Tarjeta, TituloTarjeta } from "@/components/ui";
 import { MensajeError, type EstadoFormulario } from "@/components/fincas/campo";
 
 const TONO_ESTADO: Record<Estado, "verde" | "amarillo" | "rojo"> = { RENTABLE: "verde", AJUSTADA: "amarillo", "EN RIESGO": "rojo" };
 
-const ANIMALES: { clave: keyof ParametrosCostos["animales"]; texto: string }[] = [
-  { clave: "vacas_produccion", texto: "Vacas en producción" },
-  { clave: "vacas_horras", texto: "Vacas horras" },
+const ANIMALES: { clave: keyof ConteoAnimales; texto: string }[] = [
+  { clave: "vacas_produccion", texto: "Vacas en ordeño" },
+  { clave: "vacas_secas", texto: "Vacas secas" },
   { clave: "novillas", texto: "Novillas" },
-  { clave: "terneronas", texto: "Terneronas" },
   { clave: "terneras", texto: "Terneras" },
+  { clave: "terneros", texto: "Terneros" },
+  { clave: "novillos", texto: "Novillos" },
   { clave: "toros", texto: "Toros" },
   { clave: "caballos", texto: "Caballos" },
   { clave: "perros", texto: "Perros" },
@@ -57,10 +59,15 @@ export function EditorCostos({
   inicial,
   editable,
   accion,
+  fincaId,
+  fechaConteo,
 }: {
+  /** `inicial.animales` ya trae el conteo real de la finca a `fechaConteo`. */
   inicial: ParametrosCostos;
   editable: boolean;
   accion: (estado: EstadoFormulario, datos: FormData) => Promise<EstadoFormulario>;
+  fincaId: string;
+  fechaConteo: string;
 }) {
   const [p, setP] = useState<ParametrosCostos>(inicial);
   const [estado, enviar, pendiente] = useActionState(accion, {});
@@ -101,16 +108,39 @@ export function EditorCostos({
           </div>
         </Tarjeta>
 
-        <Tarjeta>
-          <TituloTarjeta detalle={`${num(informe.totalAnimales)} en total`}>Animales</TituloTarjeta>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <Tarjeta aria-labelledby="animales-costos">
+          <TituloTarjeta detalle={`${num(informe.totalAnimales)} en total al ${fecha(fechaConteo)}`}>
+            <span id="animales-costos" className="inline-flex items-center gap-2">
+              Animales <Lock className="h-4 w-4 text-tinta-suave" aria-label="No editable" />
+            </span>
+          </TituloTarjeta>
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {ANIMALES.map(({ clave, texto }) => (
-              <label key={clave} className="block">
-                <span className="mb-1.5 block text-sm font-bold text-bosque">{texto}</span>
-                <Numero etiqueta={texto} valor={p.animales[clave]} onCambio={(v) => setP({ ...p, animales: { ...p.animales, [clave]: v } })} />
-              </label>
+              <div key={clave} className="rounded-xl border border-[#cadba8] bg-lima-suave px-3 py-2">
+                <dt className="text-xs font-bold text-tinta-suave">{texto}</dt>
+                <dd className="font-display text-xl font-bold tabular-nums text-bosque">{num(informe.animales[clave])}</dd>
+              </div>
             ))}
-          </div>
+          </dl>
+          <p className="mt-4 flex gap-2 rounded-xl bg-crema p-3 text-sm text-tinta-suave">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-pasto-oscuro" aria-hidden />
+            <span>
+              Se calculan con las fichas de la finca al {fecha(fechaConteo, true)} (cierre del mes o fecha de corte). Para cambiar la cantidad de
+              animales: registra la muerte o venta en la ficha del animal (
+              <Link href={`/fincas/${fincaId}`} className="font-bold text-bosque underline">
+                Gestionar fincas
+              </Link>
+              ) o desde{" "}
+              <Link href="/campo" className="font-bold text-bosque underline">
+                VacDaTa
+              </Link>
+              ; para agregar, crea la ficha en Gestionar fincas ›{" "}
+              <Link href={`/animales/nuevo?finca=${fincaId}`} className="font-bold text-bosque underline">
+                Nueva ficha de ser vivo
+              </Link>
+              .
+            </span>
+          </p>
         </Tarjeta>
 
         <Tarjeta>

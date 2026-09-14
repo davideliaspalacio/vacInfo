@@ -4,23 +4,73 @@
 export type ItemCosto = { nombre: string; mes: number; caja?: boolean };
 export type CategoriaCosto = { categoria: string; items: ItemCosto[] };
 
+/** Conteo de animales tal como lo usa el modelo (siempre completo). */
+export type ConteoAnimales = {
+  vacas_produccion: number;
+  vacas_secas: number;
+  novillas: number;
+  terneras: number;
+  terneros: number;
+  novillos: number;
+  toros: number;
+  caballos: number;
+  perros: number;
+  otros: number;
+};
+
+/**
+ * Animales guardados en `parametros_costos.datos.animales`. Los periodos antiguos traen
+ * `vacas_horras` (hoy "vacas secas") y `terneronas` (etapa eliminada: cuentan como novillas),
+ * y no traen terneros/novillos. `normalizarAnimales` los lleva a `ConteoAnimales`.
+ */
+export type AnimalesCostos = Partial<ConteoAnimales> & {
+  vacas_produccion: number;
+  novillas: number;
+  terneras: number;
+  /** @deprecated datos antiguos: equivale a `vacas_secas`. */
+  vacas_horras?: number;
+  /** @deprecated datos antiguos: se valorizan como novillas. */
+  terneronas?: number;
+};
+
 export type ParametrosCostos = {
   precio_litro: number;
   valorizacion_mensual_por_animal: number;
-  animales: {
-    vacas_produccion: number;
-    vacas_horras: number;
-    novillas: number;
-    terneronas: number;
-    terneras: number;
-    toros: number;
-    caballos: number;
-    perros: number;
-    otros: number;
-  };
+  animales: AnimalesCostos;
   litros_dia: { venta: number; terneras: number; consumo_humano: number };
   costos: CategoriaCosto[];
 };
+
+export const ANIMALES_VACIOS: ConteoAnimales = {
+  vacas_produccion: 0,
+  vacas_secas: 0,
+  novillas: 0,
+  terneras: 0,
+  terneros: 0,
+  novillos: 0,
+  toros: 0,
+  caballos: 0,
+  perros: 0,
+  otros: 0,
+};
+
+const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
+export function normalizarAnimales(a: Partial<AnimalesCostos> | null | undefined): ConteoAnimales {
+  const x = a ?? {};
+  return {
+    vacas_produccion: n(x.vacas_produccion),
+    vacas_secas: n(x.vacas_secas) + n(x.vacas_horras),
+    novillas: n(x.novillas) + n(x.terneronas),
+    terneras: n(x.terneras),
+    terneros: n(x.terneros),
+    novillos: n(x.novillos),
+    toros: n(x.toros),
+    caballos: n(x.caballos),
+    perros: n(x.perros),
+    otros: n(x.otros),
+  };
+}
 
 export type Estado = "RENTABLE" | "AJUSTADA" | "EN RIESGO";
 
@@ -46,6 +96,7 @@ function estadoCaja(margen: number): Estado {
 
 export function calcularInforme(p: ParametrosCostos) {
   const precio = p.precio_litro;
+  const animales = normalizarAnimales(p.animales);
   const ingresos = [
     { nombre: "Producción para la venta", litrosDia: p.litros_dia.venta },
     { nombre: "Producción para terneras", litrosDia: p.litros_dia.terneras },
@@ -70,7 +121,8 @@ export function calcularInforme(p: ParametrosCostos) {
   const utilidadMes = ingresosMes - costosMes;
   const margen = ingresosMes ? utilidadMes / ingresosMes : 0;
 
-  const animalesLevante = p.animales.novillas + p.animales.terneronas + p.animales.terneras;
+  // Solo se valorizan terneras y novillas (las terneronas de datos antiguos ya vienen sumadas a novillas).
+  const animalesLevante = animales.novillas + animales.terneras;
   const valorizacionMes = animalesLevante * p.valorizacion_mensual_por_animal;
   const utilidadTotalMes = utilidadMes + valorizacionMes;
   const margenTotal = ingresosMes ? utilidadTotalMes / ingresosMes : 0;
@@ -89,13 +141,15 @@ export function calcularInforme(p: ParametrosCostos) {
   const margenCaja = ingresosCaja ? saldoCaja / ingresosCaja : 0;
 
   const mayorCosto = [...categorias].sort((a, b) => b.totalMes - a.totalMes)[0];
-  const totalAnimales = Object.values(p.animales).reduce((s, n) => s + n, 0);
+  const totalAnimales = Object.values(animales).reduce((s, v) => s + v, 0);
 
   return {
     precio,
+    animales,
+    animalesLevante,
     totalAnimales,
     litrosDia,
-    promedioVaca: p.animales.vacas_produccion ? p.litros_dia.venta / p.animales.vacas_produccion : 0,
+    promedioVaca: animales.vacas_produccion ? p.litros_dia.venta / animales.vacas_produccion : 0,
     ingresos,
     ingresosMes,
     categorias,

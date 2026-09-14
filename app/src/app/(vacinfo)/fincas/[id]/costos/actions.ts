@@ -9,23 +9,15 @@ import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import type { ParametrosCostos } from "@/lib/finanzas";
 import type { EstadoFormulario } from "@/components/fincas/campo";
 import { mensajeErrorBD } from "@/components/fincas/validacion";
+import { conteoCostosPeriodo } from "@/components/fincas/conteo-animales";
 
 const valor = z.coerce.number({ error: "Número inválido" }).finite("Número inválido").min(0, "No puede ser negativo");
 
+// Sin `animales`: la cantidad no se edita aquí. Zod descarta lo que llegue en esa llave y el
+// servidor guarda el conteo real de la finca (fichas, partos, secados y bajas).
 const esquemaParametros = z.object({
   precio_litro: valor,
   valorizacion_mensual_por_animal: valor,
-  animales: z.object({
-    vacas_produccion: valor,
-    vacas_horras: valor,
-    novillas: valor,
-    terneronas: valor,
-    terneras: valor,
-    toros: valor,
-    caballos: valor,
-    perros: valor,
-    otros: valor,
-  }),
   litros_dia: z.object({ venta: valor, terneras: valor, consumo_humano: valor }),
   costos: z.array(
     z.object({
@@ -39,7 +31,7 @@ const esquemaParametros = z.object({
       ),
     }),
   ),
-}) satisfies z.ZodType<ParametrosCostos>;
+}) satisfies z.ZodType<Omit<ParametrosCostos, "animales">>;
 
 export async function guardarCostos(fincaId: string, periodo: string, _: EstadoFormulario, formData: FormData): Promise<EstadoFormulario> {
   const { supabase, rol, user } = await obtenerSesion();
@@ -57,8 +49,13 @@ export async function guardarCostos(fincaId: string, periodo: string, _: EstadoF
   const resultado = esquemaParametros.safeParse(crudo);
   if (!resultado.success) return { mensaje: resultado.error.issues[0]?.message ?? "Revisa los valores." };
 
+  const { animales } = await conteoCostosPeriodo(supabase, fincaId, periodo);
+
   const datos: ParametrosCostos = {
-    ...resultado.data,
+    precio_litro: resultado.data.precio_litro,
+    valorizacion_mensual_por_animal: resultado.data.valorizacion_mensual_por_animal,
+    animales,
+    litros_dia: resultado.data.litros_dia,
     costos: resultado.data.costos.map((c) => ({
       categoria: c.categoria,
       items: c.items.map(({ nombre, mes, caja }) => (caja === false ? { nombre, mes, caja } : { nombre, mes })),

@@ -4,8 +4,10 @@ import { BellRing, Pencil } from "lucide-react";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { fecha, hoyISO, num } from "@/lib/formato";
 import { consultarPagina, leerPagina } from "@/lib/paginacion";
+import { atajosDias, completarRango, leerRangoPedido, textoRango } from "@/lib/rango";
 import { BotonVolver, Encabezado, Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
+import { RangoFechas } from "@/components/rango-fechas";
 import { Dato } from "@/components/fincas/campo";
 import { CodigoQR } from "@/components/fincas/codigo-qr";
 import { ESTADOS_BIEN, TIPOS_BIEN, TIPOS_MANTENIMIENTO } from "@/components/fincas/etiquetas";
@@ -17,6 +19,12 @@ export default async function FichaBien({ params, searchParams }: PageProps<"/bi
   const { supabase, rol } = await obtenerSesion();
   const gestor = ROLES_GESTORES.includes(rol);
 
+  // Por defecto todo el historial hasta hoy (o hasta el último mantenimiento, si hay alguno con fecha futura).
+  const hoy = hoyISO();
+  const { data: ultimo } = await supabase.from("mantenimientos").select("fecha").eq("bien_id", id).order("fecha", { ascending: false }).limit(1).maybeSingle();
+  const referencia = ultimo?.fecha && ultimo.fecha > hoy ? ultimo.fecha : hoy;
+  const rango = completarRango(leerRangoPedido(sp), referencia, { todoPorDefecto: true });
+
   const [{ data: bien }, mantenimientos] = await Promise.all([
     supabase.from("bienes").select("*, fincas(id, nombre)").eq("id", id).maybeSingle(),
     consultarPagina(
@@ -25,6 +33,8 @@ export default async function FichaBien({ params, searchParams }: PageProps<"/bi
           .from("mantenimientos")
           .select("*", { count: "exact" })
           .eq("bien_id", id)
+          .gte("fecha", rango.desde)
+          .lte("fecha", rango.hasta)
           .order("fecha", { ascending: false })
           .order("registrado_en", { ascending: false })
           .order("id")
@@ -96,8 +106,18 @@ export default async function FichaBien({ params, searchParams }: PageProps<"/bi
 
       <Tarjeta id="mantenimientos" className="scroll-mt-6">
         <TituloTarjeta detalle={`${num(mantenimientos.total)} registros`}>Historial de mantenimientos</TituloTarjeta>
+        <RangoFechas
+          ruta={`/bienes/${id}`}
+          searchParams={sp}
+          desde={rango.todo ? "" : rango.desde}
+          hasta={rango.hasta}
+          texto={textoRango(rango)}
+          atajos={atajosDias(referencia, rango)}
+          ancla="mantenimientos"
+          className="mb-4"
+        />
         {!mantenimientos.filas.length ? (
-          <Vacio>Este bien aún no tiene mantenimientos registrados.</Vacio>
+          <Vacio>{rango.todo ? "Este bien aún no tiene mantenimientos registrados." : "No hay mantenimientos registrados en este rango de fechas."}</Vacio>
         ) : (
           <div className="overflow-x-auto">
             <table className="matriz w-full border-collapse bg-white text-sm">

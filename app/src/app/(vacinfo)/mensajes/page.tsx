@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { AlertTriangle, BellRing, CheckCheck, MessageSquareText } from "lucide-react";
+import { BellRing, CheckCheck, MessageSquareText } from "lucide-react";
 import { obtenerSesion, ETIQUETA_ROL, ROLES_GESTORES, type Rol } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
@@ -9,16 +9,12 @@ import { Encabezado, Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/component
 import { Paginacion } from "@/components/paginacion";
 import { cambiarEstadoComentario, marcarMensajeLeido } from "./actions";
 import { FormularioMensaje } from "./formulario-mensaje";
+import { Notificaciones } from "./notificaciones";
+import { conClave, descartesVigentes, separarAlertas } from "./alertas";
 
 export const metadata = { title: "Mensajes" };
 
 const POR_PAGINA = 20;
-
-const URGENCIAS = [
-  { id: "alta", titulo: "Urgente", tono: "rojo", clase: "border-alerta/25 bg-[#fbe9e5]" },
-  { id: "media", titulo: "Esta semana", tono: "amarillo", clase: "border-dorado/50 bg-[#fdf4dc]" },
-  { id: "baja", titulo: "Para tener en cuenta", tono: "gris", clase: "border-[#cadba8] bg-lima-suave" },
-] as const;
 
 const TONO_URGENCIA = { alta: "rojo", media: "amarillo", baja: "verde" } as const;
 const TONO_ESTADO = { nuevo: "azul", leido: "gris", resuelto: "verde" } as const;
@@ -31,13 +27,19 @@ export default async function MensajesPage({ searchParams }: PageProps<"/mensaje
   const { supabase, user, rol, organizacionId, fincas } = await obtenerSesion();
   const esGestor = ROLES_GESTORES.includes(rol);
 
-  const [alertasPorFinca, comentarios, mensajes, { data: miembros }, { count: pendientes }] = await Promise.all([
+  const verDescartadas = sp.descartadas === "1";
+
+  const [alertasPorFinca, descartes, comentarios, mensajes, { data: miembros }, { count: pendientes }] = await Promise.all([
     Promise.all(
       fincas.map(async (f) => {
         const corte = await corteDeFinca(supabase, f.id);
         const { data } = await supabase.rpc("alertas_finca", { p_finca: f.id, p_corte: corte });
-        return (data ?? []).map((a) => ({ ...a, finca: f.nombre, corte }));
+        return conClave(data, f, corte);
       }),
+    ),
+    descartesVigentes(
+      supabase,
+      fincas.map((f) => f.id),
     ),
     consultarPagina(
       (desde, hasta) =>
@@ -71,6 +73,7 @@ export default async function MensajesPage({ searchParams }: PageProps<"/mensaje
   const nombre = (id: string | null) => (id ? (nombres.get(id) || "Usuario") : "—");
 
   const alertas = alertasPorFinca.flat();
+  const { visibles, descartadas } = separarAlertas(alertas, descartes);
   const opciones = (miembros ?? [])
     .filter((m) => m.usuario_id !== user.id)
     .map((m) => ({ id: m.usuario_id, nombre: nombre(m.usuario_id), rol: ETIQUETA_ROL[m.rol as Rol] }))
@@ -85,47 +88,24 @@ export default async function MensajesPage({ searchParams }: PageProps<"/mensaje
       />
 
       <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
-        <Tarjeta className="h-fit">
-          <TituloTarjeta detalle={`${alertas.length} activas`}>
+        <Tarjeta id="notificaciones" className="h-fit scroll-mt-6">
+          <TituloTarjeta detalle={`${visibles.length} activas${descartadas.length ? ` · ${descartadas.length} descartadas` : ""}`}>
             <span className="inline-flex items-center gap-2">
               <BellRing className="h-5 w-5" aria-hidden /> Notificaciones
             </span>
           </TituloTarjeta>
-          {alertas.length === 0 ? (
-            <Vacio>No hay alertas pendientes en ninguna finca.</Vacio>
-          ) : (
-            <div className="space-y-5">
-              {URGENCIAS.map((u) => {
-                const grupo = alertas.filter((a) => a.prioridad === u.id);
-                if (grupo.length === 0) return null;
-                return (
-                  <section key={u.id}>
-                    <h3 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-tinta-suave">
-                      {u.id === "alta" && <AlertTriangle className="h-4 w-4 text-alerta" aria-hidden />}
-                      {u.titulo} <Etiqueta tono={u.tono}>{grupo.length}</Etiqueta>
-                    </h3>
-                    <ul className="space-y-2">
-                      {grupo.map((a, i) => (
-                        <li key={`${a.tipo}-${a.animal_id}-${i}`} className={clsx("rounded-2xl border p-3", u.clase)}>
-                          <div className="flex items-start justify-between gap-3">
-                            <strong className="text-bosque">
-                              {a.chapeta ? `${a.chapeta} · ` : ""}
-                              {a.nombre}
-                            </strong>
-                            <span className="shrink-0 text-xs font-bold text-tinta-suave">{fecha(a.fecha)}</span>
-                          </div>
-                          <p className="text-sm">{a.detalle}</p>
-                          <p className="mt-1 text-xs text-tinta-suave">{a.finca}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                );
-              })}
-              <p className="text-xs text-tinta-suave">
-                Calculadas al corte de cada finca: {[...new Map(alertas.map((a) => [a.finca, a.corte])).entries()].map(([f, c]) => `${f} ${fecha(c)}`).join(" · ")}
-              </p>
-            </div>
+          <Notificaciones
+            // Remonta al cambiar la lista del servidor para limpiar lo ocultado de forma optimista.
+            key={`${visibles.length}-${descartadas.length}`}
+            visibles={visibles}
+            descartadas={descartadas}
+            verDescartadas={verDescartadas}
+          />
+          {alertas.length > 0 && (
+            <p className="mt-4 text-xs text-tinta-suave">
+              Calculadas al corte de cada finca: {[...new Map(alertas.map((a) => [a.finca, a.corte])).entries()].map(([f, c]) => `${f} ${fecha(c)}`).join(" · ")}.
+              Descartar solo las oculta para ti; las que cambian a diario (mora de preñez, insumos, novillas listas) vuelven en 7 días si siguen pendientes.
+            </p>
           )}
         </Tarjeta>
 

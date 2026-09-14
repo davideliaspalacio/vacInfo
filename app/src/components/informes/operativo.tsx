@@ -143,7 +143,7 @@ export async function InformeOperativo({ supabase, rango, finca }: PropsInforme)
   });
 
   const enOrdeno = filas.filter((f) => f.en_ordeno);
-  const horras = filas.filter((f) => !f.en_ordeno);
+  const secas = filas.filter((f) => !f.en_ordeno);
 
   // Resumen de leche
   const totalOrdenado = [...lechePorDia.values()].reduce((s, v) => s + v, 0);
@@ -175,7 +175,7 @@ export async function InformeOperativo({ supabase, rango, finca }: PropsInforme)
         ) : (
           <div className="space-y-6">
             <Matriz titulo="Vacas en ordeño" filas={enOrdeno} hasta={hasta} />
-            <Matriz titulo="Vacas horras y novillas de vientre" filas={horras} hasta={hasta} horras />
+            <Matriz titulo="Vacas secas y novillas de vientre" filas={secas} hasta={hasta} secas />
           </div>
         )}
       </Tarjeta>
@@ -213,7 +213,7 @@ export async function InformeOperativo({ supabase, rango, finca }: PropsInforme)
                 ["Vacas preñadas", <Con key="p" n={r.prenadas} p={porc(r.prenadas)} />],
                 ["Vacas servidas", <Con key="s" n={r.servidas_sin_confirmar} p={porc(r.servidas_sin_confirmar)} />],
                 ["Vacas vacías", <Con key="v" n={r.vacias} p={porc(r.vacias)} />],
-                ["Vacas horras", <Con key="h" n={r.vacas_horras} p={porc(r.vacas_horras)} />],
+                ["Vacas secas", <Con key="h" n={r.vacas_horras} p={porc(r.vacas_horras)} />],
                 ["Vacas en ordeño", <Con key="o" n={r.vacas_ordeno} p={porc(r.vacas_ordeno)} />],
                 ["Novillas de vientre", <Con key="n" n={r.novillas_vientre} p={porc(r.novillas_vientre)} />],
                 ["Terneras", num(r.terneras)],
@@ -300,7 +300,7 @@ function Resumen({ filas }: { filas: [string, React.ReactNode][] }) {
   );
 }
 
-function Matriz({ titulo, filas, hasta, horras = false }: { titulo: string; filas: Fila[]; hasta: string; horras?: boolean }) {
+function Matriz({ titulo, filas, hasta, secas = false }: { titulo: string; filas: Fila[]; hasta: string; secas?: boolean }) {
   const vencida = (f: string | null) => (f && f < hasta ? "bg-[#fbe0da] font-bold text-alerta" : undefined);
   const si = (v: boolean) => (v ? "✓" : "");
 
@@ -329,7 +329,7 @@ function Matriz({ titulo, filas, hasta, horras = false }: { titulo: string; fila
                 <th className="text-left">Nombre</th>
                 <th>Fecha parto anterior</th>
                 <th>Fecha crío</th>
-                <th>{horras ? "Días seca" : "Días ordeño"}</th>
+                <th>{secas ? "Días seca" : "Días ordeño"}</th>
                 <th>Preñez más 40</th>
                 <th>Fecha servida</th>
                 <th>Palpar 33 días</th>
@@ -367,7 +367,7 @@ function Matriz({ titulo, filas, hasta, horras = false }: { titulo: string; fila
                   <td className="!text-left font-bold">{f.nombre}</td>
                   <td>{f.partoAnterior ? fecha(f.partoAnterior) : f.categoria === "novilla" || f.ultimo_parto ? "NOVILLA" : ""}</td>
                   <td>{fecha(f.ultimo_parto)}</td>
-                  <td>{horras ? num(f.dias_seca) : num(f.dias_ordeno)}</td>
+                  <td>{secas ? num(f.dias_seca) : num(f.dias_ordeno)}</td>
                   <td className={clsx(f.mora_prenez != null && f.mora_prenez > 0 && "font-bold text-alerta")}>
                     {f.mora_prenez ? f.mora_prenez : "-"}
                   </td>
@@ -400,7 +400,7 @@ function Matriz({ titulo, filas, hasta, horras = false }: { titulo: string; fila
                 </tr>
               ))}
             </tbody>
-            {!horras && (
+            {!secas && (
               <tfoot>
                 <tr className="bg-[#e7f0d4] font-bold">
                   <td colSpan={19} className="!text-right">

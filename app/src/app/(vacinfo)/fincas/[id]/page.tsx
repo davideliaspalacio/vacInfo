@@ -1,12 +1,15 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Calculator, CalendarDays, FilePlus2, MapPin, Pencil, Wrench } from "lucide-react";
+import { Calculator, FilePlus2, MapPin, Pencil, Wrench } from "lucide-react";
 import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
+import { corteDeFinca } from "@/lib/datos";
 import { fecha, litros, num, pesos } from "@/lib/formato";
 import type { Params } from "@/lib/paginacion";
+import { atajosDias, completarRango, diasEntre, leerRangoPedido, textoRango, type Rango } from "@/lib/rango";
 import { BotonVolver, Encabezado, Metrica, Tarjeta } from "@/components/ui";
+import { RangoFechas } from "@/components/rango-fechas";
 import { alertasDeFinca, resumenAlCorte } from "@/components/fincas/consultas";
 import { Bloque, EsqueletoMetricas, EsqueletoTabla } from "@/components/fincas/esqueletos";
 import { Pestanas } from "@/components/fincas/pestanas";
@@ -24,25 +27,45 @@ const PESTANAS = [
   { valor: "historial", texto: "Historial de servicios" },
 ] as const;
 
+/** El promedio de litros del rango usa indicadores_mensuales; en rangos muy largos no se calcula. */
+const MAX_DIAS_PROMEDIO = 366;
+
 type Pestana = (typeof PESTANAS)[number]["valor"];
 type DatosCorte = ReturnType<typeof resumenAlCorte>;
+type Promedio = { litrosDia: number | null; dias: number } | null;
 
 export default async function FichaFinca({ params, searchParams }: PageProps<"/fincas/[id]">) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const tab: Pestana = PESTANAS.some((p) => p.valor === sp.tab) ? (sp.tab as Pestana) : "animales";
-  const pedido = typeof sp.corte === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.corte) ? sp.corte : null;
+  // ?desde=&hasta= (hasta = fecha de corte de los cálculos; ?corte= heredado equivale a hasta).
+  const pedido = leerRangoPedido(sp);
 
   const { supabase, rol } = await obtenerSesion();
   const gestor = ROLES_GESTORES.includes(rol);
 
   // Lo lento (resumen, conteos, sección) arranca ya y se transmite por partes; el encabezado no lo espera.
-  const datos = resumenAlCorte(supabase, id, pedido);
+  const datos = resumenAlCorte(supabase, id, pedido.hasta);
+  const rango = datos.then((d) => completarRango(pedido, d.corte));
+  const referencia = pedido.hasta ? corteDeFinca(supabase, id) : datos.then((d) => d.corte);
+  const promedio: Promise<Promedio> = rango.then(async (r) => {
+    if (diasEntre(r.desde, r.hasta) > MAX_DIAS_PROMEDIO) return null;
+    const { data } = await supabase.rpc("indicadores_mensuales", { p_finca: id, p_desde: r.desde, p_hasta: r.hasta });
+    const filas = data ?? [];
+    const litrosTotales = filas.reduce((s, f) => s + Number(f.litros_totales ?? 0), 0);
+    const dias = filas.reduce((s, f) => s + Number(f.dias_con_ordeno ?? 0), 0);
+    return { litrosDia: dias ? Math.round((litrosTotales / dias) * 10) / 10 : null, dias };
+  });
   const bienes = (async () => (await supabase.from("bienes").select("id", { count: "exact", head: true }).eq("finca_id", id)).count)();
 
   const { data: finca } = await supabase.from("fincas").select("*").eq("id", id).maybeSingle();
   if (!finca) notFound();
 
-  const enlace = (t: string) => `/fincas/${id}?tab=${t}${pedido ? `&corte=${pedido}` : ""}`;
+  const claveRango = `${pedido.desde ?? ""}|${pedido.hasta ?? ""}|${pedido.todo}`;
+  const enlace = (t: string) => {
+    const q = new URLSearchParams({ tab: t });
+    for (const k of ["desde", "hasta", "corte"]) if (typeof sp[k] === "string") q.set(k, sp[k]);
+    return `/fincas/${id}?${q}`;
+  };
   const ubicacion = [finca.vereda, finca.municipio, finca.departamento].filter(Boolean).join(", ");
   const colanta = [
     finca.empresa_compradora,
@@ -110,41 +133,66 @@ export default async function FichaFinca({ params, searchParams }: PageProps<"/f
         }
       />
 
-      <Suspense key={pedido ?? ""} fallback={<EsqueletoResumen />}>
-        <ResumenFinca datos={datos} tab={tab} />
+      <Suspense key={claveRango} fallback={<EsqueletoResumen />}>
+        <ResumenFinca fincaId={id} datos={datos} rango={rango} referencia={referencia} promedio={promedio} searchParams={sp} />
       </Suspense>
 
       <Pestanas activa={tab} fincaId={id} opciones={PESTANAS.map((p) => ({ ...p, href: enlace(p.valor), cuenta: cuentas[p.valor] }))} />
 
-      <Suspense key={`${tab}-${pedido ?? ""}`} fallback={<EsqueletoTabla />}>
-        <SeccionFinca tab={tab} fincaId={id} nombre={finca.nombre} datos={datos} searchParams={sp} />
+      <Suspense key={`${tab}-${claveRango}`} fallback={<EsqueletoTabla />}>
+        <SeccionFinca tab={tab} fincaId={id} nombre={finca.nombre} datos={datos} rango={rango} searchParams={sp} />
       </Suspense>
     </div>
   );
 }
 
-async function ResumenFinca({ datos, tab }: { datos: DatosCorte; tab: Pestana }) {
-  const { corte, resumen } = await datos;
+async function ResumenFinca({
+  fincaId,
+  datos,
+  rango,
+  referencia,
+  promedio,
+  searchParams,
+}: {
+  fincaId: string;
+  datos: DatosCorte;
+  rango: Promise<Rango>;
+  referencia: Promise<string>;
+  promedio: Promise<Promedio>;
+  searchParams: Params;
+}) {
+  const [{ corte, resumen }, r, ref, prom] = await Promise.all([datos, rango, referencia, promedio]);
   return (
     <Tarjeta>
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <p className="text-sm text-tinta-suave">
-          Datos al <strong className="text-bosque">{fecha(corte, true)}</strong>
-          {resumen?.fecha_leche && resumen.fecha_leche !== corte && ` · último ordeño registrado ${fecha(resumen.fecha_leche, true)}`}
-        </p>
-        <form className="flex items-center gap-2">
-          <input type="hidden" name="tab" value={tab} />
-          <label htmlFor="corte" className="flex items-center gap-1 text-sm font-bold text-bosque">
-            <CalendarDays className="h-4 w-4" aria-hidden />
-            Fecha de corte
-          </label>
-          <input id="corte" type="date" name="corte" defaultValue={corte} className="campo-control w-auto py-2" />
-          <button className="rounded-xl bg-bosque px-4 py-2 text-sm font-bold text-leche">Ver</button>
-        </form>
-      </div>
-      <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+      <RangoFechas
+        ruta={`/fincas/${fincaId}`}
+        searchParams={searchParams}
+        desde={r.todo ? "" : r.desde}
+        hasta={r.hasta}
+        texto={textoRango(r)}
+        atajos={atajosDias(ref, r)}
+        referencia={ref}
+        nota="El resumen, los animales y las alertas se calculan a la fecha «hasta»; el historial de servicios se filtra por el rango."
+      />
+      <p className="mt-4 border-t border-black/10 pt-4 text-sm text-tinta-suave">
+        Datos al <strong className="text-bosque">{fecha(corte, true)}</strong>
+        {resumen?.fecha_leche && resumen.fecha_leche !== corte && ` · último ordeño registrado ${fecha(resumen.fecha_leche, true)}`}
+        {prom && (
+          <>
+            {" · "}
+            {prom.litrosDia != null ? (
+              <>
+                promedio del rango <strong className="text-bosque">{litros(prom.litrosDia)}/día</strong> ({num(prom.dias)} {prom.dias === 1 ? "día" : "días"} con ordeño)
+              </>
+            ) : (
+              "sin ordeños en el rango"
+            )}
+          </>
+        )}
+      </p>
+      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
         <Metrica valor={num(resumen?.vacas_ordeno ?? 0)} etiqueta="Vacas en ordeño" />
-        <Metrica valor={num(resumen?.vacas_horras ?? 0)} etiqueta="Vacas horras" />
+        <Metrica valor={num(resumen?.vacas_horras ?? 0)} etiqueta="Vacas secas" />
         <Metrica valor={num(resumen?.novillas_vientre ?? 0)} etiqueta="Novillas" />
         <Metrica valor={num(resumen?.prenadas ?? 0)} etiqueta="Preñadas" />
         <Metrica valor={num(resumen?.servidas_sin_confirmar ?? 0)} etiqueta="Servidas sin confirmar" tono="crema" />
@@ -161,23 +209,24 @@ function EsqueletoResumen() {
     <section className="papel rounded-3xl p-5 sm:p-6" aria-busy="true">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <Bloque className="h-5 w-56" />
-        <Bloque className="h-10 w-72" />
+        <Bloque className="h-10 w-96" />
       </div>
+      <Bloque className="mt-3 h-7 w-full max-w-2xl" />
       <EsqueletoMetricas className="mt-5 xl:grid-cols-8" />
     </section>
   );
 }
 
-type PropsSeccion = { tab: Pestana; fincaId: string; nombre: string; datos: DatosCorte; searchParams: Params };
+type PropsSeccion = { tab: Pestana; fincaId: string; nombre: string; datos: DatosCorte; rango: Promise<Rango>; searchParams: Params };
 
-async function SeccionFinca({ tab, fincaId, nombre, datos, searchParams }: PropsSeccion) {
+async function SeccionFinca({ tab, fincaId, nombre, datos, rango, searchParams }: PropsSeccion) {
   switch (tab) {
     case "bienes":
       return <SeccionBienes fincaId={fincaId} searchParams={searchParams} />;
     case "arbol":
       return <ArbolElementos fincaId={fincaId} nombre={nombre} />;
     case "historial":
-      return <HistorialServicios fincaId={fincaId} searchParams={searchParams} />;
+      return <HistorialServicios fincaId={fincaId} searchParams={searchParams} rango={await rango} />;
   }
   const { corte } = await datos;
   if (tab === "alertas") return <SeccionAlertas alertas={await alertasDeFinca(fincaId, corte)} corte={corte} />;

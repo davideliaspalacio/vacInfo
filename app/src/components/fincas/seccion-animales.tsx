@@ -81,12 +81,12 @@ export async function SeccionAnimales({ fincaId, corte, searchParams }: { fincaI
                         {a.en_ordeno ? (
                           <Etiqueta tono="verde">Ordeño</Etiqueta>
                         ) : a.ultimo_parto ? (
-                          <Etiqueta tono="amarillo">Horra</Etiqueta>
+                          <Etiqueta tono="amarillo">Seca</Etiqueta>
                         ) : (
                           <Etiqueta tono="azul">Novilla</Etiqueta>
                         )}
                       </td>
-                      <td>{a.dias_ordeno ?? (a.dias_seca != null ? <span className="text-tinta-suave">{a.dias_seca} secas</span> : "—")}</td>
+                      <td>{a.dias_ordeno ?? (a.dias_seca != null ? <span className="text-tinta-suave">{a.dias_seca} d seca</span> : "—")}</td>
                       <td>{a.prenada ? <Etiqueta tono="verde">Sí</Etiqueta> : a.ultimo_servicio ? <Etiqueta tono="gris">Servida</Etiqueta> : "No"}</td>
                       <td className={a.mora_prenez && a.mora_prenez > 60 ? "font-bold text-alerta" : undefined}>{a.mora_prenez || "—"}</td>
                       <td className={hoyToca(a.palpar_el) ? "font-bold text-alerta" : undefined}>{fecha(a.palpar_el)}</td>

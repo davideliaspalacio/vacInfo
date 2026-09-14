@@ -5,8 +5,10 @@ type E = Database["public"]["Enums"];
 export const CATEGORIAS: Record<E["categoria_animal"], string> = {
   vaca: "Vaca",
   novilla: "Novilla",
-  ternerona: "Ternerona",
+  novillo: "Novillo",
   ternera: "Ternera",
+  // Etapa eliminada: la base convierte cualquier "ternerona" en novilla. Se conserva solo para el tipo del enum.
+  ternerona: "Novilla",
   ternero: "Ternero",
   toro: "Toro",
   caballo: "Caballo",
@@ -17,8 +19,9 @@ export const CATEGORIAS: Record<E["categoria_animal"], string> = {
 export const CATEGORIAS_PLURAL: Record<E["categoria_animal"], string> = {
   vaca: "Vacas",
   novilla: "Novillas",
-  ternerona: "Terneronas",
+  novillo: "Novillos",
   ternera: "Terneras",
+  ternerona: "Novillas",
   ternero: "Terneros",
   toro: "Toros",
   caballo: "Caballos",
@@ -124,6 +127,7 @@ export const TIPOS_ALERTA: Record<string, string> = {
 export const ESPECIE_DE_CATEGORIA: Record<E["categoria_animal"], E["especie"]> = {
   vaca: "bovino",
   novilla: "bovino",
+  novillo: "bovino",
   ternerona: "bovino",
   ternera: "bovino",
   ternero: "bovino",
@@ -134,9 +138,13 @@ export const ESPECIE_DE_CATEGORIA: Record<E["categoria_animal"], E["especie"]> =
 };
 
 export const GRUPOS_CATEGORIA: { titulo: string; categorias: E["categoria_animal"][] }[] = [
-  { titulo: "Bovinos", categorias: ["vaca", "novilla", "ternerona", "ternera", "ternero", "toro"] },
+  { titulo: "Hembras bovinas", categorias: ["ternera", "novilla", "vaca"] },
+  { titulo: "Machos bovinos", categorias: ["ternero", "novillo", "toro"] },
   { titulo: "Otros animales", categorias: ["caballo", "perro", "otro"] },
 ];
+
+/** Categorías que se muestran, en orden de etapa (sin "ternerona"). */
+export const ORDEN_CATEGORIAS: E["categoria_animal"][] = GRUPOS_CATEGORIA.flatMap((g) => g.categorias);
 
 export const METODOS_ADQUISICION = ["Nacido en la finca", "Compra", "Donación / regalo", "Traslado desde otra finca", "Otro"];
 

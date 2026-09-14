@@ -22,7 +22,7 @@ const REGISTROS = [
 
 type RegistroFinca = (typeof REGISTROS)[number]["id"];
 
-const GRUPOS_BASE = ["Vacas en ordeño", "Vacas horras", "Novillas", "Terneras"];
+const GRUPOS_BASE = ["Vacas en ordeño", "Vacas secas", "Novillas", "Terneras"];
 
 function detallePotrero(p: PotreroCatalogo, objetivo: number) {
   const estado = ESTADOS_POTRERO[p.estado]?.texto ?? p.estado;

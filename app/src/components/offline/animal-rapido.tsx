@@ -13,7 +13,7 @@ const normalizar = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g,
 function Etiquetas({ animal }: { animal: AnimalCatalogo }) {
   const etiquetas: { texto: string; clase: string }[] = [];
   if (animal.en_ordeno) etiquetas.push({ texto: "En ordeño", clase: "bg-blue-100 text-blue-800" });
-  else if (animal.categoria === "vaca") etiquetas.push({ texto: "Horra / seca", clase: "bg-slate-100 text-slate-700" });
+  else if (animal.categoria === "vaca") etiquetas.push({ texto: "Seca", clase: "bg-slate-100 text-slate-700" });
   if (animal.prenada) etiquetas.push({ texto: "Preñada", clase: "bg-emerald-100 text-emerald-800" });
   if (animal.categoria !== "vaca") etiquetas.push({ texto: animal.categoria, clase: "bg-amber-100 text-amber-900 capitalize" });
   return (

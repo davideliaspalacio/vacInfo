@@ -324,8 +324,8 @@ stateDiagram-v2
     Servida --> Palpacion: servicio + 33 días
     Palpacion --> Prenada: preñada
     Palpacion --> Servida: vacía → nuevo servicio
-    Prenada --> Horra: secar a servicio + 210 días
-    Horra --> Parto: parto esperado servicio + 275 días
+    Prenada --> Seca: secar a servicio + 210 días
+    Seca --> Parto: parto esperado servicio + 275 días
     Parto --> [*]
 ```
 
@@ -354,7 +354,7 @@ flowchart LR
     SAL["Salidas<br/>movimientos_insumos"] --> S
     CD["Consumo diario en kg<br/>consumos_diarios ÷ contenido"] --> S
     CP["Consumo automático<br/>consumos_programados"] --> S
-    AD["animales_por_dia()<br/>vacas en ordeño · horras · levante"] --> CP
+    AD["animales_por_dia()<br/>vacas en ordeño · secas · levante"] --> CP
     S --> R["saldo · consumo/día · días que alcanza · estado"]
     R --> AL["Alerta de insumo"]
 ```

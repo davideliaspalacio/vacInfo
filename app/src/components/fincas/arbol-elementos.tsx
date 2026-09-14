@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Box, PawPrint, Warehouse } from "lucide-react";
 import { obtenerSesion } from "@/lib/sesion";
 import { Tarjeta, Vacio } from "@/components/ui";
-import { CATEGORIAS, CATEGORIAS_PLURAL, ESTADOS_BIEN, TIPOS_BIEN, TIPOS_BIEN_PLURAL } from "@/components/fincas/etiquetas";
+import { CATEGORIAS_PLURAL, ORDEN_CATEGORIAS, ESTADOS_BIEN, TIPOS_BIEN, TIPOS_BIEN_PLURAL } from "@/components/fincas/etiquetas";
 
 const MAX_CHIPS = 18;
 
@@ -19,7 +19,7 @@ export async function ArbolElementos({ fincaId, nombre }: { fincaId: string; nom
     supabase.from("bienes").select("id, codigo, nombre, tipo, estado").eq("finca_id", fincaId).order("nombre"),
   ]);
 
-  const gruposAnimales = agrupar(animales ?? [], (a) => a.categoria, Object.keys(CATEGORIAS) as (keyof typeof CATEGORIAS)[]);
+  const gruposAnimales = agrupar(animales ?? [], (a) => a.categoria, ORDEN_CATEGORIAS);
   const gruposBienes = agrupar(bienes ?? [], (b) => b.tipo, Object.keys(TIPOS_BIEN) as (keyof typeof TIPOS_BIEN)[]);
 
   return (

@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRightLeft, CalendarDays, Lightbulb, LogOut, Settings2 } from "lucide-react";
+import { ArrowRightLeft, Lightbulb, LogOut, Settings2 } from "lucide-react";
 import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, num } from "@/lib/formato";
 import { consultarPagina, leerPagina } from "@/lib/paginacion";
+import { atajosDias, completarRango, leerRangoPedido, textoRango } from "@/lib/rango";
 import { BotonVolver, Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
+import { RangoFechas } from "@/components/rango-fechas";
 import { guardarReglasFinca } from "@/app/(vacinfo)/fincas/actions";
 import { ESTADOS_POTRERO, gruposDeFinca, nombrePotrero } from "@/components/potreros/rotacion";
 import { APLICACIONES, TarjetaPotrero } from "@/components/potreros/tarjeta-potrero";
@@ -26,7 +28,7 @@ const ROTACIONES_POR_PAGINA = 40;
 
 export default async function PotrerosFinca({ params, searchParams }: PageProps<"/fincas/[id]/potreros">) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const pedido = typeof sp.corte === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.corte) ? sp.corte : null;
+  const pedido = leerRangoPedido(sp);
 
   const { supabase, rol } = await obtenerSesion();
   const gestor = ROLES_GESTORES.includes(rol);
@@ -34,7 +36,10 @@ export default async function PotrerosFinca({ params, searchParams }: PageProps<
   const { data: finca } = await supabase.from("fincas").select("id, nombre, dias_descanso_objetivo").eq("id", id).maybeSingle();
   if (!finca) notFound();
 
-  const corte = await corteDeFinca(supabase, id, pedido);
+  // hasta = fecha de corte del estado de los potreros; desde–hasta filtra rotaciones y aplicaciones.
+  const referencia = await corteDeFinca(supabase, id);
+  const rango = completarRango(pedido, pedido.hasta ?? referencia);
+  const corte = rango.hasta;
   const [{ data: estados }, rotaciones, { data: aplicaciones }, grupos] = await Promise.all([
     supabase.rpc("estado_potreros", { p_finca: id, p_corte: corte }),
     consultarPagina(
@@ -43,7 +48,9 @@ export default async function PotrerosFinca({ params, searchParams }: PageProps<
           .from("rotaciones_potrero")
           .select("id, grupo, animales, fecha_entrada, fecha_salida, observaciones, potreros(numero, nombre)", { count: "exact" })
           .eq("finca_id", id)
+          // Rotaciones que se cruzan con el rango: entraron antes de «hasta» y no habían salido antes de «desde».
           .lte("fecha_entrada", corte)
+          .or(`fecha_salida.is.null,fecha_salida.gte.${rango.desde}`)
           .order("fecha_entrada", { ascending: false })
           .order("registrado_en", { ascending: false })
           .order("id")
@@ -54,6 +61,7 @@ export default async function PotrerosFinca({ params, searchParams }: PageProps<
       .from("aplicaciones_campo")
       .select("id, fecha, tipo, producto, potreros, potrero_ids, dias_retiro_pastoreo")
       .eq("finca_id", id)
+      .gte("fecha", rango.desde)
       .lte("fecha", corte)
       .order("fecha", { ascending: false })
       .limit(12),
@@ -79,20 +87,20 @@ export default async function PotrerosFinca({ params, searchParams }: PageProps<
       />
 
       <Tarjeta>
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-          <p className="text-sm text-tinta-suave">
-            Datos al <strong className="text-bosque">{fecha(corte, true)}</strong> · {potreros.length} potreros
-          </p>
-          <form className="flex items-center gap-2">
-            <label htmlFor="corte" className="flex items-center gap-1 text-sm font-bold text-bosque">
-              <CalendarDays className="h-4 w-4" aria-hidden />
-              Fecha de corte
-            </label>
-            <input id="corte" type="date" name="corte" defaultValue={corte} className="campo-control w-auto py-2" />
-            <button className="rounded-xl bg-bosque px-4 py-2 text-sm font-bold text-leche">Ver</button>
-          </form>
-        </div>
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-5">
+        <RangoFechas
+          ruta={`/fincas/${id}/potreros`}
+          searchParams={sp}
+          desde={rango.todo ? "" : rango.desde}
+          hasta={corte}
+          texto={textoRango(rango)}
+          atajos={atajosDias(referencia, rango)}
+          referencia={referencia}
+          nota="El mapa y los estados se calculan a la fecha «hasta»; el historial de rotaciones y las aplicaciones se filtran por el rango."
+        />
+        <p className="mt-4 border-t border-black/10 pt-4 text-sm text-tinta-suave">
+          Datos al <strong className="text-bosque">{fecha(corte, true)}</strong> · {potreros.length} potreros
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
           <Metrica valor={num(cuenta("ocupado"))} etiqueta="Ocupados" tono="crema" />
           <Metrica valor={num(cuenta("bloqueado"))} etiqueta="Bloqueados por retiro" tono={cuenta("bloqueado") ? "alerta" : "crema"} />
           <Metrica valor={num(cuenta("listo"))} etiqueta="Listos para pastorear" />
@@ -154,15 +162,18 @@ export default async function PotrerosFinca({ params, searchParams }: PageProps<
           <Tarjeta>
             <TituloTarjeta
               detalle={
-                <Link href={`/fincas/${id}?tab=historial`} className="font-bold text-pasto-oscuro hover:underline">
+                <Link
+                  href={`/fincas/${id}?${new URLSearchParams({ tab: "historial", desde: rango.todo ? "todo" : rango.desde, hasta: corte })}#historial`}
+                  className="font-bold text-pasto-oscuro hover:underline"
+                >
                   Ver historial
                 </Link>
               }
             >
-              Aplicaciones recientes
+              Aplicaciones del rango
             </TituloTarjeta>
             {!aplicaciones?.length ? (
-              <p className="text-sm text-tinta-suave">Sin fumigaciones ni abonos registrados.</p>
+              <p className="text-sm text-tinta-suave">Sin fumigaciones ni abonos registrados en este rango.</p>
             ) : (
               <ul className="space-y-2 text-sm">
                 {aplicaciones.map((a) => {
@@ -220,9 +231,9 @@ export default async function PotrerosFinca({ params, searchParams }: PageProps<
       )}
 
       <Tarjeta id="rotaciones" className="scroll-mt-6">
-        <TituloTarjeta detalle={rotaciones.total ? `${num(rotaciones.total)} rotaciones` : undefined}>Historial de rotaciones</TituloTarjeta>
+        <TituloTarjeta detalle={`${num(rotaciones.total)} rotaciones · ${textoRango(rango).toLowerCase()}`}>Historial de rotaciones</TituloTarjeta>
         {!rotaciones.filas.length ? (
-          <Vacio>Sin rotaciones registradas.</Vacio>
+          <Vacio>Sin rotaciones registradas en este rango de fechas.</Vacio>
         ) : (
           <div className="overflow-x-auto">
             <table className="matriz w-full border-collapse bg-white text-sm">

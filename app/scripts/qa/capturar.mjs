@@ -6,7 +6,10 @@ import { cookiesDe } from "./sesion-local.mjs";
 
 const FASE = process.argv[2] ?? "antes";
 const BASE = process.argv[3] ?? "http://localhost:3100";
-const SALIDA = `/Users/1234/vacasProyecto/entregables/ajustes-v1.1/${FASE}`;
+// Conjunto de pantallas: "v1.1" (primera revisión) o "revision2"
+const CONJUNTO = process.argv[4] ?? "v1.1";
+const CARPETA = CONJUNTO === "revision2" ? "revision-2" : "ajustes-v1.1";
+const SALIDA = `/Users/1234/vacasProyecto/entregables/${CARPETA}/${FASE}`;
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PUERTO = 9355;
 const PERFIL = `/tmp/vacinfo-qa-perfil-${FASE}`;
@@ -29,7 +32,19 @@ const CUENTAS = {
   trabajador: "jhon@vacinfo.local",
 };
 
-export const TOMAS = [
+const TOMAS_REVISION2 = [
+  { n: "01-costos", cuenta: "admin", ruta: `/fincas/${T}/costos`, ...WEB, alto: 1500 },
+  { n: "02-finca-rango", cuenta: "admin", ruta: `/fincas/${T}`, ...WEB, alto: 1100 },
+  { n: "03-levante-rango", cuenta: "admin", ruta: `/fincas/${T}/levante`, ...WEB, alto: 1300 },
+  { n: "04-inventario-rango", cuenta: "admin", ruta: `/inventario?finca=${T}`, ...WEB, alto: 1000 },
+  { n: "05-nuevo-ser-vivo", cuenta: "admin", ruta: `/animales/nuevo?finca=${T}`, ...WEB, alto: 1300 },
+  { n: "06-levante-etapas", cuenta: "admin", ruta: `/fincas/${T}/levante`, ...WEB, alto: 2600 },
+  { n: "07-notificaciones", cuenta: "admin", ruta: "/mensajes", ...WEB, alto: 1400 },
+  { n: "08-finca-secas", cuenta: "admin", ruta: `/fincas/${T}?tab=animales`, ...WEB, alto: 1400 },
+  { n: "09-vacdata-secas", cuenta: "trabajador", ruta: `/campo/registrar?finca=${T}`, ...CEL, alto: 1500, acciones: [clic("Finca Toneles")], espera: 5000 },
+];
+
+export const TOMAS = CONJUNTO === "revision2" ? TOMAS_REVISION2 : [
   // Administrador (web)
   { n: "01-informe-administrativo", cuenta: "admin", ruta: `/informes?tab=administrativo&finca=${T}`, ...WEB, alto: 2200 },
   { n: "02-calendario", cuenta: "admin", ruta: `/calendario?finca=${T}`, ...WEB, alto: 1400 },

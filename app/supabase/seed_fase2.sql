@@ -36,12 +36,12 @@ update partos p set cria_id = a.id
 from animales a
 where a.madre_id = p.animal_id and a.fecha_nacimiento = p.fecha and a.codigo like 'TON-T%';
 
--- ─────────────── Terneronas de levante ───────────────
+-- ─────────────── Novillas de levante ───────────────
 insert into animales (finca_id, codigo, chapeta, nombre, categoria, sexo, raza, fecha_nacimiento, fecha_destete, notas) values
-  ('00000000-0000-4000-8000-000000000101', 'TON-N01', '501', 'Canela', 'ternerona', 'hembra', 'Jersey', '2024-10-20', '2025-01-18', 'Dato de demostración'),
-  ('00000000-0000-4000-8000-000000000101', 'TON-N02', '502', 'Brisa', 'ternerona', 'hembra', 'Holstein', '2024-11-15', '2025-02-13', 'Dato de demostración'),
-  ('00000000-0000-4000-8000-000000000101', 'TON-N03', '503', 'Luna', 'ternerona', 'hembra', 'Holstein', '2025-03-02', '2025-05-31', 'Dato de demostración'),
-  ('00000000-0000-4000-8000-000000000101', 'TON-N04', '504', 'Pinta', 'ternerona', 'hembra', 'Gyr', '2025-07-10', '2025-10-08', 'Dato de demostración');
+  ('00000000-0000-4000-8000-000000000101', 'TON-N01', '501', 'Canela', 'novilla', 'hembra', 'Jersey', '2024-10-20', '2025-01-18', 'Dato de demostración'),
+  ('00000000-0000-4000-8000-000000000101', 'TON-N02', '502', 'Brisa', 'novilla', 'hembra', 'Holstein', '2024-11-15', '2025-02-13', 'Dato de demostración'),
+  ('00000000-0000-4000-8000-000000000101', 'TON-N03', '503', 'Luna', 'novilla', 'hembra', 'Holstein', '2025-03-02', '2025-05-31', 'Dato de demostración'),
+  ('00000000-0000-4000-8000-000000000101', 'TON-N04', '504', 'Pinta', 'novilla', 'hembra', 'Gyr', '2025-07-10', '2025-10-08', 'Dato de demostración');
 
 insert into pesajes (animal_id, fecha, peso_kg)
 select a.id, g::date, round(38 + (g::date - a.fecha_nacimiento) * 0.7, 1)
@@ -60,7 +60,7 @@ from animales a where a.codigo like 'TON-N%'
 on conflict (animal_id, fecha) do nothing;
 
 -- ─────────────── Rotación de potreros (mar–abr 2026) ───────────────
--- Vacas en ordeño: un día por potrero en los potreros 1–20. Horras: cinco días por potrero en 21–24.
+-- Vacas en ordeño: un día por potrero en los potreros 1–20. Secas: cinco días por potrero en 21–24.
 insert into rotaciones_potrero (finca_id, potrero_id, grupo, animales, fecha_entrada, fecha_salida)
 select p.finca_id, p.id, 'Vacas en ordeño', 43, d::date, case when d::date = '2026-04-30' then null else d::date + 1 end
 from generate_series('2026-03-01'::date, '2026-04-30'::date, interval '1 day') d
@@ -68,7 +68,7 @@ join potreros p on p.finca_id = '00000000-0000-4000-8000-000000000101'
   and p.numero = ((d::date - '2026-03-01'::date) % 20) + 1;
 
 insert into rotaciones_potrero (finca_id, potrero_id, grupo, animales, fecha_entrada, fecha_salida)
-select p.finca_id, p.id, 'Vacas horras', 8, d::date, case when d::date = '2026-04-26' then null else d::date + 5 end
+select p.finca_id, p.id, 'Vacas secas', 8, d::date, case when d::date = '2026-04-26' then null else d::date + 5 end
 from generate_series('2026-03-02'::date, '2026-04-26'::date, interval '5 days') d
 join potreros p on p.finca_id = '00000000-0000-4000-8000-000000000101'
   and p.numero = 21 + ((d::date - '2026-03-02'::date) / 5) % 4;

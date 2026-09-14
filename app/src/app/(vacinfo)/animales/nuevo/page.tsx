@@ -3,7 +3,7 @@ import { soloLectura } from "@/lib/permisos";
 import { obtenerSesion } from "@/lib/sesion";
 import { BotonVolver, Encabezado, Tarjeta, Vacio } from "@/components/ui";
 import { FormularioAnimal } from "@/components/fincas/formulario-animal";
-import { fincasConCodigos, torosDeFincas } from "@/components/fincas/consultas";
+import { candidatosParientes, fincasConCodigos, torosDeServicios } from "@/components/fincas/consultas";
 import { guardarAnimal } from "../actions";
 
 export default async function NuevoAnimal({ searchParams }: PageProps<"/animales/nuevo">) {
@@ -13,11 +13,7 @@ export default async function NuevoAnimal({ searchParams }: PageProps<"/animales
   const volver = fincaInicial ? `/fincas/${fincaInicial}` : "/fincas";
   if (soloLectura(sesion.rol)) redirect(volver);
 
-  const [fincas, { data: hembras }, toros] = await Promise.all([
-    fincasConCodigos(sesion),
-    sesion.supabase.from("animales").select("id, nombre, chapeta, finca_id").eq("sexo", "hembra").eq("estado", "activo").order("nombre"),
-    torosDeFincas(sesion),
-  ]);
+  const [fincas, candidatos, torosServicios] = await Promise.all([fincasConCodigos(sesion), candidatosParientes(sesion), torosDeServicios(sesion)]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -30,8 +26,8 @@ export default async function NuevoAnimal({ searchParams }: PageProps<"/animales
           <FormularioAnimal
             accion={guardarAnimal.bind(null, null)}
             fincas={fincas}
-            hembras={hembras ?? []}
-            toros={toros}
+            candidatos={candidatos}
+            torosServicios={torosServicios}
             fincaInicial={fincaInicial}
             cancelar={volver}
           />

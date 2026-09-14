@@ -3,29 +3,52 @@
 import { useActionState, useState } from "react";
 import Link from "next/link";
 import type { Database } from "@/lib/database.types";
+import {
+  categoriaFormulario,
+  especieDeCategoria,
+  madresPosibles,
+  padresPosibles,
+  sexoDeCategoria,
+  torosDeServiciosPosibles,
+  type Candidato,
+  type ToroServicio,
+} from "@/lib/parientes";
 import { BotonPrimario } from "@/components/ui";
 import { Campo, MensajeError, type EstadoFormulario } from "@/components/fincas/campo";
-import { CATEGORIAS, GRUPOS_CATEGORIA, METODOS_ADQUISICION, SEXOS } from "@/components/fincas/etiquetas";
-import type { FincaConCodigos, Toro } from "@/components/fincas/consultas";
+import { CATEGORIAS, ESTADOS_ANIMAL, GRUPOS_CATEGORIA, METODOS_ADQUISICION, SEXOS } from "@/components/fincas/etiquetas";
+import type { FincaConCodigos } from "@/components/fincas/consultas";
 
 type Animal = Database["public"]["Tables"]["animales"]["Row"];
-export type Hembra = { id: string; nombre: string; chapeta: string | null; finca_id: string };
 
 const PADRE_OTRO = "__otro__";
+
+const textoCategoria = (c: string) => (CATEGORIAS as Record<string, string>)[c] ?? c;
+const textoEstado = (e: string) => (ESTADOS_ANIMAL as Record<string, string>)[e] ?? e;
+
+function Opcion({ c }: { c: Candidato }) {
+  return (
+    <option value={c.id}>
+      {c.nombre}
+      {c.chapeta ? ` · ${c.chapeta}` : ""} · {textoCategoria(c.categoria)}
+      {c.estado !== "activo" ? ` (${textoEstado(c.estado).toLowerCase()})` : ""}
+    </option>
+  );
+}
 
 export function FormularioAnimal({
   accion,
   fincas,
-  hembras,
-  toros,
+  candidatos,
+  torosServicios,
   animal,
   fincaInicial,
   cancelar,
 }: {
   accion: (estado: EstadoFormulario, datos: FormData) => Promise<EstadoFormulario>;
   fincas: FincaConCodigos[];
-  hembras: Hembra[];
-  toros: Toro[];
+  /** Animales de las fincas de la sesión (madre/padre se filtran por finca, especie y sexo). */
+  candidatos: Candidato[];
+  torosServicios: ToroServicio[];
   animal?: Animal;
   fincaInicial?: string;
   cancelar: string;
@@ -37,33 +60,41 @@ export function FormularioAnimal({
   const [chapeta, setChapeta] = useState(animal?.chapeta ?? "");
   const [codigo, setCodigo] = useState(animal?.codigo ?? "");
   const [codigoManual, setCodigoManual] = useState(Boolean(animal));
-  const [madreId, setMadreId] = useState(animal?.madre_id ?? "");
+  const [categoria, setCategoria] = useState<string>(categoriaFormulario(animal?.categoria));
+  const [sexoElegido, setSexoElegido] = useState<string>(animal?.sexo ?? "hembra");
 
-  const torosFinca = toros.filter((t) => t.finca_id === fincaId);
+  const listas = (finca: string, cat: string) => {
+    const ctx = { fincaId: finca, categoria: cat, excluirId: animal?.id };
+    const padres = padresPosibles(candidatos, ctx);
+    const servicios = torosDeServiciosPosibles(torosServicios, padres, ctx);
+    return { madres: madresPosibles(candidatos, ctx), padres, servicios, nombresPadre: new Set([...padres, ...servicios].map((p) => p.nombre)) };
+  };
+  const { madres, padres, servicios, nombresPadre } = listas(fincaId, categoria);
+
+  const [madreId, setMadreId] = useState(animal?.madre_id && madres.some((m) => m.id === animal.madre_id) ? animal.madre_id : "");
   const padreInicial = animal?.padre_nombre ?? "";
-  const [padre, setPadre] = useState(!padreInicial || torosFinca.some((t) => t.nombre === padreInicial) ? padreInicial : PADRE_OTRO);
+  const [padre, setPadre] = useState(!padreInicial || nombresPadre.has(padreInicial) ? padreInicial : PADRE_OTRO);
+
+  const sexoFijo = sexoDeCategoria(categoria);
+  const especie = especieDeCategoria(categoria);
+  const bovino = especie === "bovino";
+
+  /** Al cambiar finca o categoría se limpian madre y padre que ya no son compatibles. */
+  const reajustar = (finca: string, cat: string) => {
+    const nuevas = listas(finca, cat);
+    if (madreId && !nuevas.madres.some((m) => m.id === madreId)) setMadreId("");
+    if (padre && padre !== PADRE_OTRO && !nuevas.nombresPadre.has(padre)) setPadre("");
+  };
 
   const prefijo = fincas.find((f) => f.id === fincaId)?.prefijo ?? "";
   const sugerido = chapeta.trim() ? `${prefijo}-${chapeta.trim()}` : "";
   const codigoMostrado = codigoManual ? codigo : sugerido;
-  const madres = hembras.filter((h) => h.finca_id === fincaId && h.id !== animal?.id);
   const metodoGuardado = animal?.metodo_adquisicion;
   const metodos = metodoGuardado && !METODOS_ADQUISICION.includes(metodoGuardado) ? [...METODOS_ADQUISICION, metodoGuardado] : METODOS_ADQUISICION;
   const v = (x: string | number | null | undefined) => (x == null ? "" : String(x));
 
-  const grupoToros = (origen: Toro["origen"], titulo: string) => {
-    const lista = torosFinca.filter((t) => t.origen === origen);
-    return lista.length ? (
-      <optgroup label={titulo}>
-        {lista.map((t) => (
-          <option key={`${origen}-${t.nombre}`} value={t.nombre}>
-            {t.nombre}
-            {t.chapeta ? ` · ${t.chapeta}` : ""}
-          </option>
-        ))}
-      </optgroup>
-    ) : null;
-  };
+  const madresAdultas = bovino ? madres.filter((m) => ["vaca", "novilla"].includes(m.categoria)) : madres;
+  const madresJovenes = bovino ? madres.filter((m) => !["vaca", "novilla"].includes(m.categoria)) : [];
 
   return (
     <form action={enviar} className="space-y-8">
@@ -78,8 +109,7 @@ export function FormularioAnimal({
               value={fincaId}
               onChange={(ev) => {
                 setFincaId(ev.target.value);
-                setMadreId("");
-                if (padre !== PADRE_OTRO) setPadre("");
+                reajustar(ev.target.value, categoria);
               }}
               className="campo-control"
               required
@@ -123,7 +153,16 @@ export function FormularioAnimal({
             <input name="nombre" required defaultValue={v(animal?.nombre)} className="campo-control" />
           </Campo>
           <Campo etiqueta="Categoría *" error={e.categoria}>
-            <select name="categoria" defaultValue={animal?.categoria ?? "vaca"} className="campo-control" required>
+            <select
+              name="categoria"
+              value={categoria}
+              onChange={(ev) => {
+                setCategoria(ev.target.value);
+                reajustar(fincaId, ev.target.value);
+              }}
+              className="campo-control"
+              required
+            >
               {GRUPOS_CATEGORIA.map((g) => (
                 <optgroup key={g.titulo} label={g.titulo}>
                   {g.categorias.map((c) => (
@@ -135,8 +174,15 @@ export function FormularioAnimal({
               ))}
             </select>
           </Campo>
-          <Campo etiqueta="Sexo" error={e.sexo}>
-            <select name="sexo" defaultValue={animal?.sexo ?? "hembra"} className="campo-control">
+          <Campo etiqueta="Sexo" error={e.sexo} ayuda={sexoFijo ? "Lo define la categoría" : undefined}>
+            {sexoFijo && <input type="hidden" name="sexo" value={sexoFijo} />}
+            <select
+              name={sexoFijo ? undefined : "sexo"}
+              value={sexoFijo ?? sexoElegido}
+              onChange={(ev) => setSexoElegido(ev.target.value)}
+              disabled={!!sexoFijo}
+              className="campo-control disabled:opacity-70"
+            >
               {Object.entries(SEXOS).map(([valor, texto]) => (
                 <option key={valor} value={valor}>
                   {texto}
@@ -151,7 +197,7 @@ export function FormularioAnimal({
         <legend className="font-display mb-4 text-xl font-bold text-bosque">Datos generales</legend>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Campo etiqueta="Raza" error={e.raza}>
-            <input name="raza" defaultValue={v(animal?.raza)} className="campo-control" placeholder="Holstein, Jersey…" />
+            <input name="raza" defaultValue={v(animal?.raza)} className="campo-control" placeholder={bovino ? "Holstein, Jersey…" : undefined} />
           </Campo>
           <Campo etiqueta="Color" error={e.color}>
             <input name="color" defaultValue={v(animal?.color)} className="campo-control" />
@@ -178,32 +224,68 @@ export function FormularioAnimal({
       <fieldset>
         <legend className="font-display mb-4 text-xl font-bold text-bosque">Parientes</legend>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Campo etiqueta="Madre en la finca" error={e.madre_id}>
+          <Campo
+            etiqueta="Madre en la finca"
+            error={e.madre_id}
+            ayuda={madres.length === 0 ? `No hay hembras de la misma especie (${textoCategoria(categoria).toLowerCase()}) en la finca.` : "Hembras de la misma especie"}
+          >
             <select name="madre_id" value={madreId} onChange={(ev) => setMadreId(ev.target.value)} className="campo-control">
               <option value="">— No está en la finca —</option>
-              {madres.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.nombre}
-                  {h.chapeta ? ` · ${h.chapeta}` : ""}
-                </option>
-              ))}
+              {bovino ? (
+                <>
+                  {madresAdultas.length > 0 && (
+                    <optgroup label="Vacas y novillas">
+                      {madresAdultas.map((c) => (
+                        <Opcion key={c.id} c={c} />
+                      ))}
+                    </optgroup>
+                  )}
+                  {madresJovenes.length > 0 && (
+                    <optgroup label="Otras hembras">
+                      {madresJovenes.map((c) => (
+                        <Opcion key={c.id} c={c} />
+                      ))}
+                    </optgroup>
+                  )}
+                </>
+              ) : (
+                madres.map((c) => <Opcion key={c.id} c={c} />)
+              )}
             </select>
           </Campo>
-          <Campo etiqueta="Padre (toro)" error={e.padre_nombre}>
+          <Campo etiqueta={bovino ? "Padre (toro)" : "Padre"} error={e.padre_nombre} ayuda="Machos de la misma especie">
             <select name="padre_nombre" value={padre} onChange={(ev) => setPadre(ev.target.value)} className="campo-control">
               <option value="">— Sin registrar —</option>
-              {grupoToros("finca", "Toros de la finca")}
-              {grupoToros("servicios", "Toros usados en servicios")}
+              {padres.length > 0 && (
+                <optgroup label={bovino ? "Toros y novillos de la finca" : "Machos de la finca"}>
+                  {padres.map((p) => (
+                    <option key={p.id} value={p.nombre}>
+                      {p.nombre}
+                      {p.chapeta ? ` · ${p.chapeta}` : ""} · {textoCategoria(p.categoria)}
+                      {p.estado !== "activo" ? ` (${textoEstado(p.estado).toLowerCase()})` : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {servicios.length > 0 && (
+                <optgroup label="Toros usados en servicios">
+                  {servicios.map((t) => (
+                    <option key={`servicio-${t.nombre}`} value={t.nombre}>
+                      {t.nombre}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
               <option value={PADRE_OTRO}>Otro (escribir nombre)</option>
             </select>
           </Campo>
           {padre === PADRE_OTRO && (
-            <Campo etiqueta="Nombre o registro del toro *" error={e.padre_otro}>
+            <Campo etiqueta={bovino ? "Nombre o registro del toro *" : "Nombre o registro del padre *"} error={e.padre_otro}>
               <input
                 name="padre_otro"
                 required
                 autoFocus={!animal}
-                defaultValue={padreInicial && !torosFinca.some((t) => t.nombre === padreInicial) ? padreInicial : ""}
+                defaultValue={padreInicial && !nombresPadre.has(padreInicial) ? padreInicial : ""}
                 className="campo-control"
               />
             </Campo>

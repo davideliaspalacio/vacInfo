@@ -5,6 +5,7 @@ import { fecha, litros, num, pct, pesos } from "@/lib/formato";
 import { Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { todasLasFilas, type PropsInforme } from "./consultas";
 import { GraficaCostosPct, GraficaFlujoCaja, GraficaPagos } from "./graficas-contable";
+import { conteoAnimalesFinca } from "@/components/fincas/conteo-animales";
 
 const TONO_ESTADO: Record<Estado, "verde" | "amarillo" | "rojo"> = {
   RENTABLE: "verde",
@@ -54,7 +55,9 @@ export async function InformeContable({ supabase, rango, finca }: PropsInforme) 
     );
   }
 
-  const p = parametros.datos as unknown as ParametrosCostos;
+  // La cantidad de animales guardada puede estar desactualizada: se usa el conteo real a la fecha de corte del informe.
+  const animales = await conteoAnimalesFinca(supabase, fincaId, hasta);
+  const p: ParametrosCostos = { ...(parametros.datos as unknown as ParametrosCostos), animales };
   const r = calcularInforme(p);
 
   const litrosPorDia = new Map<string, number>();
@@ -82,17 +85,18 @@ export async function InformeContable({ supabase, rango, finca }: PropsInforme) 
           <Bloque titulo="Datos generales" clase="bg-[#2336c9] text-white">
             <Filas
               filas={[
-                ["Vacas en producción", num(p.animales.vacas_produccion)],
-                ["Vacas horras - preparto", num(p.animales.vacas_horras)],
-                ["Novillas", num(p.animales.novillas)],
-                ["Terneronas", num(p.animales.terneronas)],
-                ["Terneras", num(p.animales.terneras)],
-                ["Toros", num(p.animales.toros)],
-                ["Caballos", num(p.animales.caballos)],
-                ["Perros", num(p.animales.perros)],
-                ["Otros", num(p.animales.otros)],
+                ["Vacas en producción", num(r.animales.vacas_produccion)],
+                ["Vacas secas - preparto", num(r.animales.vacas_secas)],
+                ["Novillas", num(r.animales.novillas)],
+                ["Terneras", num(r.animales.terneras)],
+                ["Terneros", num(r.animales.terneros)],
+                ["Novillos", num(r.animales.novillos)],
+                ["Toros", num(r.animales.toros)],
+                ["Caballos", num(r.animales.caballos)],
+                ["Perros", num(r.animales.perros)],
+                ["Otros", num(r.animales.otros)],
               ]}
-              total={["Total animales finca", num(r.totalAnimales)]}
+              total={[`Total animales finca al ${fecha(hasta)}`, num(r.totalAnimales)]}
             />
           </Bloque>
           <Bloque titulo="Resumen" clase="bg-dorado text-bosque">
@@ -194,7 +198,7 @@ export async function InformeContable({ supabase, rango, finca }: PropsInforme) 
               pct(r.margen),
             ],
             [
-              `Valorización terneras y novillas (${num(p.animales.novillas + p.animales.terneronas + p.animales.terneras)} animales)`,
+              `Valorización terneras y novillas (${num(r.animalesLevante)} animales)`,
               pesos(r.valorizacionMes / 30),
               pesos(r.valorizacionMes),
               pct(r.ingresosMes ? r.valorizacionMes / r.ingresosMes : 0),
@@ -300,7 +304,7 @@ export async function InformeContable({ supabase, rango, finca }: PropsInforme) 
                 ["Precio venta litro de leche", pesos(r.precio)],
                 ["Producción día (venta)", litros(p.litros_dia.venta)],
                 ["Producción mes", litros(p.litros_dia.venta * 30)],
-                ["Vacas en producción", num(p.animales.vacas_produccion)],
+                ["Vacas en producción", num(r.animales.vacas_produccion)],
                 ["Ingresos en dinero", pesos(r.caja.ingresos)],
                 ["Pagos en dinero", pesos(r.caja.pagos)],
                 ["Saldo caja final", <Signo key="s" v={r.caja.saldo} texto={pesos(r.caja.saldo)} />],

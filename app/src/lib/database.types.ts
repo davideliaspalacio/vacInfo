@@ -9,6 +9,40 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      alertas_descartadas: {
+        Row: {
+          clave: string
+          descartada_en: string
+          fecha_alerta: string | null
+          finca_id: string
+          usuario_id: string
+          visible_desde: string | null
+        }
+        Insert: {
+          clave: string
+          descartada_en?: string
+          fecha_alerta?: string | null
+          finca_id: string
+          usuario_id?: string
+          visible_desde?: string | null
+        }
+        Update: {
+          clave?: string
+          descartada_en?: string
+          fecha_alerta?: string | null
+          finca_id?: string
+          usuario_id?: string
+          visible_desde?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alertas_descartadas_finca_id_fkey"
+            columns: ["finca_id"]
+            referencedRelation: "fincas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       animales: {
         Row: {
           categoria: Database["public"]["Enums"]["categoria_animal"]
@@ -1873,6 +1907,7 @@ export type Database = {
       categoria_animal:
         | "vaca"
         | "novilla"
+        | "novillo"
         | "ternerona"
         | "ternera"
         | "ternero"
@@ -2074,6 +2109,7 @@ export const Constants = {
       categoria_animal: [
         "vaca",
         "novilla",
+        "novillo",
         "ternerona",
         "ternera",
         "ternero",

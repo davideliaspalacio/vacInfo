@@ -31,14 +31,14 @@ export const ETIQUETA_PERIODO: Record<PeriodoConsumo, string> = { dia: "día", m
 
 export const ETIQUETA_GRUPO: Record<GrupoConsumo, string> = {
   vacas_ordeno: "Vacas en ordeño",
-  vacas_horras: "Vacas horras",
+  vacas_horras: "Vacas secas",
   levante: "Terneras y novillas de levante",
   todos: "Todos los animales",
 };
 
 const POR_CADA: Record<GrupoConsumo, string> = {
   vacas_ordeno: "vaca en ordeño",
-  vacas_horras: "vaca horra",
+  vacas_horras: "vaca seca",
   levante: "animal de levante",
   todos: "animal",
 };

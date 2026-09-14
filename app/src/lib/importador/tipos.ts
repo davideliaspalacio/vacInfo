@@ -13,7 +13,7 @@ export interface FilaHoja {
   bloque: 1 | 2;
   chapeta: string | null;
   nombre: string;
-  /** "FECHA PARTO ANTERIOS" (puede haber dos columnas en el bloque de horras). */
+  /** "FECHA PARTO ANTERIOS" (puede haber dos columnas en el bloque de secas). */
   partosAnteriores: string[];
   /** "FECHA CRIO": último parto. */
   fechaCrio: string | null;

@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CalendarDays, LineChart, Scale, Settings2 } from "lucide-react";
+import { LineChart, Scale, Settings2 } from "lucide-react";
 import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, num } from "@/lib/formato";
-import { leerPagina, recortar } from "@/lib/paginacion";
+import { consultarPagina, leerPagina, recortar } from "@/lib/paginacion";
+import { atajosDias, completarRango, leerRangoPedido, textoRango } from "@/lib/rango";
 import { BotonVolver, Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
+import { RangoFechas } from "@/components/rango-fechas";
 import { guardarReglasFinca } from "@/app/(vacinfo)/fincas/actions";
 import { ESTADOS_LEVANTE, tonoGanancia, type EstadoLevante } from "@/components/levante/etiquetas";
 import { FormularioDestete, FormularioPesaje, FormularioReglasLevante } from "@/components/levante/formularios-levante";
@@ -17,6 +19,9 @@ import { registrarDestete, registrarPesaje } from "./actions";
 export const metadata = { title: "Levante" };
 
 const POR_GRUPO = 50;
+const PESAJES_POR_PAGINA = 20;
+const DESTETES_POR_PAGINA = 20;
+const DESC = { ascending: false } as const;
 
 const GRUPOS: { clave: string; titulo: string; estados: EstadoLevante[]; vacio: string }[] = [
   { clave: "lactante", titulo: "Terneras lactantes", estados: ["lactante"], vacio: "No hay crías lactantes." },
@@ -28,7 +33,7 @@ const GRUPOS: { clave: string; titulo: string; estados: EstadoLevante[]; vacio: 
 
 export default async function LevanteFinca({ params, searchParams }: PageProps<"/fincas/[id]/levante">) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const pedido = typeof sp.corte === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.corte) ? sp.corte : null;
+  const pedido = leerRangoPedido(sp);
   const seleccion = typeof sp.animal === "string" ? sp.animal : undefined;
 
   const { supabase, rol } = await obtenerSesion();
@@ -41,17 +46,51 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
     .maybeSingle();
   if (!finca) notFound();
 
-  const corte = await corteDeFinca(supabase, id, pedido);
-  const { data } = await supabase.rpc("levante_finca", { p_finca: id, p_corte: corte });
+  // hasta = fecha de corte del estado de levante; desde–hasta filtra pesajes y destetes.
+  const referencia = await corteDeFinca(supabase, id);
+  const rango = completarRango(pedido, referencia);
+  const hasta = rango.hasta;
+
+  const [{ data }, pesajesRango, destetesRango] = await Promise.all([
+    supabase.rpc("levante_finca", { p_finca: id, p_corte: hasta }),
+    consultarPagina(
+      (a, b) =>
+        supabase
+          .from("pesajes")
+          .select("id, fecha, peso_kg, observaciones, animales!inner(id, nombre, chapeta, codigo, finca_id)", { count: "exact" })
+          .eq("animales.finca_id", id)
+          .gte("fecha", rango.desde)
+          .lte("fecha", hasta)
+          .order("fecha", DESC)
+          .order("registrado_en", DESC)
+          .order("id")
+          .range(a, b),
+      leerPagina(sp, { param: "ppes", tamano: PESAJES_POR_PAGINA }),
+    ),
+    consultarPagina(
+      (a, b) =>
+        supabase
+          .from("animales")
+          .select("id, nombre, chapeta, codigo, categoria, fecha_nacimiento, fecha_destete", { count: "exact" })
+          .eq("finca_id", id)
+          .gte("fecha_destete", rango.desde)
+          .lte("fecha_destete", hasta)
+          .order("fecha_destete", DESC)
+          .order("id")
+          .range(a, b),
+      leerPagina(sp, { param: "pdes", tamano: DESTETES_POR_PAGINA }),
+    ),
+  ]);
   const filas = data ?? [];
 
   const elegido = filas.find((f) => f.animal_id === seleccion);
+  // La curva de crecimiento usa todos los pesajes hasta la fecha «hasta» (necesita la historia desde el nacimiento).
   const pesajes = elegido
-    ? ((await supabase.from("pesajes").select("id, fecha, peso_kg, altura_cm, condicion_corporal, observaciones").eq("animal_id", elegido.animal_id).lte("fecha", corte)).data ?? [])
+    ? ((await supabase.from("pesajes").select("id, fecha, peso_kg, altura_cm, condicion_corporal, observaciones").eq("animal_id", elegido.animal_id).lte("fecha", hasta)).data ?? [])
     : [];
 
   const cuenta = (...estados: string[]) => filas.filter((f) => estados.includes(f.estado)).length;
-  // Conserva corte y páginas de los grupos al abrir o cerrar la curva de un animal.
+  // Conserva rango y páginas de los grupos al abrir o cerrar la curva de un animal.
   const enlace = (extra: Record<string, string | undefined>) => {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(sp)) if (!(k in extra) && typeof v === "string") q.set(k, v);
@@ -60,6 +99,7 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
     return `/fincas/${id}/levante${s ? `?${s}` : ""}`;
   };
   const sinDestetar = filas.filter((f) => !f.fecha_destete && ["ternera", "ternero"].includes(f.categoria));
+  const ruta = `/fincas/${id}/levante`;
 
   return (
     <div className="space-y-8">
@@ -72,26 +112,27 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
       />
 
       <Tarjeta>
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-          <p className="text-sm text-tinta-suave">
-            Datos al <strong className="text-bosque">{fecha(corte, true)}</strong> · {filas.length} animales de levante
-          </p>
-          <form className="flex items-center gap-2">
-            {seleccion && <input type="hidden" name="animal" value={seleccion} />}
-            <label htmlFor="corte" className="flex items-center gap-1 text-sm font-bold text-bosque">
-              <CalendarDays className="h-4 w-4" aria-hidden />
-              Fecha de corte
-            </label>
-            <input id="corte" type="date" name="corte" defaultValue={corte} className="campo-control w-auto py-2" />
-            <button className="rounded-xl bg-bosque px-4 py-2 text-sm font-bold text-leche">Ver</button>
-          </form>
-        </div>
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-5">
+        <RangoFechas
+          ruta={ruta}
+          searchParams={sp}
+          desde={rango.todo ? "" : rango.desde}
+          hasta={hasta}
+          texto={textoRango(rango)}
+          atajos={atajosDias(referencia, rango)}
+          referencia={referencia}
+          nota="El estado de cada animal se calcula a la fecha «hasta»; pesajes y destetes se filtran por el rango."
+        />
+        <p className="mt-4 border-t border-black/10 pt-4 text-sm text-tinta-suave">
+          Datos al <strong className="text-bosque">{fecha(hasta, true)}</strong> · {filas.length} animales de levante
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
           <Metrica valor={num(cuenta("lactante"))} etiqueta="Lactantes" tono="crema" />
           <Metrica valor={num(cuenta("destetar"))} etiqueta="Por destetar" tono={cuenta("destetar") ? "alerta" : "crema"} />
           <Metrica valor={num(cuenta("levante"))} etiqueta="En levante" tono="crema" />
           <Metrica valor={num(cuenta("lista_servicio"))} etiqueta="Listas para servicio" />
           <Metrica valor={`${num(cuenta("servida"))} / ${num(cuenta("prenada"))}`} etiqueta="Servidas / preñadas" />
+          <Metrica valor={num(pesajesRango.total)} etiqueta="Pesajes en el rango" tono="crema" />
+          <Metrica valor={num(destetesRango.total)} etiqueta="Destetes en el rango" tono="crema" />
         </div>
       </Tarjeta>
 
@@ -132,14 +173,14 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
               </span>
             </TituloTarjeta>
             {filas.length ? (
-              <FormularioPesaje accion={registrarPesaje.bind(null, id)} animales={filas} corte={corte} animal={elegido?.animal_id} />
+              <FormularioPesaje accion={registrarPesaje.bind(null, id)} animales={filas} corte={hasta} animal={elegido?.animal_id} />
             ) : (
               <Vacio>No hay animales de levante.</Vacio>
             )}
           </Tarjeta>
           <Tarjeta>
             <TituloTarjeta detalle={`${sinDestetar.length} sin destetar`}>Registrar destete</TituloTarjeta>
-            <FormularioDestete accion={registrarDestete.bind(null, id)} animales={sinDestetar} corte={corte} animal={elegido?.animal_id} />
+            <FormularioDestete accion={registrarDestete.bind(null, id)} animales={sinDestetar} corte={hasta} animal={elegido?.animal_id} />
             {gestor && (
               <div className="mt-6 border-t border-black/10 pt-4">
                 <p className="mb-3 flex items-center gap-2 text-sm font-bold text-bosque">
@@ -220,7 +261,7 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
               </div>
             )}
             <Paginacion
-              ruta={`/fincas/${id}/levante`}
+              ruta={ruta}
               searchParams={sp}
               param={param}
               pagina={pagina.pagina}
@@ -233,6 +274,100 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
           </Tarjeta>
         );
       })}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Tarjeta id="pesajes-rango" className="scroll-mt-6">
+          <TituloTarjeta detalle={`${num(pesajesRango.total)} · ${textoRango(rango).toLowerCase()}`}>Pesajes del rango</TituloTarjeta>
+          {!pesajesRango.filas.length ? (
+            <Vacio>No hay pesajes registrados en este rango de fechas.</Vacio>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="matriz w-full border-collapse bg-white text-sm">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Animal</th>
+                    <th>Peso</th>
+                    <th>Observaciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pesajesRango.filas.map((p) => (
+                    <tr key={p.id}>
+                      <td>{fecha(p.fecha)}</td>
+                      <td className="!text-left">
+                        <Link href={`/animales/${p.animales.id}`} className="font-bold text-bosque hover:underline">
+                          {p.animales.nombre}
+                        </Link>{" "}
+                        <span className="font-mono text-xs text-tinta-suave">{p.animales.chapeta ?? p.animales.codigo}</span>
+                      </td>
+                      <td className="font-bold">{num(p.peso_kg)} kg</td>
+                      <td className="!whitespace-normal !text-left">{p.observaciones ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <Paginacion
+            ruta={ruta}
+            searchParams={sp}
+            param="ppes"
+            pagina={pesajesRango.pagina.pagina}
+            tamano={pesajesRango.pagina.tamano}
+            total={pesajesRango.total}
+            unidad="pesajes"
+            etiqueta="Páginas de pesajes del rango"
+            ancla="pesajes-rango"
+          />
+        </Tarjeta>
+
+        <Tarjeta id="destetes-rango" className="scroll-mt-6">
+          <TituloTarjeta detalle={`${num(destetesRango.total)} · ${textoRango(rango).toLowerCase()}`}>Destetes del rango</TituloTarjeta>
+          {!destetesRango.filas.length ? (
+            <Vacio>No hay destetes registrados en este rango de fechas.</Vacio>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="matriz w-full border-collapse bg-white text-sm">
+                <thead>
+                  <tr>
+                    <th>Fecha destete</th>
+                    <th>Animal</th>
+                    <th>Categoría</th>
+                    <th>Nacimiento</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {destetesRango.filas.map((d) => (
+                    <tr key={d.id}>
+                      <td>{fecha(d.fecha_destete)}</td>
+                      <td className="!text-left">
+                        <Link href={`/animales/${d.id}`} className="font-bold text-bosque hover:underline">
+                          {d.nombre}
+                        </Link>{" "}
+                        <span className="font-mono text-xs text-tinta-suave">{d.chapeta ?? d.codigo}</span>
+                      </td>
+                      <td className="capitalize">{d.categoria}</td>
+                      <td>{fecha(d.fecha_nacimiento)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <Paginacion
+            ruta={ruta}
+            searchParams={sp}
+            param="pdes"
+            pagina={destetesRango.pagina.pagina}
+            tamano={destetesRango.pagina.tamano}
+            total={destetesRango.total}
+            unidad="destetes"
+            etiqueta="Páginas de destetes del rango"
+            ancla="destetes-rango"
+          />
+        </Tarjeta>
+      </div>
     </div>
   );
 }

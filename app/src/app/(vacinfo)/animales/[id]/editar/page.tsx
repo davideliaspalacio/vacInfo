@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { BotonVolver, Encabezado, Tarjeta } from "@/components/ui";
 import { FormularioAnimal } from "@/components/fincas/formulario-animal";
-import { fincasConCodigos, torosDeFincas } from "@/components/fincas/consultas";
+import { candidatosParientes, fincasConCodigos, torosDeServicios } from "@/components/fincas/consultas";
 import { guardarAnimal } from "../../actions";
 
 export default async function EditarAnimal({ params }: PageProps<"/animales/[id]/editar">) {
@@ -10,11 +10,11 @@ export default async function EditarAnimal({ params }: PageProps<"/animales/[id]
   const sesion = await obtenerSesion();
   if (!ROLES_GESTORES.includes(sesion.rol)) redirect(`/animales/${id}`);
 
-  const [{ data: animal }, fincas, { data: hembras }, toros] = await Promise.all([
+  const [{ data: animal }, fincas, candidatos, torosServicios] = await Promise.all([
     sesion.supabase.from("animales").select("*").eq("id", id).maybeSingle(),
     fincasConCodigos(sesion),
-    sesion.supabase.from("animales").select("id, nombre, chapeta, finca_id").eq("sexo", "hembra").order("nombre"),
-    torosDeFincas(sesion),
+    candidatosParientes(sesion),
+    torosDeServicios(sesion),
   ]);
   if (!animal) notFound();
 
@@ -26,8 +26,8 @@ export default async function EditarAnimal({ params }: PageProps<"/animales/[id]
         <FormularioAnimal
           accion={guardarAnimal.bind(null, id)}
           fincas={fincas}
-          hembras={hembras ?? []}
-          toros={toros}
+          candidatos={candidatos}
+          torosServicios={torosServicios}
           animal={animal}
           cancelar={`/animales/${id}`}
         />

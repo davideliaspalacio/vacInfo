@@ -111,7 +111,7 @@ insert into parametros_costos (finca_id, periodo, datos) values (
     "costos": [
       { "categoria": "Concentrados", "items": [
         { "nombre": "Concentrado vacas", "mes": 17145536 }, { "nombre": "Sales", "mes": 485625 },
-        { "nombre": "Concentrado novillas - terneronas", "mes": 240000 }, { "nombre": "Concentrado horras", "mes": 225000 },
+        { "nombre": "Concentrado novillas", "mes": 240000 }, { "nombre": "Concentrado vacas secas", "mes": 225000 },
         { "nombre": "Concentrado terneras", "mes": 225000 }, { "nombre": "Minerales (Premex)", "mes": 128520 } ] },
       { "categoria": "Fertilizantes", "items": [
         { "nombre": "Abono - fertilizante químico", "mes": 10442880 }, { "nombre": "Fertilizante polvo", "mes": 528571 },
@@ -189,13 +189,13 @@ insert into tareas_manual (frecuencia, orden, descripcion) values
   ('diaria', 17, 'Cuidar las novillas próximas a criar con 1–2 kg de concentrado preparto en las tardes.'),
   ('diaria', 18, 'Lavar el tanque de enfriamiento y utensilios después de que el carrotanque recoja la leche.'),
   ('diaria', 19, 'Verificar que las vacas que criaron expulsaron la placenta; si no, avisar al administrador para antibiótico.'),
-  ('diaria', 20, 'Revisar las vacas horras dos veces por semana: sin mastitis y sanas hasta que críen.'),
+  ('diaria', 20, 'Revisar las vacas secas dos veces por semana: sin mastitis y sanas hasta que críen.'),
   ('diaria', 21, 'Informar al administrador todo evento de vacas, terneras, compañeros, equipos, casa y vecinos.'),
   ('diaria', 22, 'Regar veneno cada 8 días en lomo y patas de vacas y terneras para evitar el mosco.'),
   ('frecuente', 1, 'Mantener limpios y sin huecos los caminos de ingreso de las vacas a la sala.'),
   ('frecuente', 2, 'Los días 15 y 30 medir la leche de cada vaca en la tarde y anotar partos, abortos, cojeras, fiebres, servicios, concentrado y abonos.'),
   ('frecuente', 3, 'Secar las vacas preñadas confirmadas a los 7 meses (palpar antes) o si dan menos de 5 litros; tratar mastitis antes de secar.'),
-  ('frecuente', 4, 'Revisar cada 5 días ubres y estado corporal de las vacas horras que estén en otra finca.'),
+  ('frecuente', 4, 'Revisar cada 5 días ubres y estado corporal de las vacas secas que estén en otra finca.'),
   ('frecuente', 5, 'Revisar día por medio las vacas próximas a parir que estén en el paridero de otra finca.'),
   ('frecuente', 6, 'Al parto: dar obligatoriamente 3 litros de calostro al ternero, calcio oral y en vena a la vaca, yodo en el ombligo; mover a las 24 horas.'),
   ('frecuente', 7, 'Cambiar estacones quebrados y cuerdas reventadas; desechar la madera mala y el alambre de forma segura.'),

@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
 import { CalendarRange, CircleCheck, Lock } from "lucide-react";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
-import type { ParametrosCostos } from "@/lib/finanzas";
+import { ANIMALES_VACIOS, type ParametrosCostos } from "@/lib/finanzas";
 import { fecha } from "@/lib/formato";
 import { BotonVolver, Encabezado, Tarjeta } from "@/components/ui";
 import { EditorCostos } from "@/components/fincas/editor-costos";
+import { conteoCostosPeriodo } from "@/components/fincas/conteo-animales";
 import { guardarCostos } from "./actions";
 
 const CATEGORIAS_BASE = [
@@ -32,7 +33,7 @@ function plantillaVacia(precio: number | null): ParametrosCostos {
   return {
     precio_litro: precio ?? 0,
     valorizacion_mensual_por_animal: 0,
-    animales: { vacas_produccion: 0, vacas_horras: 0, novillas: 0, terneronas: 0, terneras: 0, toros: 0, caballos: 0, perros: 0, otros: 0 },
+    animales: { ...ANIMALES_VACIOS },
     litros_dia: { venta: 0, terneras: 0, consumo_humano: 0 },
     costos: CATEGORIAS_BASE.map((categoria) => ({ categoria, items: [] })),
   };
@@ -58,7 +59,10 @@ export default async function ParametrosCostosFinca({ params, searchParams }: Pa
 
   const actual = periodos.find((p) => p.periodo === periodo);
   const base = actual ?? periodos.find((p) => p.periodo < periodo) ?? periodos[0];
-  const datos = base ? (base.datos as unknown as ParametrosCostos) : plantillaVacia(finca.precio_litro);
+  const guardados = base ? (base.datos as unknown as ParametrosCostos) : plantillaVacia(finca.precio_litro);
+  // La cantidad de animales no se edita: siempre es el conteo real de la finca para este periodo.
+  const conteo = await conteoCostosPeriodo(supabase, id, periodo);
+  const datos: ParametrosCostos = { ...guardados, animales: conteo.animales };
 
   return (
     <div className="space-y-8">
@@ -66,7 +70,7 @@ export default async function ParametrosCostosFinca({ params, searchParams }: Pa
       <Encabezado
         eyebrow={`Parámetros de costos · ${finca.nombre}`}
         titulo={`Costos de ${nombrePeriodo(periodo)}`}
-        descripcion="Precios, animales, litros y costos mensuales que alimentan el informe contable. La vista previa se recalcula mientras escribes."
+        descripcion="Precios, litros y costos mensuales que alimentan el informe contable. La cantidad de animales se toma de las fichas de la finca. La vista previa se recalcula mientras escribes."
       />
 
       <Tarjeta className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -114,7 +118,14 @@ export default async function ParametrosCostosFinca({ params, searchParams }: Pa
       )}
       {actual && <p className="text-sm text-leche/70">Última actualización: {fecha(actual.registrado_en.slice(0, 10), true)}</p>}
 
-      <EditorCostos key={`${periodo}-${actual?.registrado_en ?? "nuevo"}`} inicial={datos} editable={gestor} accion={guardarCostos.bind(null, id, periodo)} />
+      <EditorCostos
+        key={`${periodo}-${actual?.registrado_en ?? "nuevo"}`}
+        inicial={datos}
+        editable={gestor}
+        accion={guardarCostos.bind(null, id, periodo)}
+        fincaId={id}
+        fechaConteo={conteo.fecha}
+      />
     </div>
   );
 }

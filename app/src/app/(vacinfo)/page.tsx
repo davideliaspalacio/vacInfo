@@ -3,6 +3,7 @@ import { BarChart3, BellRing, Droplets, Milk, TriangleAlert, Warehouse } from "l
 import { obtenerSesion } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, litros, num } from "@/lib/formato";
+import { conClave, descartesVigentes, separarAlertas } from "./mensajes/alertas";
 
 const ACCIONES = [
   { href: "/fincas", texto: "Gestionar fincas", ayuda: "Fichas, animales, bienes y costos", icono: Warehouse, clase: "bg-lima" },
@@ -13,16 +14,22 @@ const ACCIONES = [
 export default async function Inicio() {
   const { supabase, fincas } = await obtenerSesion();
 
-  const resumenes = await Promise.all(
-    fincas.map(async (f) => {
-      const corte = await corteDeFinca(supabase, f.id);
-      const [{ data: resumen }, { data: alertas }] = await Promise.all([
-        supabase.rpc("resumen_finca", { p_finca: f.id, p_corte: corte }).single(),
-        supabase.rpc("alertas_finca", { p_finca: f.id, p_corte: corte }),
-      ]);
-      return { finca: f, corte, resumen, altas: (alertas ?? []).filter((a) => a.prioridad === "alta").length };
-    }),
-  );
+  const [resumenes, descartes] = await Promise.all([
+    Promise.all(
+      fincas.map(async (f) => {
+        const corte = await corteDeFinca(supabase, f.id);
+        const [{ data: resumen }, { data: alertas }] = await Promise.all([
+          supabase.rpc("resumen_finca", { p_finca: f.id, p_corte: corte }).single(),
+          supabase.rpc("alertas_finca", { p_finca: f.id, p_corte: corte }),
+        ]);
+        return { finca: f, corte, resumen, alertas: conClave(alertas, f, corte) };
+      }),
+    ),
+    descartesVigentes(
+      supabase,
+      fincas.map((f) => f.id),
+    ),
+  ]);
 
   return (
     <div className="grid items-center gap-12 py-4 lg:grid-cols-[1.05fr_0.95fr] lg:py-10">
@@ -58,7 +65,10 @@ export default async function Inicio() {
             {resumenes.length === 0 && (
               <p className="rounded-2xl bg-leche/95 p-5 text-tinta-suave shadow-lg">Aún no tienes fincas registradas.</p>
             )}
-            {resumenes.map(({ finca, corte, resumen, altas }) => (
+            {resumenes.map(({ finca, corte, resumen, alertas }) => {
+              // Sin las alertas que el usuario descartó en Mensajes y notificaciones.
+              const altas = separarAlertas(alertas, descartes).visibles.filter((a) => a.prioridad === "alta").length;
+              return (
               <Link
                 key={finca.id}
                 href={`/fincas/${finca.id}`}
@@ -86,7 +96,8 @@ export default async function Inicio() {
                   </div>
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

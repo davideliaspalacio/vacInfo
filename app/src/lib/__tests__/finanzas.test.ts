@@ -35,6 +35,18 @@ describe("informe contable de la finca de prueba", () => {
     expect(r.mayorCosto.categoria).toBe("Concentrados");
   });
 
+  it("lee datos antiguos: terneronas como novillas y vacas horras como secas", () => {
+    expect(r.animalesLevante).toBe(24);
+    expect(r.animales.novillas).toBe(16);
+    expect(r.animales.vacas_secas).toBe(8);
+    expect(r.totalAnimales).toBe(74);
+    const nuevo = calcularInforme({
+      ...(parametros as ParametrosCostos),
+      animales: { ...r.animales, novillas: 16, terneras: 8, terneros: 5, novillos: 3 },
+    });
+    expect(nuevo.valorizacionMes).toBe(2_880_000);
+  });
+
   it("reproduce el flujo de caja", () => {
     expect(r.caja.ingresos).toBe(54_531_000);
     aprox(r.caja.pagos, 52_981_700);

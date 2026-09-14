@@ -4,10 +4,13 @@ import { Pencil } from "lucide-react";
 import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
-import { fecha, litros, num, sumarDias } from "@/lib/formato";
+import { fecha, litros, num } from "@/lib/formato";
 import { consultarPagina, leerPagina, paginarUnion } from "@/lib/paginacion";
+import { atajosDias, completarRango, leerRangoPedido, textoRango } from "@/lib/rango";
 import { BotonVolver, Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
+import { RangoFechas } from "@/components/rango-fechas";
+import { todasLasFilas } from "@/components/informes/consultas";
 import { Dato } from "@/components/fincas/campo";
 import { CodigoQR } from "@/components/fincas/codigo-qr";
 import { GraficoProduccion } from "@/components/fincas/grafico-produccion";
@@ -16,7 +19,8 @@ import { esLevante } from "@/components/levante/etiquetas";
 import { SeccionCrecimiento } from "@/components/levante/seccion-crecimiento";
 import { CATEGORIAS, ESPECIES, ESTADOS_ANIMAL, ESTADOS_SANITARIOS, SEXOS, TIPOS_BAJA, TIPOS_SANITARIOS } from "@/components/fincas/etiquetas";
 
-const DIAS_PRODUCCION = 60;
+/** Rango por defecto de la ficha: el último año (producción e historiales). */
+const DIAS_POR_DEFECTO = 365;
 const POR_PAGINA = 20;
 const BAJAS_POR_PAGINA = 10;
 const CLAVES = "id, fecha, registrado_en";
@@ -42,8 +46,10 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
     .maybeSingle();
   if (!animal) notFound();
 
-  const corte = await corteDeFinca(supabase, animal.finca_id);
-  const desde = sumarDias(corte, -(DIAS_PRODUCCION - 1));
+  // hasta = fecha de corte del estado reproductivo y del levante; desde–hasta filtra producción e historiales.
+  const referencia = await corteDeFinca(supabase, animal.finca_id);
+  const rango = completarRango(leerRangoPedido(sp), referencia, { dias: DIAS_POR_DEFECTO });
+  const { desde, hasta: corte } = rango;
 
   const [pesajes, levante] = await Promise.all([
     supabase.from("pesajes").select("id, fecha, peso_kg, altura_cm, condicion_corporal, observaciones").eq("animal_id", id).lte("fecha", corte),
@@ -56,23 +62,23 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
   const [madre, crias, ordenos, estadoRep, historial, sanidad, bajas, ultimaBaja] = await Promise.all([
     animal.madre_id ? supabase.from("animales").select("id, nombre, chapeta").eq("id", animal.madre_id).maybeSingle() : Promise.resolve({ data: null }),
     supabase.from("animales").select("id, nombre, chapeta, sexo, fecha_nacimiento").eq("madre_id", id).order("fecha_nacimiento", { ascending: false }),
-    supabase.from("ordenos").select("fecha, jornada, litros").eq("animal_id", id).gte("fecha", desde).lte("fecha", corte).order("fecha"),
+    todasLasFilas((a, b) => supabase.from("ordenos").select("id, fecha, litros").eq("animal_id", id).gte("fecha", desde).lte("fecha", corte).order("fecha").order("id").range(a, b)),
     supabase.rpc("estado_reproductivo", { p_finca: animal.finca_id, p_corte: corte }).eq("animal_id", id).maybeSingle(),
     paginarUnion(
       {
-        servicios: (a, b) => supabase.from("servicios").select(CLAVES, { count: "exact" }).eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
-        palpaciones: (a, b) => supabase.from("palpaciones").select(CLAVES, { count: "exact" }).eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
-        partos: (a, b) => supabase.from("partos").select(CLAVES, { count: "exact" }).eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
-        secados: (a, b) => supabase.from("secados").select(CLAVES, { count: "exact" }).eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+        servicios: (a, b) => supabase.from("servicios").select(CLAVES, { count: "exact" }).eq("animal_id", id).gte("fecha", desde).lte("fecha", corte).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+        palpaciones: (a, b) => supabase.from("palpaciones").select(CLAVES, { count: "exact" }).eq("animal_id", id).gte("fecha", desde).lte("fecha", corte).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+        partos: (a, b) => supabase.from("partos").select(CLAVES, { count: "exact" }).eq("animal_id", id).gte("fecha", desde).lte("fecha", corte).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+        secados: (a, b) => supabase.from("secados").select(CLAVES, { count: "exact" }).eq("animal_id", id).gte("fecha", desde).lte("fecha", corte).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
       },
       leerPagina(sp, { param: "prep", tamano: POR_PAGINA }),
     ),
     consultarPagina(
-      (a, b) => supabase.from("eventos_sanitarios").select("*", { count: "exact" }).eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+      (a, b) => supabase.from("eventos_sanitarios").select("*", { count: "exact" }).eq("animal_id", id).gte("fecha", desde).lte("fecha", corte).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
       leerPagina(sp, { param: "psan", tamano: POR_PAGINA }),
     ),
     consultarPagina(
-      (a, b) => supabase.from("bajas").select("*", { count: "exact" }).eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
+      (a, b) => supabase.from("bajas").select("*", { count: "exact" }).eq("animal_id", id).gte("fecha", desde).lte("fecha", corte).order("fecha", DESC).order("registrado_en", DESC).order("id").range(a, b),
       leerPagina(sp, { param: "pbajas", tamano: BAJAS_POR_PAGINA }),
     ),
     supabase.from("bajas").select("fecha, tipo, causa").eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).limit(1).maybeSingle(),
@@ -88,7 +94,7 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
   ]);
 
   const porDia = new Map<string, number>();
-  for (const o of ordenos.data ?? []) porDia.set(o.fecha, (porDia.get(o.fecha) ?? 0) + Number(o.litros));
+  for (const o of ordenos) porDia.set(o.fecha, (porDia.get(o.fecha) ?? 0) + Number(o.litros));
   const produccion = [...porDia.entries()].map(([f, l]) => ({ fecha: f, litros: Math.round(l * 10) / 10 }));
   const promedio = produccion.length ? produccion.reduce((s, p) => s + p.litros, 0) / produccion.length : null;
   const maximo = produccion.length ? Math.max(...produccion.map((p) => p.litros)) : null;
@@ -231,11 +237,24 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
       </div>
 
       <Tarjeta>
+        <RangoFechas
+          ruta={`/animales/${id}`}
+          searchParams={sp}
+          desde={rango.todo ? "" : desde}
+          hasta={corte}
+          texto={textoRango(rango)}
+          atajos={atajosDias(referencia, rango)}
+          referencia={referencia}
+          nota="El estado reproductivo y el crecimiento se calculan a la fecha «hasta»; la producción y los historiales se filtran por el rango."
+        />
+      </Tarjeta>
+
+      <Tarjeta>
         <TituloTarjeta detalle={`al ${fecha(corte, true)}`}>Estado reproductivo</TituloTarjeta>
         {er ? (
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Metrica
-              valor={er.en_ordeno ? "Ordeño" : er.ultimo_parto ? "Horra" : "Novilla"}
+              valor={er.en_ordeno ? "Ordeño" : er.ultimo_parto ? "Seca" : "Novilla"}
               etiqueta={er.en_ordeno ? `${er.dias_ordeno} días en ordeño` : er.dias_seca != null ? `${er.dias_seca} días seca` : "Sin partos"}
             />
             <Metrica
@@ -279,9 +298,9 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
       )}
 
       <Tarjeta>
-        <TituloTarjeta detalle={`${fecha(desde)} – ${fecha(corte)}`}>Producción</TituloTarjeta>
+        <TituloTarjeta detalle={textoRango(rango)}>Producción</TituloTarjeta>
         {produccion.length === 0 ? (
-          <Vacio>Sin ordeños registrados en los últimos {DIAS_PRODUCCION} días.</Vacio>
+          <Vacio>Sin ordeños registrados en este rango de fechas.</Vacio>
         ) : (
           <>
             <div className="mb-4 grid grid-cols-3 gap-3">
@@ -297,7 +316,7 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
       <Tarjeta id="reproduccion" className="scroll-mt-6">
         <TituloTarjeta detalle={`${num(historial.total)} eventos`}>Reproducción</TituloTarjeta>
         {eventos.length === 0 ? (
-          <Vacio>Sin servicios, palpaciones, partos ni secados registrados.</Vacio>
+          <Vacio>Sin servicios, palpaciones, partos ni secados registrados en este rango de fechas.</Vacio>
         ) : (
           <div className="overflow-x-auto">
             <table className="matriz w-full border-collapse bg-white text-sm">
@@ -338,7 +357,7 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
       <Tarjeta id="sanidad" className="scroll-mt-6">
         <TituloTarjeta detalle={`${num(sanidad.total)} registros`}>Sanidad</TituloTarjeta>
         {!sanidad.filas.length ? (
-          <Vacio>Sin enfermedades, tratamientos ni vacunas registrados.</Vacio>
+          <Vacio>Sin enfermedades, tratamientos ni vacunas registrados en este rango de fechas.</Vacio>
         ) : (
           <div className="overflow-x-auto">
             <table className="matriz w-full border-collapse bg-white text-sm">

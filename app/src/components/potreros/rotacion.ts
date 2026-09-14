@@ -86,5 +86,5 @@ export async function moverGrupo(
 /** Grupos que ya se han usado en la finca, para sugerirlos. */
 export async function gruposDeFinca(supabase: Cliente, fincaId: string) {
   const { data } = await supabase.from("rotaciones_potrero").select("grupo").eq("finca_id", fincaId).order("fecha_entrada", { ascending: false }).limit(300);
-  return [...new Set(["Vacas en ordeño", "Vacas horras", "Novillas", "Terneras", ...(data ?? []).map((r) => r.grupo)])];
+  return [...new Set(["Vacas en ordeño", "Vacas secas", "Novillas", "Terneras", ...(data ?? []).map((r) => r.grupo)])];
 }
