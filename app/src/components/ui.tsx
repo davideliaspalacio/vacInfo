@@ -75,6 +75,12 @@ export function Etiqueta({ tono = "gris", children }: { tono?: keyof typeof TONO
   return <span className={clsx("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold", TONOS[tono])}>{children}</span>;
 }
 
+/**
+ * @deprecated El botón «Atrás» ahora lo pone el layout de `(vacinfo)` con
+ * `BotonAtras` (`src/components/boton-atras.tsx`), así que aparece en todas las
+ * páginas. Esto se conserva solo para las dos páginas que todavía lo usan
+ * (`/importar` y `/fincas/[id]/costos`); al quitarlo de ellas, borra este componente.
+ */
 export function BotonVolver({ href, children = "Volver" }: { href: string; children?: React.ReactNode }) {
   return (
     <Link

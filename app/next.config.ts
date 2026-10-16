@@ -19,7 +19,8 @@ const csp = [
   // Next inyecta scripts en línea para hidratar; en desarrollo el recargado en caliente usa eval.
   `script-src 'self' 'unsafe-inline'${produccion ? "" : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  // Las fotos de animales, bienes y fincas se sirven con enlaces firmados del Storage de Supabase.
+  ["img-src 'self' data: blob:", ...origenesSupabase().filter((o) => o.startsWith("http"))].join(" "),
   "font-src 'self' data:",
   ["connect-src 'self'", ...origenesSupabase()].join(" "),
   "worker-src 'self'",

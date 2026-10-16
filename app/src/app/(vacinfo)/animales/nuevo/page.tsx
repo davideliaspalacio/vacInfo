@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { soloLectura } from "@/lib/permisos";
-import { obtenerSesion } from "@/lib/sesion";
-import { BotonVolver, Encabezado, Tarjeta, Vacio } from "@/components/ui";
+import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
+import { Encabezado, Tarjeta, Vacio } from "@/components/ui";
 import { FormularioAnimal } from "@/components/fincas/formulario-animal";
 import { candidatosParientes, fincasConCodigos, torosDeServicios } from "@/components/fincas/consultas";
 import { guardarAnimal } from "../actions";
@@ -17,8 +17,7 @@ export default async function NuevoAnimal({ searchParams }: PageProps<"/animales
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
-      <BotonVolver href={volver} />
-      <Encabezado eyebrow="Hoja informativa ser vivo" titulo="Nueva ficha de ser vivo" descripcion="Registra un animal para identificarlo con su chapeta y QR." />
+      <Encabezado eyebrow="Hoja informativa animal" titulo="Ingreso nuevo animal" descripcion="Registra un animal para identificarlo con su chapeta y QR." />
       <Tarjeta>
         {fincas.length === 0 ? (
           <Vacio>Primero crea una finca.</Vacio>
@@ -30,6 +29,8 @@ export default async function NuevoAnimal({ searchParams }: PageProps<"/animales
             torosServicios={torosServicios}
             fincaInicial={fincaInicial}
             cancelar={volver}
+            organizacionId={sesion.organizacionId}
+            puedeFoto={ROLES_GESTORES.includes(sesion.rol)}
           />
         )}
       </Tarjeta>

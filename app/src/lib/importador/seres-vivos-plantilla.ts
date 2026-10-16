@@ -1,0 +1,160 @@
+import ExcelJS from "exceljs";
+import { COLUMNAS_PLANILLA, ESPECIES_ACEPTADAS, FILAS_PLANTILLA, HOJA_SERES_VIVOS, PESO_MAXIMO, TITULO_PLANILLA } from "./seres-vivos";
+
+/** Ancho de cada columna de la plantilla, en el mismo orden que `COLUMNAS_PLANILLA`. */
+const ANCHOS = [5, 12, 16, 14, 10, 20, 18, 12, 10, 20, 14, 20, 14];
+
+const BOSQUE = "FF14402A";
+const LIMA = "FFD9ECC4";
+const CREMA = "FFF7F3E8";
+
+const borde = (color = "FFB7C4B2"): Partial<ExcelJS.Borders> => ({
+  top: { style: "thin", color: { argb: color } },
+  left: { style: "thin", color: { argb: color } },
+  bottom: { style: "thin", color: { argb: color } },
+  right: { style: "thin", color: { argb: color } },
+});
+
+const relleno = (argb: string): ExcelJS.FillPattern => ({ type: "pattern", pattern: "solid", fgColor: { argb } });
+
+/** Fila donde van los encabezados; arriba quedan el título y la celda de la finca. */
+const FILA_ENCABEZADOS = 4;
+
+const INSTRUCCIONES: [string, string][] = [
+  [
+    "PERTENECEN A FINCA:",
+    "Escribe el nombre de la finca a la que pertenecen los animales de la planilla. Al importar se compara con la finca elegida y, si no coincide, se avisa.",
+  ],
+  ["#", "Número de la fila. Solo es una guía: puedes dejarlo como viene."],
+  ["ESPECIE", `Acepta: ${ESPECIES_ACEPTADAS.join(", ")}. Si escribes otra cosa, el animal queda en la categoría «Otro».`],
+  ["RAZA", "Texto libre: Holstein, Jersey, Gyr, Pardo Suizo, Criollo…"],
+  ["COLOR", "Texto libre: blanco, negro, pintado, cereza…"],
+  ["SEXO", "Escribe hembra o macho (también sirven H / M). Es obligatorio: sin sexo la fila no se importa."],
+  ["NOMBRE", "Nombre del animal. Si no tiene nombre, deja la casilla vacía y escribe la chapeta: se usará la chapeta como nombre."],
+  [
+    "FECHA NACIMIENTO",
+    "Formato DD/MM/AAAA (por ejemplo 05/03/2025). Con la fecha se calcula la categoría (ternera, novilla, vaca, ternero, novillo, toro). Si la dejas vacía, la hembra queda como vaca y el macho como toro.",
+  ],
+  ["CHAPETA", "Número o código de la chapeta. Sirve para no repetir animales: si la chapeta ya existe en la finca, la fila no se vuelve a crear."],
+  [
+    "PESO",
+    `Peso en kilos, solo el número (por ejemplo 420). Debe estar entre 1 y ${PESO_MAXIMO.toLocaleString("es-CO")} kg. Además del peso de la ficha se crea un pesaje con la fecha de la importación, para la curva de crecimiento de Levante.`,
+  ],
+  ["PADRE", "Nombre del padre. Se guarda como texto en la ficha."],
+  ["CHAPETA PADRE", "Chapeta del padre. Se guarda como texto en la ficha."],
+  ["MADRE", "Nombre de la madre."],
+  [
+    "CHAPETA MADRE",
+    "Si la chapeta coincide con un animal de la finca (o con otra fila de esta misma planilla) la ficha queda enlazada a su madre. Si no coincide, se guardan el nombre y la chapeta tal como los escribiste.",
+  ],
+];
+
+const NOTAS = [
+  "Las columnas se reconocen por su título, no por su posición: puedes moverlas o agregar columnas propias.",
+  "Nada se guarda hasta que revises la vista previa y confirmes la importación.",
+  "Puedes subir la misma planilla dos veces sin miedo: los animales que ya existen no se duplican.",
+  "Si necesitas más de 75 animales, copia la última fila hacia abajo o sube varias planillas.",
+];
+
+/** Genera el libro .xlsx de la plantilla de implementación de seres vivos. */
+export async function generarPlantillaSeresVivos(): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "VacInfo";
+  wb.created = new Date();
+
+  const ws = wb.addWorksheet(HOJA_SERES_VIVOS, { views: [{ state: "frozen", ySplit: FILA_ENCABEZADOS }] });
+  const ultima = String.fromCharCode(64 + COLUMNAS_PLANILLA.length); // "M" con 13 columnas
+  ANCHOS.forEach((ancho, i) => (ws.getColumn(i + 1).width = ancho));
+
+  ws.mergeCells(`A1:${ultima}1`);
+  const titulo = ws.getCell("A1");
+  titulo.value = TITULO_PLANILLA;
+  titulo.font = { name: "Calibri", size: 14, bold: true, color: { argb: "FFFFFFFF" } };
+  titulo.alignment = { horizontal: "center", vertical: "middle" };
+  titulo.fill = relleno(BOSQUE);
+  ws.getRow(1).height = 28;
+
+  const etiquetaFinca = ws.getCell("A2");
+  etiquetaFinca.value = "PERTENECEN A FINCA:";
+  etiquetaFinca.font = { bold: true };
+  ws.mergeCells(`B2:${ultima}2`);
+  const nombreFinca = ws.getCell("B2");
+  nombreFinca.fill = relleno(CREMA);
+  nombreFinca.border = { bottom: { style: "medium", color: { argb: BOSQUE } } };
+  ws.getRow(2).height = 20;
+
+  const encabezados = ws.getRow(FILA_ENCABEZADOS);
+  COLUMNAS_PLANILLA.forEach((texto, i) => {
+    const celda = encabezados.getCell(i + 1);
+    celda.value = texto;
+    celda.font = { bold: true, color: { argb: BOSQUE } };
+    celda.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    celda.fill = relleno(LIMA);
+    celda.border = borde(BOSQUE);
+  });
+  encabezados.height = 32;
+
+  const columna = (titulo: (typeof COLUMNAS_PLANILLA)[number]) => COLUMNAS_PLANILLA.indexOf(titulo) + 1;
+  const colEspecie = columna("ESPECIE");
+  const colSexo = columna("SEXO");
+  const colFecha = columna("FECHA NACIMIENTO");
+  const colPeso = columna("PESO");
+
+  for (let n = 1; n <= FILAS_PLANTILLA; n++) {
+    const fila = ws.getRow(FILA_ENCABEZADOS + n);
+    fila.getCell(1).value = n;
+    for (let c = 1; c <= COLUMNAS_PLANILLA.length; c++) {
+      const celda = fila.getCell(c);
+      celda.border = borde();
+      celda.alignment = { vertical: "middle" };
+    }
+    fila.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+    fila.getCell(colFecha).numFmt = "dd/mm/yyyy";
+    fila.getCell(colPeso).numFmt = "#,##0.##";
+  }
+
+  // Listas sugeridas: en Excel y en Google Sheets aparecen como desplegable y no bloquean otros valores.
+  // Se declaran por rango (y no celda por celda) para que el archivo lleve un solo `sqref` por columna.
+  const letra = (c: number) => String.fromCharCode(64 + c);
+  const rango = (c: number) => `${letra(c)}${FILA_ENCABEZADOS + 1}:${letra(c)}${FILA_ENCABEZADOS + FILAS_PLANTILLA}`;
+  const listas = (ws as unknown as { dataValidations: { add(rango: string, validacion: ExcelJS.DataValidation): void } }).dataValidations;
+  listas.add(rango(colEspecie), { type: "list", allowBlank: true, formulae: [`"${ESPECIES_ACEPTADAS.join(",")}"`], showErrorMessage: false });
+  listas.add(rango(colSexo), { type: "list", allowBlank: true, formulae: ['"Hembra,Macho"'], showErrorMessage: false });
+
+  const guia = wb.addWorksheet("Instrucciones");
+  guia.getColumn(1).width = 24;
+  guia.getColumn(2).width = 110;
+
+  const subtitulo = guia.getCell("A1");
+  guia.mergeCells("A1:B1");
+  subtitulo.value = "Cómo llenar la planilla de implementación de seres vivos";
+  subtitulo.font = { size: 13, bold: true, color: { argb: "FFFFFFFF" } };
+  subtitulo.alignment = { horizontal: "center", vertical: "middle" };
+  subtitulo.fill = relleno(BOSQUE);
+  guia.getRow(1).height = 26;
+
+  let fila = 3;
+  for (const [campo, texto] of INSTRUCCIONES) {
+    const r = guia.getRow(fila++);
+    r.getCell(1).value = campo;
+    r.getCell(1).font = { bold: true, color: { argb: BOSQUE } };
+    r.getCell(1).alignment = { vertical: "top" };
+    r.getCell(2).value = texto;
+    r.getCell(2).alignment = { vertical: "top", wrapText: true };
+  }
+
+  fila++;
+  const tituloNotas = guia.getRow(fila++).getCell(1);
+  tituloNotas.value = "Ten en cuenta";
+  tituloNotas.font = { bold: true, color: { argb: BOSQUE } };
+  for (const nota of NOTAS) {
+    const r = guia.getRow(fila++);
+    r.getCell(2).value = `• ${nota}`;
+    r.getCell(2).alignment = { vertical: "top", wrapText: true };
+  }
+
+  const datos = await wb.xlsx.writeBuffer();
+  return Buffer.from(datos as ArrayBuffer);
+}
+
+export const NOMBRE_ARCHIVO_PLANTILLA = "Plantilla implementacion seres vivos - VacInfo.xlsx";

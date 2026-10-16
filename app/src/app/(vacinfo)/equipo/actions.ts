@@ -16,7 +16,7 @@ export type EstadoInvitacion = {
   creada?: { codigo: string; enlace: string; svg: string; detalle: string };
 };
 
-const SIN_PERMISO = "Solo propietarios y administradores pueden gestionar el equipo.";
+const SIN_PERMISO = "Solo propietarios y administradores pueden gestionar los empleados.";
 
 async function sesionGestora() {
   const sesion = await obtenerSesion();

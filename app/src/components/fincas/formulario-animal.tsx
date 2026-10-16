@@ -14,6 +14,7 @@ import {
   type ToroServicio,
 } from "@/lib/parientes";
 import { BotonPrimario } from "@/components/ui";
+import { FotoCampo } from "@/components/foto-campo";
 import { Campo, MensajeError, type EstadoFormulario } from "@/components/fincas/campo";
 import { CATEGORIAS, ESTADOS_ANIMAL, GRUPOS_CATEGORIA, METODOS_ADQUISICION, SEXOS } from "@/components/fincas/etiquetas";
 import type { FincaConCodigos } from "@/components/fincas/consultas";
@@ -43,6 +44,9 @@ export function FormularioAnimal({
   animal,
   fincaInicial,
   cancelar,
+  organizacionId,
+  fotoUrl,
+  puedeFoto,
 }: {
   accion: (estado: EstadoFormulario, datos: FormData) => Promise<EstadoFormulario>;
   fincas: FincaConCodigos[];
@@ -52,6 +56,10 @@ export function FormularioAnimal({
   animal?: Animal;
   fincaInicial?: string;
   cancelar: string;
+  organizacionId: string;
+  /** Enlace firmado de la foto guardada (vista previa al editar). */
+  fotoUrl?: string | null;
+  puedeFoto: boolean;
 }) {
   const [estado, enviar, pendiente] = useActionState(accion, {});
   const e = estado.errores ?? {};
@@ -292,6 +300,17 @@ export function FormularioAnimal({
           )}
         </div>
       </fieldset>
+
+      <FotoCampo
+        tipo="animales"
+        organizacionId={organizacionId}
+        valor={animal?.foto_url}
+        url={fotoUrl}
+        alt={animal ? `Foto de ${animal.nombre}` : "Vista previa de la foto del animal"}
+        deshabilitado={!puedeFoto}
+        motivo="Solo propietarios y administradores pueden poner la foto."
+        error={e.foto_url}
+      />
 
       <Campo etiqueta="Notas" error={e.notas}>
         <textarea name="notas" rows={3} defaultValue={v(animal?.notas)} className="campo-control" />

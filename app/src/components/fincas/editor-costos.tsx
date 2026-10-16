@@ -3,7 +3,24 @@
 import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, Info, Lock, Plus, Trash2 } from "lucide-react";
-import { calcularInforme, type ConteoAnimales, type Estado, type ParametrosCostos } from "@/lib/finanzas";
+import {
+  calcularInforme,
+  calcularItem,
+  describirItemPorAnimal,
+  ETIQUETA_GRUPO_COSTO,
+  ETIQUETA_PERIODO_COSTO,
+  ETIQUETA_UNIDAD_COSTO,
+  GRUPOS_COSTO,
+  PERIODOS_COSTO,
+  UNIDADES_COSTO,
+  type ConteoAnimales,
+  type Estado,
+  type GrupoCosto,
+  type ItemCosto,
+  type ParametrosCostos,
+  type PeriodoCosto,
+  type UnidadCosto,
+} from "@/lib/finanzas";
 import { fecha, litros, num, pct, pesos } from "@/lib/formato";
 import { BotonPrimario, Etiqueta, Tarjeta, TituloTarjeta } from "@/components/ui";
 import { MensajeError, type EstadoFormulario } from "@/components/fincas/campo";
@@ -73,11 +90,46 @@ export function EditorCostos({
   const [estado, enviar, pendiente] = useActionState(accion, {});
   const informe = useMemo(() => calcularInforme(p), [p]);
 
-  const cambiarItem = (ci: number, ii: number, cambio: Partial<ParametrosCostos["costos"][number]["items"][number]>) =>
+  const cambiarItem = (ci: number, ii: number, cambio: Partial<ItemCosto>) =>
     setP((prev) => ({
       ...prev,
       costos: prev.costos.map((c, i) => (i !== ci ? c : { ...c, items: c.items.map((it, j) => (j === ii ? { ...it, ...cambio } : it)) })),
     }));
+
+  /** Al cambiar de modo: por animal arranca con valores por defecto; al volver a mensual se limpian. */
+  const cambiarModo = (ci: number, ii: number, it: ItemCosto, modo: string) =>
+    cambiarItem(
+      ci,
+      ii,
+      modo === "por_animal"
+        ? {
+            modo: "por_animal",
+            cantidad: it.cantidad ?? 0,
+            unidad: it.unidad ?? "kg",
+            precio_unitario: it.precio_unitario ?? 0,
+            grupo: it.grupo ?? "vacas_ordeno",
+            periodo: it.periodo ?? "dia",
+          }
+        : {
+            // Al volver a mensual queda el último valor calculado, listo para ajustarlo a mano.
+            mes: calcularItem(it, informe.animales).mes,
+            modo: undefined,
+            cantidad: undefined,
+            unidad: undefined,
+            precio_unitario: undefined,
+            grupo: undefined,
+            periodo: undefined,
+          },
+    );
+
+  // Se guarda el ítem completo y además el `mes` ya calculado, para que cualquier lectura antigua del jsonb siga funcionando.
+  const paraGuardar = useMemo(
+    () => ({
+      ...p,
+      costos: p.costos.map((c) => ({ ...c, items: c.items.map((it) => ({ ...it, mes: calcularItem(it, informe.animales).mes })) })),
+    }),
+    [p, informe.animales],
+  );
 
   const agregarItem = (ci: number) =>
     setP((prev) => ({ ...prev, costos: prev.costos.map((c, i) => (i === ci ? { ...c, items: [...c.items, { nombre: "", mes: 0 }] } : c)) }));
@@ -87,7 +139,7 @@ export function EditorCostos({
 
   return (
     <form action={enviar} className="grid items-start gap-6 xl:grid-cols-[1fr_380px]">
-      <input type="hidden" name="datos" value={JSON.stringify(p)} />
+      <input type="hidden" name="datos" value={JSON.stringify(paraGuardar)} />
 
       <fieldset disabled={!editable || pendiente} className="min-w-0 space-y-6">
         <Tarjeta>
@@ -128,15 +180,15 @@ export function EditorCostos({
               Se calculan con las fichas de la finca al {fecha(fechaConteo, true)} (cierre del mes o fecha de corte). Para cambiar la cantidad de
               animales: registra la muerte o venta en la ficha del animal (
               <Link href={`/fincas/${fincaId}`} className="font-bold text-bosque underline">
-                Gestionar fincas
+                Administrar fincas
               </Link>
               ) o desde{" "}
               <Link href="/campo" className="font-bold text-bosque underline">
                 VacDaTa
               </Link>
-              ; para agregar, crea la ficha en Gestionar fincas ›{" "}
+              ; para agregar, crea la ficha en Administrar fincas ›{" "}
               <Link href={`/animales/nuevo?finca=${fincaId}`} className="font-bold text-bosque underline">
-                Nueva ficha de ser vivo
+                Ingreso nuevo animal
               </Link>
               .
             </span>
@@ -171,43 +223,136 @@ export function EditorCostos({
                   </summary>
                   <div className="space-y-2 border-t border-black/5 px-4 py-3">
                     {c.items.length > 0 && (
-                      <div className="hidden grid-cols-[1fr_160px_110px_36px] gap-2 text-xs font-bold uppercase tracking-wider text-tinta-suave sm:grid">
+                      <div className="hidden grid-cols-[1fr_150px_160px_110px_36px] gap-2 text-xs font-bold uppercase tracking-wider text-tinta-suave sm:grid">
                         <span>Ítem</span>
+                        <span>Cómo se calcula</span>
                         <span className="text-right">Valor mes</span>
                         <span className="text-center">No sale de caja</span>
                         <span />
                       </div>
                     )}
-                    {c.items.map((it, ii) => (
-                      <div key={ii} className="grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_160px_110px_36px] sm:items-center">
-                        <input
-                          aria-label="Nombre del ítem"
-                          value={it.nombre}
-                          required
-                          placeholder="Nombre del ítem"
-                          onChange={(e) => cambiarItem(ci, ii, { nombre: e.target.value })}
-                          className="campo-control col-span-2 py-2 sm:col-span-1"
-                        />
-                        <Numero etiqueta={`Valor mensual de ${it.nombre || "ítem"}`} valor={it.mes} onCambio={(v) => cambiarItem(ci, ii, { mes: v })} className="py-2" />
-                        <label className="flex items-center justify-center gap-2 text-sm text-tinta-suave">
-                          <input
-                            type="checkbox"
-                            checked={it.caja === false}
-                            onChange={(e) => cambiarItem(ci, ii, { caja: e.target.checked ? false : undefined })}
-                            className="h-4 w-4 accent-[#173f2a]"
-                          />
-                          <span className="sm:sr-only">No sale de caja</span>
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => quitarItem(ci, ii)}
-                          className="justify-self-end rounded-lg p-2 text-tinta-suave hover:bg-[#fbe9e5] hover:text-alerta disabled:hidden"
-                          aria-label={`Quitar ${it.nombre || "ítem"}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
+                    {c.items.map((it, ii) => {
+                      const porAnimal = it.modo === "por_animal";
+                      const calculo = calcularItem(it, informe.animales);
+                      const nombre = it.nombre || "ítem";
+                      return (
+                        <div key={ii} className={porAnimal ? "rounded-xl border border-[#cadba8] bg-lima-suave/50 p-2" : undefined}>
+                          <div className="grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_150px_160px_110px_36px] sm:items-center">
+                            <input
+                              aria-label="Nombre del ítem"
+                              value={it.nombre}
+                              required
+                              placeholder="Nombre del ítem"
+                              onChange={(e) => cambiarItem(ci, ii, { nombre: e.target.value })}
+                              className="campo-control col-span-2 py-2 sm:col-span-1"
+                            />
+                            <select
+                              aria-label={`Cómo se calcula ${nombre}`}
+                              value={porAnimal ? "por_animal" : "mensual"}
+                              onChange={(e) => cambiarModo(ci, ii, it, e.target.value)}
+                              className="campo-control py-2"
+                            >
+                              <option value="mensual">Valor al mes</option>
+                              <option value="por_animal">Por animal</option>
+                            </select>
+                            {porAnimal ? (
+                              <output
+                                aria-label={`Valor mensual calculado de ${nombre}`}
+                                className="block rounded-xl border border-dashed border-[#cadba8] bg-white px-3 py-2 text-right font-bold tabular-nums text-bosque"
+                              >
+                                {pesos(calculo.mes)}
+                              </output>
+                            ) : (
+                              <Numero etiqueta={`Valor mensual de ${nombre}`} valor={it.mes} onCambio={(v) => cambiarItem(ci, ii, { mes: v })} className="py-2" />
+                            )}
+                            <label className="flex items-center justify-center gap-2 text-sm text-tinta-suave">
+                              <input
+                                type="checkbox"
+                                checked={it.caja === false}
+                                onChange={(e) => cambiarItem(ci, ii, { caja: e.target.checked ? false : undefined })}
+                                className="h-4 w-4 accent-[#173f2a]"
+                              />
+                              <span className="sm:sr-only">No sale de caja</span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => quitarItem(ci, ii)}
+                              className="justify-self-end rounded-lg p-2 text-tinta-suave hover:bg-[#fbe9e5] hover:text-alerta disabled:hidden"
+                              aria-label={`Quitar ${nombre}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                          {porAnimal && (
+                            <>
+                              <div className="mt-2 grid gap-2 border-t border-[#cadba8] pt-2 sm:grid-cols-5">
+                                <CampoItem etiqueta="Cantidad por animal">
+                                  <Numero
+                                    etiqueta={`Cantidad por animal de ${nombre}`}
+                                    valor={it.cantidad ?? 0}
+                                    onCambio={(v) => cambiarItem(ci, ii, { cantidad: v })}
+                                    className="py-2"
+                                  />
+                                </CampoItem>
+                                <CampoItem etiqueta="Unidad">
+                                  <select
+                                    aria-label={`Unidad de ${nombre}`}
+                                    value={it.unidad ?? "kg"}
+                                    onChange={(e) => cambiarItem(ci, ii, { unidad: e.target.value as UnidadCosto })}
+                                    className="campo-control py-2"
+                                  >
+                                    {UNIDADES_COSTO.map((u) => (
+                                      <option key={u} value={u}>
+                                        {ETIQUETA_UNIDAD_COSTO[u]}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </CampoItem>
+                                <CampoItem etiqueta="Precio por unidad (COP)">
+                                  <Numero
+                                    etiqueta={`Precio por unidad de ${nombre}`}
+                                    valor={it.precio_unitario ?? 0}
+                                    onCambio={(v) => cambiarItem(ci, ii, { precio_unitario: v })}
+                                    className="py-2"
+                                  />
+                                </CampoItem>
+                                <CampoItem etiqueta="Grupo de animales">
+                                  <select
+                                    aria-label={`Grupo de animales de ${nombre}`}
+                                    value={it.grupo ?? "vacas_ordeno"}
+                                    onChange={(e) => cambiarItem(ci, ii, { grupo: e.target.value as GrupoCosto })}
+                                    className="campo-control py-2"
+                                  >
+                                    {GRUPOS_COSTO.map((g) => (
+                                      <option key={g} value={g}>
+                                        {ETIQUETA_GRUPO_COSTO[g]}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </CampoItem>
+                                <CampoItem etiqueta="La cantidad es">
+                                  <select
+                                    aria-label={`La cantidad de ${nombre} es por día o por mes`}
+                                    value={it.periodo ?? "dia"}
+                                    onChange={(e) => cambiarItem(ci, ii, { periodo: e.target.value as PeriodoCosto })}
+                                    className="campo-control py-2"
+                                  >
+                                    {PERIODOS_COSTO.map((t) => (
+                                      <option key={t} value={t}>
+                                        {ETIQUETA_PERIODO_COSTO[t]}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </CampoItem>
+                              </div>
+                              <p className="mt-2 text-sm text-tinta-suave">
+                                {describirItemPorAnimal(it, informe.animales)} · <strong className="text-bosque">{pesos(calculo.mes)}</strong>
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
                     <button
                       type="button"
                       onClick={() => agregarItem(ci)}
@@ -264,13 +409,22 @@ export function EditorCostos({
             <div className="mt-6 space-y-3">
               <MensajeError>{estado.mensaje}</MensajeError>
               <BotonPrimario disabled={pendiente} className="w-full">
-                {pendiente ? "Guardando…" : "Guardar parámetros"}
+                {pendiente ? "Guardando…" : "Guardar costos"}
               </BotonPrimario>
             </div>
           )}
         </Tarjeta>
       </aside>
     </form>
+  );
+}
+
+function CampoItem({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <span className="mb-1 block text-xs font-bold text-tinta-suave">{etiqueta}</span>
+      {children}
+    </div>
   );
 }
 

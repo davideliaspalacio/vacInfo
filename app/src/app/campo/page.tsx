@@ -7,12 +7,12 @@ import { ContadorMensajes } from "@/components/offline/mensajes";
 const MENU: { href: string; titulo: string; detalle: string; icono: LucideIcon; principal?: boolean; mensajes?: boolean }[] = [
   {
     href: "/campo/registrar",
-    titulo: "Registrar",
+    titulo: "Registrar evento finca",
     detalle: "Funciona con o sin señal. Animales, ordeño por lista y registros de la finca",
     icono: ClipboardPenLine,
     principal: true,
   },
-  { href: "/campo/mensajes", titulo: "Mensajes", detalle: "Lo que te escribe el administrador", icono: Mail, mensajes: true },
+  { href: "/campo/mensajes", titulo: "Mensajes recibidos", detalle: "Lo que te escribe el administrador", icono: Mail, mensajes: true },
   { href: "/campo/aprendizaje", titulo: "Aprendizaje", detalle: "Manual del trabajador y flujograma reproductivo", icono: BookOpenCheck },
   { href: "/campo/comentario", titulo: "Comentario", detalle: "Avísale algo al administrador", icono: MessageSquare },
 ];
@@ -56,7 +56,7 @@ export default async function CampoInicio() {
                 <Icono className={principal ? "h-7 w-7" : "h-[23px] w-[23px]"} aria-hidden />
               </span>
               <span>
-                <span className={clsx("block font-bold", principal ? "text-2xl" : "text-lg")}>
+                <span className={clsx("block break-words font-bold leading-tight", principal ? "text-[1.4rem]" : "text-lg")}>
                   {titulo}
                   {mensajes && <ContadorMensajes usuarioId={user.id} />}
                 </span>

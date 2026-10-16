@@ -9,7 +9,7 @@ import { FormularioInvitacion, ListaInvitaciones, type InvitacionLista } from "@
 import { datosCodigo, estadoInvitacion, origenActual, textoVence } from "@/components/equipo/enlace";
 import { usuarioDeCorreo } from "@/components/registro/cuentas";
 
-export const metadata: Metadata = { title: "Equipo" };
+export const metadata: Metadata = { title: "Empleados" };
 
 const MIEMBROS_POR_PAGINA = 25;
 const INVITACIONES_POR_PAGINA = 10;
@@ -85,7 +85,7 @@ export default async function EquipoPage({ searchParams }: PageProps<"/equipo">)
     <div className="space-y-8">
       <Encabezado
         eyebrow={sesion.organizacion}
-        titulo="Equipo"
+        titulo="Empleados"
         descripcion={
           esGestor
             ? "Invita a mayordomos y trabajadores con un código, define su rol y a qué fincas tienen acceso."
@@ -117,7 +117,7 @@ export default async function EquipoPage({ searchParams }: PageProps<"/equipo">)
       {esGestor && (
         <div className="grid gap-6 lg:grid-cols-2">
           <Tarjeta>
-            <TituloTarjeta>Invitar con código</TituloTarjeta>
+            <TituloTarjeta>Ingreso nuevo empleado</TituloTarjeta>
             <p className="mb-4 text-sm text-tinta-suave">
               Quien reciba el código entra a <strong>/unirse</strong> y crea su cuenta con usuario y PIN, sin necesidad de correo.
             </p>

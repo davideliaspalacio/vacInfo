@@ -2,15 +2,17 @@
 
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
-import { Save, Search } from "lucide-react";
+import { CircleCheck, LoaderCircle, Save, Search } from "lucide-react";
+import { clasesGuardar } from "@/components/campo/boton-guardar";
 import { control } from "@/components/campo/ui";
 import { hoyISO } from "@/lib/formato";
+import { OrdenoRepetidoError } from "@/lib/offline/cliente";
 import { validarDatos } from "@/lib/offline/esquemas";
+import { yaOrdenada } from "@/lib/offline/ordenos";
 import { formatoNumero } from "@/lib/offline/resumen";
-import type { AnimalCatalogo, Catalogo } from "@/lib/offline/tipos";
+import type { AnimalCatalogo, Catalogo, Jornada } from "@/lib/offline/tipos";
 import { Chip, type Guardar } from "./formularios-rapidos";
 
-type Jornada = "am" | "pm";
 type Valores = Record<string, string>;
 
 const claveBorrador = (finca: string, fecha: string, jornada: Jornada) => `vacdata:borrador:${finca}:${fecha}:${jornada}`;
@@ -41,7 +43,7 @@ function aLitros(texto: string | undefined) {
 const normalizar = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const porChapeta = (a: AnimalCatalogo, b: AnimalCatalogo) => (a.chapeta ?? a.codigo).localeCompare(b.chapeta ?? b.codigo, "es", { numeric: true });
 
-export function OrdenoLista({ catalogo, alGuardar }: { catalogo: Catalogo; alGuardar: Guardar }) {
+export function OrdenoLista({ catalogo, indice, alGuardar }: { catalogo: Catalogo; indice: Set<string>; alGuardar: Guardar }) {
   const [turno, setTurno] = useState(() => {
     const fecha = hoyISO();
     const jornada: Jornada = new Date().getHours() < 12 ? "am" : "pm";
@@ -65,7 +67,12 @@ export function OrdenoLista({ catalogo, alGuardar }: { catalogo: Catalogo; alGua
   }, [vacas, filtro]);
 
   const { valores, fecha, jornada } = turno;
-  const litros = vacas.map((a) => aLitros(valores[a.id]));
+  // Una vaca no se ordeña dos veces en la misma jornada: las que ya están (catálogo o cola) salen marcadas y sin casilla.
+  const ordenada = (a: AnimalCatalogo) => yaOrdenada(indice, a.id, fecha, jornada);
+  const pendientes = vacas.filter((a) => !ordenada(a));
+  const editables = visibles.filter((a) => !ordenada(a));
+  const yaOrdenadas = vacas.length - pendientes.length;
+  const litros = pendientes.map((a) => aLitros(valores[a.id]));
   const anotadas = litros.filter((l): l is number => l !== null && !Number.isNaN(l));
   const invalidas = litros.filter((l) => Number.isNaN(l)).length;
   const total = anotadas.reduce((s, l) => s + l, 0);
@@ -92,10 +99,10 @@ export function OrdenoLista({ catalogo, alGuardar }: { catalogo: Catalogo; alGua
   }
 
   async function guardar() {
-    const items = vacas.flatMap((a, i) => (litros[i] !== null && !Number.isNaN(litros[i]) ? [{ animal_id: a.id, litros: litros[i] }] : []));
+    const items = pendientes.flatMap((a, i) => (litros[i] !== null && !Number.isNaN(litros[i]) ? [{ animal_id: a.id, litros: litros[i] }] : []));
     if (invalidas) return setError("Hay litros que no son válidos (entre 0 y 99). Están marcados en rojo.");
     if (!items.length) return setError("Anota los litros de al menos una vaca.");
-    const faltan = vacas.length - items.length;
+    const faltan = pendientes.length - items.length;
     if (faltan > 0 && !window.confirm(`Faltan ${faltan} vacas sin litros. ¿Guardar solo las ${items.length} anotadas?`)) return;
 
     const leido = validarDatos("ordeno_lista", { fecha, jornada, items });
@@ -107,8 +114,8 @@ export function OrdenoLista({ catalogo, alGuardar }: { catalogo: Catalogo; alGua
       escribirBorrador(turno.clave, {});
       setTurno({ ...turno, valores: {} });
       setFiltro("");
-    } catch {
-      setError("No se pudo guardar en el teléfono. Revisa que haya espacio disponible.");
+    } catch (e) {
+      setError(e instanceof OrdenoRepetidoError ? e.message : "No se pudo guardar en el teléfono. Revisa que haya espacio disponible.");
     } finally {
       setGuardando(false);
     }
@@ -146,44 +153,66 @@ export function OrdenoLista({ catalogo, alGuardar }: { catalogo: Catalogo; alGua
         </Chip>
       </div>
 
+      {pendientes.length === 0 && vacas.length > 0 && (
+        <p role="status" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 font-semibold text-emerald-800">
+          Ya se registró el ordeño {jornada === "am" ? "de la mañana" : "de la tarde"} de todas estas vacas. No se puede registrar dos veces la misma jornada.
+        </p>
+      )}
+
       {vacas.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-300 p-5 text-center text-slate-500">
           No hay vacas en ordeño en los datos descargados. Toca «Todas» para ver todas las vacas y novillas.
         </p>
       ) : (
         <ol className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200">
-          {visibles.map((a, i) => {
+          {visibles.map((a) => {
             const valor = valores[a.id] ?? "";
             const invalido = Number.isNaN(aLitros(valor));
             const anterior = jornada === "am" ? a.litros_am : a.litros_pm;
+            const bloqueada = ordenada(a);
+            // Las casillas (y el salto con Enter) van en el orden de las vacas que todavía se pueden anotar.
+            const i = editables.indexOf(a);
             return (
-              <li key={a.id} className={clsx("flex items-center gap-3 px-3 py-2", valor.trim() && !invalido && "bg-emerald-50/60")}>
-                <label htmlFor={`litros-${a.id}`} className="min-w-0 flex-1">
-                  <span className="block text-lg font-bold leading-tight text-slate-900">{a.chapeta ?? a.codigo}</span>
+              <li
+                key={a.id}
+                className={clsx(
+                  "flex items-center gap-3 px-3 py-2",
+                  bloqueada ? "bg-slate-50 text-slate-500" : valor.trim() && !invalido && "bg-emerald-50/60",
+                )}
+              >
+                <label htmlFor={bloqueada ? undefined : `litros-${a.id}`} className="min-w-0 flex-1">
+                  <span className={clsx("block text-lg font-bold leading-tight", bloqueada ? "text-slate-500" : "text-slate-900")}>{a.chapeta ?? a.codigo}</span>
                   <span className="block truncate text-sm text-slate-500">
                     {a.nombre}
                     {anterior != null && <span className="text-slate-400"> · antes {formatoNumero(anterior)} L</span>}
                   </span>
                 </label>
-                <input
-                  id={`litros-${a.id}`}
-                  ref={(el) => {
-                    entradas.current[i] = el;
-                  }}
-                  value={valor}
-                  onChange={(e) => anotar(a.id, e.target.value)}
-                  onKeyDown={(e) => siguiente(e, i)}
-                  onFocus={(e) => e.target.select()}
-                  inputMode="decimal"
-                  enterKeyHint={i === visibles.length - 1 ? "done" : "next"}
-                  autoComplete="off"
-                  placeholder="L"
-                  aria-invalid={invalido}
-                  className={clsx(
-                    "h-14 w-24 rounded-xl border bg-white px-3 text-right text-2xl font-bold text-slate-900 focus:outline-none focus:ring-4",
-                    invalido ? "border-red-400 ring-red-200" : "border-slate-300 focus:border-campo focus:ring-campo/15",
-                  )}
-                />
+                {bloqueada ? (
+                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-800">
+                    <CircleCheck className="h-4 w-4" aria-hidden />
+                    Ya ordeñada
+                  </span>
+                ) : (
+                  <input
+                    id={`litros-${a.id}`}
+                    ref={(el) => {
+                      entradas.current[i] = el;
+                    }}
+                    value={valor}
+                    onChange={(e) => anotar(a.id, e.target.value)}
+                    onKeyDown={(e) => siguiente(e, i)}
+                    onFocus={(e) => e.target.select()}
+                    inputMode="decimal"
+                    enterKeyHint={i === editables.length - 1 ? "done" : "next"}
+                    autoComplete="off"
+                    placeholder="L"
+                    aria-invalid={invalido}
+                    className={clsx(
+                      "h-14 w-24 rounded-xl border bg-white px-3 text-right text-2xl font-bold text-slate-900 focus:outline-none focus:ring-4",
+                      invalido ? "border-red-400 ring-red-200" : "border-slate-300 focus:border-campo focus:ring-campo/15",
+                    )}
+                  />
+                )}
               </li>
             );
           })}
@@ -193,7 +222,8 @@ export function OrdenoLista({ catalogo, alGuardar }: { catalogo: Catalogo; alGua
       <div className="sticky bottom-24 z-10 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
         <p className="mb-2 flex justify-between text-sm font-bold text-slate-700">
           <span>
-            {anotadas.length} de {vacas.length} vacas
+            {anotadas.length} de {pendientes.length} vacas
+            {yaOrdenadas > 0 && <span className="font-semibold text-slate-500"> · {yaOrdenadas} ya ordeñada{yaOrdenadas === 1 ? "" : "s"}</span>}
           </span>
           <span className="text-lg text-slate-900">Total {formatoNumero(total)} L</span>
         </p>
@@ -207,11 +237,14 @@ export function OrdenoLista({ catalogo, alGuardar }: { catalogo: Catalogo; alGua
           type="button"
           onClick={guardar}
           disabled={guardando}
-          className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-campo text-lg font-bold text-white disabled:opacity-60"
+          className={clasesGuardar(anotadas.length > 0 && !guardando, "min-h-14")}
         >
-          <Save className="h-5 w-5" aria-hidden />
+          {guardando ? <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden /> : <Save className="h-5 w-5" aria-hidden />}
           {guardando ? "Guardando…" : `Guardar ordeño ${jornada.toUpperCase()}`}
         </button>
+        {anotadas.length > 0 && !guardando && (
+          <p className="mt-2 text-center text-xs font-semibold text-guardar">Tienes litros sin guardar: toca Guardar para que no se pierdan.</p>
+        )}
       </div>
     </div>
   );

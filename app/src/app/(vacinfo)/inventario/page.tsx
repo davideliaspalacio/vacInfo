@@ -136,7 +136,7 @@ export default async function InventarioPage(props: PageProps<"/inventario">) {
               ))}
             </select>
           </label>
-          <button className="boton-accion rounded-xl bg-lima px-4 py-3 font-bold text-bosque">Ver finca</button>
+          <button className="boton-accion rounded-xl bg-lima px-4 py-3 font-bold text-bosque">Seleccionar finca</button>
         </form>
         <RangoFechas
           ruta="/inventario"

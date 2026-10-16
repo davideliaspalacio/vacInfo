@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { soloLectura } from "@/lib/permisos";
-import { obtenerSesion } from "@/lib/sesion";
-import { BotonVolver, Encabezado, Tarjeta, Vacio } from "@/components/ui";
+import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
+import { Encabezado, Tarjeta, Vacio } from "@/components/ui";
 import { FormularioBien } from "@/components/fincas/formulario-bien";
 import { fincasConCodigos } from "@/components/fincas/consultas";
 import { guardarBien } from "../actions";
@@ -16,13 +16,19 @@ export default async function NuevoBien({ searchParams }: PageProps<"/bienes/nue
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
-      <BotonVolver href={volver} />
       <Encabezado eyebrow="Hoja informativa bien o servicio" titulo="Nueva ficha de bien" descripcion="Equipos, vehículos, herramientas e infraestructura de la finca." />
       <Tarjeta>
         {fincas.length === 0 ? (
           <Vacio>Primero crea una finca.</Vacio>
         ) : (
-          <FormularioBien accion={guardarBien.bind(null, null)} fincas={fincas} fincaInicial={fincaInicial} cancelar={volver} />
+          <FormularioBien
+            accion={guardarBien.bind(null, null)}
+            fincas={fincas}
+            fincaInicial={fincaInicial}
+            cancelar={volver}
+            organizacionId={sesion.organizacionId}
+            puedeFoto={ROLES_GESTORES.includes(sesion.rol)}
+          />
         )}
       </Tarjeta>
     </div>

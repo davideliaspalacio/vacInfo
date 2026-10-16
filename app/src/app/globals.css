@@ -18,9 +18,24 @@
   --color-alerta: #a53b2b;
   --color-campo: #2563eb;
   --color-campo-oscuro: #1d4ed8;
+  /* Botón Guardar con datos sin enviar: naranja fuerte (5,2:1 con texto blanco). */
+  --color-guardar: #c2410c;
+  --color-guardar-oscuro: #9a3412;
 
   --font-sans: var(--font-dm-sans), system-ui, sans-serif;
   --font-display: var(--font-fraunces), Georgia, serif;
+
+  /* Pulso lento (1,2 s) para recordar que falta guardar. Solo cambia el halo: el color y el contraste no se tocan. */
+  --animate-recordar-guardar: recordar-guardar 1.2s ease-in-out infinite;
+  @keyframes recordar-guardar {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgba(194, 65, 12, 0.55);
+    }
+    50% {
+      box-shadow: 0 0 0 10px rgba(194, 65, 12, 0);
+    }
+  }
 }
 
 body {

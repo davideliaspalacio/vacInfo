@@ -1,16 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
+import { urlFirmadaFoto } from "@/lib/fotos";
 import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, litros, num } from "@/lib/formato";
 import { consultarPagina, leerPagina, paginarUnion } from "@/lib/paginacion";
 import { atajosDias, completarRango, leerRangoPedido, textoRango } from "@/lib/rango";
-import { BotonVolver, Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
 import { RangoFechas } from "@/components/rango-fechas";
 import { todasLasFilas } from "@/components/informes/consultas";
+import { FotoFicha } from "@/components/foto";
 import { Dato } from "@/components/fincas/campo";
 import { CodigoQR } from "@/components/fincas/codigo-qr";
 import { GraficoProduccion } from "@/components/fincas/grafico-produccion";
@@ -47,6 +49,7 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
   if (!animal) notFound();
 
   // hasta = fecha de corte del estado reproductivo y del levante; desde–hasta filtra producción e historiales.
+  const fotoUrl = await urlFirmadaFoto(supabase, animal.foto_url);
   const referencia = await corteDeFinca(supabase, animal.finca_id);
   const rango = completarRango(leerRangoPedido(sp), referencia, { dias: DIAS_POR_DEFECTO });
   const { desde, hasta: corte } = rango;
@@ -159,10 +162,9 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
 
   return (
     <div className="space-y-8">
-      <BotonVolver href={`/fincas/${animal.finca_id}`}>{animal.fincas?.nombre ?? "Finca"}</BotonVolver>
 
       <Encabezado
-        eyebrow="Hoja informativa ser vivo"
+        eyebrow="Hoja informativa animal"
         titulo={animal.nombre}
         descripcion={
           <>
@@ -231,9 +233,16 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
           {animal.notas && <p className="mt-4 rounded-2xl bg-crema p-4 text-sm text-tinta">{animal.notas}</p>}
         </Tarjeta>
 
-        <Tarjeta className="flex flex-col items-center justify-center">
-          <CodigoQR codigo={animal.codigo} nombre={animal.nombre} detalle={animal.fincas?.nombre} />
-        </Tarjeta>
+        <div className="space-y-6">
+          {fotoUrl && (
+            <Tarjeta>
+              <FotoFicha url={fotoUrl} alt={`Foto de ${animal.nombre}`} />
+            </Tarjeta>
+          )}
+          <Tarjeta className="flex flex-col items-center justify-center">
+            <CodigoQR codigo={animal.codigo} nombre={animal.nombre} detalle={animal.fincas?.nombre} />
+          </Tarjeta>
+        </div>
       </div>
 
       <Tarjeta>

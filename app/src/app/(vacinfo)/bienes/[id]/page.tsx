@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BellRing, Pencil } from "lucide-react";
+import { urlFirmadaFoto } from "@/lib/fotos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { fecha, hoyISO, num } from "@/lib/formato";
 import { consultarPagina, leerPagina } from "@/lib/paginacion";
 import { atajosDias, completarRango, leerRangoPedido, textoRango } from "@/lib/rango";
-import { BotonVolver, Encabezado, Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { Encabezado, Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
 import { RangoFechas } from "@/components/rango-fechas";
+import { FotoFicha } from "@/components/foto";
 import { Dato } from "@/components/fincas/campo";
 import { CodigoQR } from "@/components/fincas/codigo-qr";
 import { ESTADOS_BIEN, TIPOS_BIEN, TIPOS_MANTENIMIENTO } from "@/components/fincas/etiquetas";
@@ -44,12 +46,12 @@ export default async function FichaBien({ params, searchParams }: PageProps<"/bi
   ]);
   if (!bien) notFound();
 
+  const fotoUrl = await urlFirmadaFoto(supabase, bien.foto_url);
   const estado = ESTADOS_BIEN[bien.estado];
   const garantiaVigente = bien.garantia_hasta ? bien.garantia_hasta >= hoyISO() : null;
 
   return (
     <div className="space-y-8">
-      <BotonVolver href={`/fincas/${bien.finca_id}?tab=bienes`}>{bien.fincas?.nombre ?? "Finca"}</BotonVolver>
 
       <Encabezado
         eyebrow="Hoja informativa bien o servicio"
@@ -99,9 +101,16 @@ export default async function FichaBien({ params, searchParams }: PageProps<"/bi
           )}
         </Tarjeta>
 
-        <Tarjeta className="flex flex-col items-center justify-center">
-          <CodigoQR codigo={bien.codigo} nombre={bien.nombre} detalle={bien.fincas?.nombre} />
-        </Tarjeta>
+        <div className="space-y-6">
+          {fotoUrl && (
+            <Tarjeta>
+              <FotoFicha url={fotoUrl} alt={`Foto de ${bien.nombre}`} />
+            </Tarjeta>
+          )}
+          <Tarjeta className="flex flex-col items-center justify-center">
+            <CodigoQR codigo={bien.codigo} nombre={bien.nombre} detalle={bien.fincas?.nombre} />
+          </Tarjeta>
+        </div>
       </div>
 
       <Tarjeta id="mantenimientos" className="scroll-mt-6">

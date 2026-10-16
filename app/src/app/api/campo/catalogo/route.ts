@@ -1,15 +1,28 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { corteDeFinca } from "@/lib/datos";
-import { hoyISO } from "@/lib/formato";
+import { hoyISO, sumarDias } from "@/lib/formato";
 import { gruposDeFinca } from "@/components/potreros/rotacion";
 import { leerBandeja } from "@/lib/offline/mensajes";
 import { REGLAS, limitar, respuestaLimite } from "@/lib/limites";
-import type { AnimalCatalogo, BandejaMensajes, Catalogo, FincaResumen } from "@/lib/offline/tipos";
+import type { AnimalCatalogo, BandejaMensajes, Catalogo, FincaResumen, Jornada, OrdenoRegistrado } from "@/lib/offline/tipos";
 
 const SIN_CACHE = { "Cache-Control": "no-store" };
+/** Días hacia atrás (desde hoy y desde el corte) de los que se mandan los ordeños ya registrados. */
+const DIAS_ORDENOS = 2;
+const MAX_ORDENOS = 3000;
 
 const normalizar = (s: string) => s.trim().replace(/\s+/g, " ");
+
+/**
+ * Fechas de las que se revisa si la vaca ya se ordeñó: hoy y los días anteriores, más el corte de la finca
+ * (en los datos de demostración el último ordeño es anterior a hoy).
+ */
+function fechasDeOrdenos(hoy: string, corte: string) {
+  const fechas = new Set<string>();
+  for (const base of [hoy, corte]) for (let d = 0; d <= DIAS_ORDENOS; d++) fechas.add(sumarDias(base, -d));
+  return [...fechas];
+}
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -36,7 +49,7 @@ export async function GET(request: Request) {
   if (!finca) return NextResponse.json({ error: "No tienes acceso a esa finca." }, { status: 404, headers: SIN_CACHE });
 
   const corte = await corteDeFinca(supabase, finca.id);
-  const [animales, estados, potreros, abiertas, grupos, bienes, insumos, servicios] = await Promise.all([
+  const [animales, estados, potreros, abiertas, grupos, bienes, insumos, servicios, ordenos] = await Promise.all([
     supabase
       .from("animales")
       .select("id, codigo, chapeta, nombre, categoria, sexo, fecha_destete")
@@ -56,8 +69,16 @@ export async function GET(request: Request) {
       .not("toro_nombre", "is", null)
       .order("fecha", { ascending: false })
       .limit(1000),
+    // Ordeños ya registrados de los últimos días: el teléfono los usa para no dejar registrar dos veces la misma jornada.
+    supabase
+      .from("ordenos")
+      .select("animal_id, fecha, jornada, animales!inner(finca_id)")
+      .eq("animales.finca_id", finca.id)
+      .in("fecha", fechasDeOrdenos(hoyISO(), corte))
+      .limit(MAX_ORDENOS),
   ]);
-  const fallo = animales.error ?? estados.error ?? potreros.error ?? abiertas.error ?? bienes.error ?? insumos.error ?? servicios.error;
+  const fallo =
+    animales.error ?? estados.error ?? potreros.error ?? abiertas.error ?? bienes.error ?? insumos.error ?? servicios.error ?? ordenos.error;
   if (fallo) return NextResponse.json({ error: fallo.message }, { status: 500, headers: SIN_CACHE });
 
   // Toros conocidos: los usados en servicios (del más reciente al más viejo) y los toros de la finca.
@@ -70,6 +91,12 @@ export async function GET(request: Request) {
   (servicios.data ?? []).forEach((s) => agregarToro(s.toro_nombre));
 
   const estadoPorAnimal = new Map((estados.data ?? []).map((e) => [e.animal_id, e]));
+  const ordenosPorAnimal = new Map<string, OrdenoRegistrado[]>();
+  for (const o of ordenos.data ?? []) {
+    const lista = ordenosPorAnimal.get(o.animal_id) ?? [];
+    lista.push({ fecha: o.fecha, jornada: o.jornada as Jornada });
+    ordenosPorAnimal.set(o.animal_id, lista);
+  }
   const catalogo: Catalogo = {
     finca_id: finca.id,
     finca: { id: finca.id, nombre: finca.nombre, municipio: finca.municipio },
@@ -88,6 +115,7 @@ export async function GET(request: Request) {
         parto_esperado: e?.parto_esperado ?? null,
         litros_am: e?.litros_am ?? null,
         litros_pm: e?.litros_pm ?? null,
+        ordenos_recientes: (ordenosPorAnimal.get(a.id) ?? []).sort((x, y) => y.fecha.localeCompare(x.fecha) || y.jornada.localeCompare(x.jornada)),
       };
     }),
     potreros_estado: potreros.data ?? [],

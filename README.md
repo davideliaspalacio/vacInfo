@@ -204,7 +204,7 @@ flowchart LR
 | Inventario | `/inventario` | Saldo por insumo, días que alcanza, mínimos, catálogo y **consumo automático** |
 | Mensajes | `/mensajes` | Alertas automáticas, comentarios de VacDaTa y mensajes al equipo |
 | Equipo | `/equipo` | Miembros, roles, fincas permitidas, invitaciones con código/enlace/QR |
-| Importar | `/importar` | Carga de planillas quincenales en Excel, sin duplicar |
+| Importar | `/importar` | Dos pestañas: planillas quincenales de ordeño y planilla de implementación de seres vivos (plantilla descargable), sin duplicar |
 
 ---
 
@@ -372,7 +372,22 @@ flowchart LR
     A --> LOG["importaciones"]
 ```
 
+#### Planilla de implementación de seres vivos
+
+```mermaid
+flowchart LR
+    T["/importar/plantilla-seres-vivos<br/>plantilla .xlsx en blanco"] --> L["Libro lleno"]
+    L --> P["seres-vivos.ts<br/>columnas por título<br/>categoría por especie + sexo + edad"]
+    P --> V["Vista previa<br/>nuevos · ya registrados · advertencias"]
+    V --> A["seres-vivos-aplicar.ts<br/>fichas + pesaje inicial + madre enlazada"]
+    A --> LOG["importaciones"]
+```
+
+La segunda pestaña de `/importar` carga el listado con el que el cliente da de alta todos los animales de una finca: `#, ESPECIE, RAZA, COLOR, SEXO, NOMBRE, FECHA NACIMIENTO, CHAPETA, PESO, PADRE, CHAPETA PADRE, MADRE, CHAPETA MADRE`. La etapa se deriva de la especie, el sexo y la edad al importar (bovino hembra < 12 meses ternera y ≥ 12 novilla; macho < 12 ternero, 12–24 novillo y > 24 toro; sin fecha de nacimiento la hembra queda vaca y el macho toro); el peso crea además un registro en `pesajes` para la curva de crecimiento de Levante, y la chapeta de la madre enlaza `madre_id` cuando coincide con un animal de la finca o con otra fila del mismo archivo (si no, se guardan `madre_nombre` y `madre_chapeta`). La chapeta es la llave para no duplicar: subir dos veces el mismo archivo no crea nada nuevo.
+
 ### 8.5 Informe contable
+
+Cada ítem de costo se entra de dos maneras: **valor al mes** (como siempre) o **por animal** —`modo: "por_animal"` con `cantidad`, `unidad` (kg / L / unidad), `precio_unitario`, `grupo` (`vacas_ordeno`, `vacas_horras`, `levante`, `todos`: los mismos del consumo automático de inventario) y `periodo` (`dia` / `mes`)—. En ese caso `lib/finanzas.ts › calcularItem` calcula `consumoMes = cantidad × animales del grupo × (periodo "dia" ? 30 : 1)` y `mes = consumoMes × precio_unitario` con el conteo real de la finca, y el informe contable muestra el consumo del mes junto al valor en pesos. El `mes` calculado también se guarda en el jsonb para que las lecturas antiguas sigan funcionando.
 
 `lib/finanzas.ts › calcularInforme(parametros)` reproduce el modelo del consultor: ingresos por leche, costos por categoría, utilidad y margen con semáforo (rentable ≥ 8 %, ajustada ≥ 3 %), costo y utilidad por litro, punto de equilibrio en litros, valorización de levante y flujo de caja. Está probado contra el PDF original (`src/lib/__tests__/finanzas.test.ts`).
 
@@ -433,6 +448,12 @@ Toda tabla de eventos guarda `registrado_por` y `registrado_en`.
 | `20260912000007_liberar_sincronizacion.sql` | Política para liberar marcas de sincronización |
 | `20260912000008_catalogos.sql` | Manual del trabajador y plan sanitario |
 | `20260913000009_ajustes.sql` | Consultor solo lectura, eventos programados, consumo automático, rendimiento, índices, `aplicar_baja` security definer |
+| `20260914000010_rate_limit.sql` | Tabla `limites_uso` y función `consumir_limite` (rate limiting) |
+| `20260914000011_etapas_y_terminologia.sql` | Etapa `novillo` en el enum de categorías |
+| `20260914000012_etapas_y_terminologia_datos.sql` | Sin «ternerona», textos «vaca seca», funciones recreadas |
+| `20260914000013_alertas_descartadas.sql` | Notificaciones descartables por usuario |
+| `20261016000014_padres_chapeta.sql` | Chapeta del padre y de la madre en `animales` (plantilla de seres vivos) |
+| `20261016000015_fotos.sql` | Bucket `fotos` de Storage, función de ruta y políticas por empresa |
 
 **Funciones principales:** `estado_reproductivo`, `resumen_finca`, `alertas_finca`, `eventos_calendario`, `indicadores_mensuales`, `levante_finca`, `estado_potreros`, `saldo_insumos`, `animales_por_dia`, `ultimo_ordeno`, `registrar_parto`, `registrar_destete`, `crear_organizacion`, `ver_invitacion`, `aceptar_invitacion`.
 **Ayudantes de RLS:** `es_miembro`, `es_gestor`, `puede_ver_finca`, `puede_ver_animal`, `puede_registrar_finca`, `puede_registrar_animal`, `puede_registrar_organizacion`, `puede_gestionar_finca`.
@@ -585,7 +606,11 @@ VacDaTa trata el 429 como “reintentar más tarde”: los registros siguen pend
 
 ### Cabeceras de seguridad
 
-`next.config.ts` envía `Content-Security-Policy` (sin orígenes externos salvo Supabase), `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` (cámara solo para “Escanear chapeta”) y `Strict-Transport-Security` en producción.
+`next.config.ts` envía `Content-Security-Policy` (sin orígenes externos salvo Supabase), `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` (cámara solo para tomar la foto del animal, bien o finca) y `Strict-Transport-Security` en producción.
+
+### Fotos
+
+Las fotos de animales, bienes y fincas viven en el bucket privado `fotos` de Supabase Storage, con ruta `{organizacion_id}/{tipo}/{uuid}.jpg`. En la base se guarda la ruta, nunca una URL: la ficha firma el enlace por una hora. Ver: cualquier miembro de la empresa; subir, cambiar o borrar: solo gestores (el consultor no puede). El navegador reduce la imagen a 1600 px antes de subirla.
 
 ### Paginación
 

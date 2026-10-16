@@ -86,7 +86,7 @@ function FilaMiembro({
   function quitar() {
     const pregunta = esYo
       ? "¿Seguro que quieres salir de la empresa? Perderás el acceso a sus fincas."
-      : `¿Quitar a ${miembro.nombre} del equipo? Ya no podrá ingresar a la empresa.`;
+      : `¿Quitar a ${miembro.nombre} de los empleados? Ya no podrá ingresar a la empresa.`;
     if (window.confirm(pregunta)) ejecutar(() => quitarMiembro(miembro.usuarioId));
   }
 

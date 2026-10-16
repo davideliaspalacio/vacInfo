@@ -42,7 +42,7 @@ export default async function CampoLayout({ children }: LayoutProps<"/campo">) {
           {ROLES_VACINFO.includes(rol) && (
             <Link href="/" className="mt-2 inline-flex items-center gap-1.5 px-1 text-xs font-bold text-campo-oscuro">
               <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-              Volver a VacInfo
+              Ir a VacInfo
             </Link>
           )}
         </header>

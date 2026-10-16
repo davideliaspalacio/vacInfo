@@ -1,4 +1,5 @@
 import { borrar, contar, guardar, leer, leerTodos, transaccion } from "./idb";
+import { indiceOrdenos, revisarOrdenoRepetido } from "./ordenos";
 import { resumir } from "./resumen";
 import type {
   Accion,
@@ -28,6 +29,14 @@ export class SinSesionError extends Error {
 export class SinConexionError extends Error {
   constructor() {
     super("Sin señal. Los registros siguen guardados en el teléfono.");
+  }
+}
+
+/** Esa vaca ya tiene el ordeño de esa fecha y jornada: no se encola otro (también sin señal). */
+export class OrdenoRepetidoError extends Error {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = "OrdenoRepetidoError";
   }
 }
 
@@ -139,7 +148,7 @@ export async function descargarCatalogo(fincaId: string): Promise<Catalogo> {
 function completarCatalogo(c: Catalogo): Catalogo {
   return {
     ...c,
-    animales: c.animales.map((a) => ({ ...a, fecha_destete: a.fecha_destete ?? null })),
+    animales: c.animales.map((a) => ({ ...a, fecha_destete: a.fecha_destete ?? null, ordenos_recientes: a.ordenos_recientes ?? [] })),
     potreros_estado: c.potreros_estado ?? [],
     dias_descanso_objetivo: c.dias_descanso_objetivo ?? 35,
     grupos: c.grupos ?? [],
@@ -223,7 +232,17 @@ function nuevoId() {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
+/** Última barrera antes de guardar en el teléfono: ningún segundo ordeño de la misma vaca, fecha y jornada. */
+async function revisarAntesDeEncolar(accion: Accion, datos: Record<string, unknown>, fincaId: string) {
+  if (accion !== "ordeno" && accion !== "ordeno_lista") return;
+  const [cola, historial, catalogo] = await Promise.all([listarCola(), listarHistorial(), leerCatalogo(fincaId).catch(() => undefined)]);
+  const problema = revisarOrdenoRepetido(accion, datos, indiceOrdenos([...cola, ...historial], catalogo));
+  if (problema) throw new OrdenoRepetidoError(problema);
+}
+
 export async function encolar(accion: Accion, datos: Record<string, unknown>, fincaId: string, animal?: AnimalCatalogo) {
+  await revisarAntesDeEncolar(accion, datos, fincaId);
+
   const registro: RegistroCola = {
     cliente_id: nuevoId(),
     accion,

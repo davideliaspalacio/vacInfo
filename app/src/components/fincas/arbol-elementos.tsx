@@ -28,7 +28,7 @@ export async function ArbolElementos({ fincaId, nombre }: { fincaId: string; nom
         <Warehouse className="h-6 w-6" aria-hidden />
         <span className="font-display text-xl">{nombre}</span>
         <span className="ml-auto text-sm font-normal text-leche/75">
-          {animales?.length ?? 0} seres vivos · {bienes?.length ?? 0} bienes
+          {animales?.length ?? 0} animales · {bienes?.length ?? 0} bienes
         </span>
       </div>
 
@@ -36,11 +36,11 @@ export async function ArbolElementos({ fincaId, nombre }: { fincaId: string; nom
         <div className="rounded-2xl bg-lima-suave p-4">
           <strong className="flex items-center gap-2 text-bosque">
             <PawPrint className="h-5 w-5" aria-hidden />
-            Seres vivos ({animales?.length ?? 0})
+            Animales ({animales?.length ?? 0})
           </strong>
           {gruposAnimales.length === 0 ? (
             <div className="mt-3">
-              <Vacio>Sin seres vivos activos.</Vacio>
+              <Vacio>Sin animales activos.</Vacio>
             </div>
           ) : (
             <div className="ml-3 mt-3 space-y-4 border-l-2 border-dashed border-[#9eb386] pl-5">

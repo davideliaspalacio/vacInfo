@@ -112,7 +112,7 @@ export default async function CalendarioPage(props: PageProps<"/calendario">) {
       <Encabezado
         eyebrow={`Calendario · ${finca.nombre}`}
         titulo="Calendario de la finca"
-        descripcion={`Lo realizado, lo programado y lo agendado por el equipo. Las fechas programadas se calculan al corte del ${fecha(corte, true)}.`}
+        descripcion={`Lo realizado, lo programado y lo agendado por los empleados. Las fechas programadas se calculan al corte del ${fecha(corte, true)}.`}
         acciones={<BotonImprimir />}
       />
 
@@ -130,7 +130,7 @@ export default async function CalendarioPage(props: PageProps<"/calendario">) {
               ))}
             </select>
           </label>
-          <button className="boton-accion rounded-xl bg-lima px-4 py-3 font-bold text-bosque">Ver finca</button>
+          <button className="boton-accion rounded-xl bg-lima px-4 py-3 font-bold text-bosque">Seleccionar finca</button>
         </form>
         <nav aria-label="Cambiar de mes" className="flex flex-wrap items-center gap-2">
           <Link

@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { Registro } from "@/components/offline/registro";
 
-export const metadata: Metadata = { title: { absolute: "Registrar · VacDaTa" } };
+export const metadata: Metadata = { title: { absolute: "Registrar evento finca · VacDaTa" } };
 
 export default function RegistrarPage() {
   return (

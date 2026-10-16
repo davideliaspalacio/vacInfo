@@ -6,6 +6,14 @@ import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { leerLibro } from "@/lib/importador/leer";
 import { combinarHojas } from "@/lib/importador/combinar";
 import { aplicarPlan, previsualizar, type ResultadoImportacion, type VistaPrevia } from "@/lib/importador/aplicar";
+import { leerPlanillaSeresVivos } from "@/lib/importador/seres-vivos";
+import {
+  aplicarSeresVivos,
+  previsualizarSeresVivos,
+  type ResultadoSeresVivos,
+  type VistaPreviaSeresVivos,
+} from "@/lib/importador/seres-vivos-aplicar";
+import { hoyISO } from "@/lib/formato";
 import { REGLAS, limitar, mensajeLimite, type Regla } from "@/lib/limites";
 
 const MAX_BYTES = 15 * 1024 * 1024;
@@ -59,6 +67,54 @@ export async function importarExcel(formData: FormData): Promise<Respuesta<Resul
   try {
     const { sesion, fincaId, archivo, plan } = await prepararPlan(formData, REGLAS.importarExcel);
     const resultado = await aplicarPlan(sesion.supabase, fincaId, plan, archivo);
+    revalidatePath("/", "layout");
+    return { ok: true, datos: resultado };
+  } catch (e) {
+    return { ok: false, mensaje: mensaje(e) };
+  }
+}
+
+/* ───────────────── Planilla de implementación de seres vivos ───────────────── */
+
+async function prepararSeresVivos(formData: FormData, regla: Regla) {
+  const sesion = await obtenerSesion();
+  if (!ROLES_GESTORES.includes(sesion.rol)) throw new Error("Solo propietarios y administradores pueden importar seres vivos.");
+
+  const limite = await limitar(sesion.supabase, sesion.user.id, regla);
+  if (!limite.permitido) throw new Error(mensajeLimite(limite.reintentarEn));
+
+  const r = esquema.safeParse({ finca: formData.get("finca"), archivo: formData.get("archivo") });
+  if (!r.success) throw new Error(r.error.issues[0]?.message ?? "Datos inválidos");
+  if (!sesion.fincas.some((f) => f.id === r.data.finca)) throw new Error("No tienes acceso a esa finca.");
+
+  let plan;
+  try {
+    plan = await leerPlanillaSeresVivos(await r.data.archivo.arrayBuffer(), hoyISO());
+  } catch {
+    throw new Error("No se pudo leer el archivo. Verifica que sea un libro de Excel (.xlsx).");
+  }
+  if (!plan)
+    throw new Error(
+      "El archivo no tiene la tabla de seres vivos. Descarga la plantilla y conserva los títulos de las columnas (ESPECIE, SEXO, NOMBRE, CHAPETA…).",
+    );
+  if (!plan.filas.length) throw new Error("La planilla no tiene ninguna fila que se pueda importar. Revisa que los animales tengan nombre o chapeta y el sexo.");
+
+  return { sesion, fincaId: r.data.finca, archivo: r.data.archivo.name, plan };
+}
+
+export async function analizarSeresVivos(formData: FormData): Promise<Respuesta<VistaPreviaSeresVivos>> {
+  try {
+    const { sesion, fincaId, plan } = await prepararSeresVivos(formData, REGLAS.analizarSeresVivos);
+    return { ok: true, datos: await previsualizarSeresVivos(sesion.supabase, fincaId, plan) };
+  } catch (e) {
+    return { ok: false, mensaje: mensaje(e) };
+  }
+}
+
+export async function importarSeresVivos(formData: FormData): Promise<Respuesta<ResultadoSeresVivos>> {
+  try {
+    const { sesion, fincaId, archivo, plan } = await prepararSeresVivos(formData, REGLAS.importarSeresVivos);
+    const resultado = await aplicarSeresVivos(sesion.supabase, fincaId, plan, archivo);
     revalidatePath("/", "layout");
     return { ok: true, datos: resultado };
   } catch (e) {

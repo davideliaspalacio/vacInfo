@@ -328,7 +328,7 @@ function Matriz({ titulo, filas, hasta, secas = false }: { titulo: string; filas
                 <th>Chapeta</th>
                 <th className="text-left">Nombre</th>
                 <th>Fecha parto anterior</th>
-                <th>Fecha crío</th>
+                <th>Parto actual</th>
                 <th>{secas ? "Días seca" : "Días ordeño"}</th>
                 <th>Preñez más 40</th>
                 <th>Fecha servida</th>

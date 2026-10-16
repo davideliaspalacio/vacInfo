@@ -293,7 +293,7 @@ function Resultado({ resultado }: { resultado: ResultadoImportacion }) {
       </div>
       <div className="mt-6 flex flex-wrap gap-3">
         <Link href={`/fincas/${resultado.fincaId}`} className="boton-accion inline-flex items-center gap-2 rounded-xl bg-bosque px-5 py-3 font-bold text-leche">
-          Ver finca
+          Seleccionar finca
           <ArrowRight className="h-5 w-5" aria-hidden />
         </Link>
         <Link href={informe} className="inline-flex items-center gap-2 rounded-xl border border-bosque/20 px-5 py-3 font-bold text-bosque hover:bg-lima-suave">

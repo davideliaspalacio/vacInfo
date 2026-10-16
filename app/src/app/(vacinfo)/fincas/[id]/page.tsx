@@ -2,14 +2,16 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Calculator, FilePlus2, MapPin, Pencil, Wrench } from "lucide-react";
+import { urlFirmadaFoto } from "@/lib/fotos";
 import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, litros, num, pesos } from "@/lib/formato";
 import type { Params } from "@/lib/paginacion";
 import { atajosDias, completarRango, diasEntre, leerRangoPedido, textoRango, type Rango } from "@/lib/rango";
-import { BotonVolver, Encabezado, Metrica, Tarjeta } from "@/components/ui";
+import { Encabezado, Metrica, Tarjeta } from "@/components/ui";
 import { RangoFechas } from "@/components/rango-fechas";
+import { FotoFicha } from "@/components/foto";
 import { alertasDeFinca, resumenAlCorte } from "@/components/fincas/consultas";
 import { Bloque, EsqueletoMetricas, EsqueletoTabla } from "@/components/fincas/esqueletos";
 import { Pestanas } from "@/components/fincas/pestanas";
@@ -60,6 +62,8 @@ export default async function FichaFinca({ params, searchParams }: PageProps<"/f
   const { data: finca } = await supabase.from("fincas").select("*").eq("id", id).maybeSingle();
   if (!finca) notFound();
 
+  const fotoUrl = await urlFirmadaFoto(supabase, finca.foto_url);
+
   const claveRango = `${pedido.desde ?? ""}|${pedido.hasta ?? ""}|${pedido.todo}`;
   const enlace = (t: string) => {
     const q = new URLSearchParams({ tab: t });
@@ -82,7 +86,6 @@ export default async function FichaFinca({ params, searchParams }: PageProps<"/f
 
   return (
     <div className="space-y-8">
-      <BotonVolver href="/fincas">Fincas</BotonVolver>
 
       <Encabezado
         eyebrow="Hoja informativa finca"
@@ -111,7 +114,7 @@ export default async function FichaFinca({ params, searchParams }: PageProps<"/f
               <>
                 <Link href={`/animales/nuevo?finca=${id}`} className="boton-accion inline-flex items-center gap-2 rounded-xl bg-lima px-4 py-3 font-bold text-bosque">
                   <FilePlus2 className="h-5 w-5" aria-hidden />
-                  Nueva ficha de ser vivo
+                  Ingreso nuevo animal
                 </Link>
                 <Link href={`/bienes/nuevo?finca=${id}`} className="boton-accion inline-flex items-center gap-2 rounded-xl bg-lima-suave px-4 py-3 font-bold text-bosque">
                   <Wrench className="h-5 w-5" aria-hidden />
@@ -121,7 +124,7 @@ export default async function FichaFinca({ params, searchParams }: PageProps<"/f
             )}
             <Link href={`/fincas/${id}/costos`} className="boton-accion inline-flex items-center gap-2 rounded-xl bg-dorado px-4 py-3 font-bold text-bosque">
               <Calculator className="h-5 w-5" aria-hidden />
-              Parámetros de costos
+              Ingreso costos
             </Link>
             {gestor && (
               <Link href={`/fincas/${id}/editar`} className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-4 py-3 font-bold text-leche hover:bg-white/10">
@@ -132,6 +135,12 @@ export default async function FichaFinca({ params, searchParams }: PageProps<"/f
           </>
         }
       />
+
+      {fotoUrl && (
+        <Tarjeta className="max-w-xs">
+          <FotoFicha url={fotoUrl} alt={`Foto de ${finca.nombre}`} />
+        </Tarjeta>
+      )}
 
       <Suspense key={claveRango} fallback={<EsqueletoResumen />}>
         <ResumenFinca fincaId={id} datos={datos} rango={rango} referencia={referencia} promedio={promedio} searchParams={sp} />

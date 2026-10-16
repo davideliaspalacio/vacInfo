@@ -2,6 +2,8 @@ import Link from "next/link";
 import { BarChart3, BellRing, CalendarDays, LineChart, LogOut, Package, Smartphone, Users, Warehouse } from "lucide-react";
 import { obtenerSesion, ETIQUETA_ROL } from "@/lib/sesion";
 import { cerrarSesion } from "@/app/login/actions";
+import { BotonAtras } from "@/components/boton-atras";
+import { LogoInicio } from "@/components/logo-inicio";
 
 const NAV = [
   { href: "/fincas", etiqueta: "Fincas", icono: Warehouse, clase: "bg-lima-suave" },
@@ -9,7 +11,7 @@ const NAV = [
   { href: "/indicadores", etiqueta: "Indicadores", icono: LineChart, clase: "bg-lima-suave" },
   { href: "/calendario", etiqueta: "Calendario", icono: CalendarDays, clase: "bg-lima-suave" },
   { href: "/inventario", etiqueta: "Inventario", icono: Package, clase: "bg-lima-suave" },
-  { href: "/equipo", etiqueta: "Equipo", icono: Users, clase: "bg-lima-suave" },
+  { href: "/equipo", etiqueta: "Empleados", icono: Users, clase: "bg-lima-suave" },
   { href: "/mensajes", etiqueta: "Mensajes", icono: BellRing, clase: "bg-dorado" },
 ];
 
@@ -23,20 +25,7 @@ export default async function VacInfoLayout({ children }: LayoutProps<"/">) {
 
       <header className="sticky top-0 z-30 border-b border-white/30 bg-leche/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <Link href="/" className="flex items-center gap-3 rounded-xl">
-            <span
-              aria-hidden
-              className="h-10 w-10 rounded-[50%_42%_55%_45%] border-2 border-tinta bg-white shadow-[0_4px_0_rgba(23,63,42,0.18)]"
-              style={{
-                background:
-                  "radial-gradient(circle at 68% 25%, #111 0 13%, transparent 14%), radial-gradient(circle at 28% 68%, #111 0 19%, transparent 20%), #fff",
-              }}
-            />
-            <span>
-              <strong className="font-display block text-xl leading-none text-bosque">VacInfo</strong>
-              <span className="text-xs text-tinta-suave">{sesion.organizacion}</span>
-            </span>
-          </Link>
+          <LogoInicio organizacion={sesion.organizacion} />
 
           <nav aria-label="Navegación principal" className="flex items-center gap-2">
             {NAV.map(({ href, etiqueta, icono: Icono, clase }) => (
@@ -71,7 +60,10 @@ export default async function VacInfoLayout({ children }: LayoutProps<"/">) {
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto w-full max-w-7xl px-5 py-8 sm:px-8">{children}</main>
+      <main className="relative z-10 mx-auto w-full max-w-7xl px-5 py-8 sm:px-8">
+        <BotonAtras />
+        {children}
+      </main>
     </div>
   );
 }

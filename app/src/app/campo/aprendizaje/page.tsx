@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { Microscope } from "lucide-react";
 import { obtenerSesion } from "@/lib/sesion";
-import { Chips, TarjetaCampo, Titulo, Volver, param } from "@/components/campo/ui";
+import { Atras, Chips, TarjetaCampo, Titulo, param } from "@/components/campo/ui";
 
 const SECCIONES = [
   { clave: "manual", etiqueta: "Manual del trabajador" },
@@ -39,7 +39,7 @@ export default async function AprendizajePage({ searchParams }: PageProps<"/camp
 
   return (
     <>
-      <Volver href="/campo" />
+      <Atras href="/campo" />
       <TarjetaCampo>
         <Titulo kicker="Aprendizaje" titulo="Aprende el trabajo de la finca" descripcion="Consulta las tareas, el ciclo de cada vaca y el calendario de vacunas." />
         <Chips items={SECCIONES.map((s) => ({ href: `/campo/aprendizaje?seccion=${s.clave}`, etiqueta: s.etiqueta, activo: s.clave === seccion }))} />

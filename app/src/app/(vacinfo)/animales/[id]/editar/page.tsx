@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
+import { urlFirmadaFoto } from "@/lib/fotos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
-import { BotonVolver, Encabezado, Tarjeta } from "@/components/ui";
+import { Encabezado, Tarjeta } from "@/components/ui";
 import { FormularioAnimal } from "@/components/fincas/formulario-animal";
 import { candidatosParientes, fincasConCodigos, torosDeServicios } from "@/components/fincas/consultas";
 import { guardarAnimal } from "../../actions";
@@ -17,11 +18,11 @@ export default async function EditarAnimal({ params }: PageProps<"/animales/[id]
     torosDeServicios(sesion),
   ]);
   if (!animal) notFound();
+  const fotoUrl = await urlFirmadaFoto(sesion.supabase, animal.foto_url);
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
-      <BotonVolver href={`/animales/${id}`} />
-      <Encabezado eyebrow="Hoja informativa ser vivo" titulo={`Editar ${animal.nombre}`} />
+      <Encabezado eyebrow="Hoja informativa animal" titulo={`Editar ${animal.nombre}`} />
       <Tarjeta>
         <FormularioAnimal
           accion={guardarAnimal.bind(null, id)}
@@ -30,6 +31,9 @@ export default async function EditarAnimal({ params }: PageProps<"/animales/[id]
           torosServicios={torosServicios}
           animal={animal}
           cancelar={`/animales/${id}`}
+          organizacionId={sesion.organizacionId}
+          fotoUrl={fotoUrl}
+          puedeFoto
         />
       </Tarjeta>
     </div>

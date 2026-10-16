@@ -84,7 +84,7 @@ export default async function MensajesPage({ searchParams }: PageProps<"/mensaje
       <Encabezado
         eyebrow="Mensajes y notificaciones"
         titulo="Mensajes"
-        descripcion="Alertas automáticas de todas las fincas, comentarios que llegan desde VacDaTa y mensajes para el equipo."
+        descripcion="Alertas automáticas de todas las fincas, comentarios que llegan desde VacDaTa y mensajes para los empleados."
       />
 
       <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
@@ -113,7 +113,7 @@ export default async function MensajesPage({ searchParams }: PageProps<"/mensaje
           <Tarjeta id="comentarios" className="scroll-mt-6">
             <TituloTarjeta detalle={pendientes ? `${pendientes} sin leer` : undefined}>
               <span className="inline-flex items-center gap-2">
-                <MessageSquareText className="h-5 w-5" aria-hidden /> Comentarios del equipo
+                <MessageSquareText className="h-5 w-5" aria-hidden /> Comentarios de los empleados
               </span>
             </TituloTarjeta>
             {comentarios.filas.length === 0 ? (

@@ -14,8 +14,8 @@ export const ETIQUETA_ROL: Record<Rol, string> = {
 };
 
 export const DESCRIPCION_ROL: Record<Rol, string> = {
-  propietario: "Control total de la empresa y su equipo",
-  administrador: "Gestiona fincas, equipo e informes",
+  propietario: "Control total de la empresa y sus empleados",
+  administrador: "Gestiona fincas, empleados e informes",
   mayordomo: "Coordina la finca y registra desde VacDaTa",
   trabajador: "Registra ordeños y novedades desde el celular",
   veterinario: "Consulta y registra la parte sanitaria",

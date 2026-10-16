@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { rutaFotoValida, type TipoFoto } from "@/lib/fotos";
 
 /** Texto opcional de formulario: vacío → null. */
 export const textoOpcional = z
@@ -19,6 +20,17 @@ export const fechaOpcional = z
   .nullish()
   .transform((v) => v?.trim() || null)
   .refine((v) => v === null || /^\d{4}-\d{2}-\d{2}$/.test(v), "Fecha inválida");
+
+/**
+ * Ruta de la foto que mandó el formulario. Nunca se confía en el navegador: tiene que ser
+ * exactamente {organizacion_id}/{tipo}/{uuid}.jpg con la organización del usuario de la sesión.
+ */
+export const fotoOpcional = (organizacionId: string, tipo: TipoFoto) =>
+  z
+    .string()
+    .nullish()
+    .transform((v) => v?.trim() || null)
+    .refine((v) => v === null || rutaFotoValida(v, organizacionId, tipo), "Vuelve a subir la foto");
 
 export function datosDe(formData: FormData) {
   return Object.fromEntries([...formData.entries()].filter(([, v]) => typeof v === "string")) as Record<string, string>;

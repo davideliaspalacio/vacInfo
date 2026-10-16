@@ -1,13 +1,17 @@
 "use client";
 
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import clsx from "clsx";
-import { ChevronDown, CircleAlert, Save } from "lucide-react";
+import { ChevronDown, CircleAlert, LoaderCircle, Save } from "lucide-react";
 import { Campo, CampoFecha, Casilla, JORNADAS, Opciones, SI_NO, control } from "@/components/campo/ui";
+import { clasesGuardar } from "@/components/campo/boton-guardar";
 import { esLevante } from "@/components/levante/etiquetas";
+import { hoyISO } from "@/lib/formato";
+import { OrdenoRepetidoError } from "@/lib/offline/cliente";
 import { CUARTOS, TIPOS_SALUD, validarDatos } from "@/lib/offline/esquemas";
+import { jornadaLibre, textoYaOrdenada, yaOrdenada } from "@/lib/offline/ordenos";
 import { ETIQUETA_ACCION } from "@/lib/offline/resumen";
-import type { Accion, AnimalCatalogo, Catalogo } from "@/lib/offline/tipos";
+import type { Accion, AnimalCatalogo, Catalogo, Jornada } from "@/lib/offline/tipos";
 
 export type Guardar = (accion: Accion, datos: Record<string, unknown>) => Promise<void>;
 
@@ -23,15 +27,35 @@ function leerFormulario(form: HTMLFormElement) {
 
 export const jornadaActual = () => (new Date().getHours() < 12 ? "am" : "pm");
 
-export function Chip({ activo, onClick, children }: { activo: boolean; onClick: () => void; children: ReactNode }) {
+export function Chip({
+  activo,
+  onClick,
+  bloqueado,
+  motivo,
+  children,
+}: {
+  activo: boolean;
+  onClick: () => void;
+  /** Deshabilitado: `motivo` explica por qué (se lee en el título y con lectores de pantalla). */
+  bloqueado?: boolean;
+  motivo?: string;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={activo}
+      disabled={bloqueado}
+      title={bloqueado ? motivo : undefined}
+      aria-label={bloqueado && motivo && typeof children === "string" ? `${children} · ${motivo}` : undefined}
       className={clsx(
         "inline-flex min-h-11 items-center rounded-full border px-4 text-sm font-bold",
-        activo ? "border-campo bg-campo text-white" : "border-slate-300 bg-white text-slate-700",
+        bloqueado
+          ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+          : activo
+            ? "border-campo bg-campo text-white"
+            : "border-slate-300 bg-white text-slate-700",
       )}
     >
       {children}
@@ -47,6 +71,7 @@ export function FormaRapida({
   descripcion,
   boton,
   revisar,
+  bloqueado,
   children,
 }: {
   accion: Accion;
@@ -57,13 +82,19 @@ export function FormaRapida({
   boton?: string;
   /** Validación adicional con los datos ya limpios; devuelve el mensaje de error o null. */
   revisar?: (datos: Record<string, unknown>) => string | null;
+  /** Motivo por el que no se puede guardar (p. ej. ordeño ya registrado): deshabilita el botón y lo explica. */
+  bloqueado?: string | null;
   children: ReactNode;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  // Solo parpadea cuando hay datos escritos sin guardar.
+  const [sucio, setSucio] = useState(false);
+  const idAviso = useId();
 
   async function enviar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (bloqueado) return setError(bloqueado);
     const form = e.currentTarget;
     const leido = validarDatos(accion, { ...leerFormulario(form), ...fijos });
     if (!leido.ok) return setError(leido.mensaje);
@@ -75,15 +106,16 @@ export function FormaRapida({
       await alGuardar(accion, leido.datos);
       setError(null);
       form.reset();
-    } catch {
-      setError("No se pudo guardar en el teléfono. Revisa que haya espacio disponible.");
+      setSucio(false);
+    } catch (e) {
+      setError(e instanceof OrdenoRepetidoError ? e.message : "No se pudo guardar en el teléfono. Revisa que haya espacio disponible.");
     } finally {
       setGuardando(false);
     }
   }
 
   return (
-    <form onSubmit={enviar} className="space-y-4">
+    <form onSubmit={enviar} onInput={() => setSucio(true)} onChange={() => setSucio(true)} className="space-y-4">
       <h2 className="font-display text-xl font-bold text-slate-900">{titulo ?? ETIQUETA_ACCION[accion]}</h2>
       {descripcion && <p className="-mt-2 text-sm text-slate-500">{descripcion}</p>}
       {children}
@@ -93,15 +125,24 @@ export function FormaRapida({
           {error}
         </p>
       )}
+      {bloqueado && (
+        <p id={idAviso} className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-900">
+          <CircleAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
+          {bloqueado}
+        </p>
+      )}
       <button
         type="submit"
-        disabled={guardando}
-        className="flex min-h-16 w-full items-center justify-center gap-2 rounded-2xl bg-campo text-lg font-bold text-white shadow-lg shadow-campo/25 disabled:opacity-60"
+        disabled={guardando || Boolean(bloqueado)}
+        aria-describedby={bloqueado ? idAviso : undefined}
+        className={clasesGuardar(sucio && !guardando && !bloqueado, "min-h-16")}
       >
-        <Save className="h-5 w-5" aria-hidden />
+        {guardando ? <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden /> : <Save className="h-5 w-5" aria-hidden />}
         {guardando ? "Guardando…" : (boton ?? "Guardar")}
       </button>
-      <p className="-mt-2 text-center text-xs text-slate-500">Queda guardado en el teléfono y se envía cuando haya señal.</p>
+      <p className="-mt-2 text-center text-xs text-slate-500">
+        {sucio && !bloqueado ? "Tienes datos sin guardar: toca Guardar para que no se pierdan." : "Queda guardado en el teléfono y se envía cuando haya señal."}
+      </p>
     </form>
   );
 }
@@ -361,29 +402,76 @@ function CampoToro({ toros }: { toros: string[] }) {
   );
 }
 
+/**
+ * Ordeño de una vaca. No deja registrar dos veces la misma fecha y jornada: la jornada ya registrada
+ * sale marcada y el botón Guardar queda deshabilitado explicando por qué. Funciona sin señal.
+ */
+function FormularioOrdeno({ animal, indice, alGuardar }: { animal: AnimalCatalogo; indice: Set<string>; alGuardar: Guardar }) {
+  const hoy = hoyISO();
+  const [fecha, setFecha] = useState(hoy);
+  const [jornada, setJornada] = useState<Jornada>(() => jornadaLibre(indice, animal.id, hoy, jornadaActual()) ?? jornadaActual());
+  const registrada = (j: Jornada) => yaOrdenada(indice, animal.id, fecha, j);
+
+  function cambiarFecha(nueva: string) {
+    if (!nueva) return;
+    setFecha(nueva);
+    setJornada(jornadaLibre(indice, animal.id, nueva, jornada) ?? jornada);
+  }
+
+  return (
+    <FormaRapida
+      accion="ordeno"
+      fijos={{ animal_id: animal.id, fecha, jornada }}
+      alGuardar={alGuardar}
+      bloqueado={registrada(jornada) ? textoYaOrdenada(fecha, jornada, hoy) : null}
+    >
+      <Campo etiqueta="Fecha">
+        <input type="date" value={fecha} max={hoy} onChange={(e) => cambiarFecha(e.target.value)} className={control} />
+      </Campo>
+      <fieldset>
+        <legend className="mb-2 font-bold text-slate-800">Jornada</legend>
+        <div className="flex flex-wrap gap-2">
+          {JORNADAS.map((j) => {
+            const valor = j.valor as Jornada;
+            const ya = registrada(valor);
+            return (
+              <Chip
+                key={valor}
+                activo={jornada === valor}
+                bloqueado={ya}
+                motivo={ya ? textoYaOrdenada(fecha, valor, hoy) : undefined}
+                onClick={() => setJornada(valor)}
+              >
+                {ya ? `${j.etiqueta} · ya registrada` : j.etiqueta}
+              </Chip>
+            );
+          })}
+        </div>
+      </fieldset>
+      <Numero etiqueta="Litros" name="litros" requerido grande />
+    </FormaRapida>
+  );
+}
+
 export function FormularioAnimalRapido({
   accion,
   animal,
   catalogo,
+  indice,
   alGuardar,
 }: {
   accion: AccionAnimal;
   animal: AnimalCatalogo;
   catalogo: Catalogo;
+  /** Ordeños que el teléfono ya conoce (catálogo + cola), para no repetir jornada. */
+  indice: Set<string>;
   alGuardar: Guardar;
 }) {
-  const [jornada] = useState(jornadaActual);
   const fijos = { animal_id: animal.id };
 
   switch (accion) {
     case "ordeno":
-      return (
-        <FormaRapida accion="ordeno" fijos={fijos} alGuardar={alGuardar}>
-          <CampoFecha />
-          <Opciones etiqueta="Jornada" name="jornada" opciones={JORNADAS} defecto={jornada} requerido />
-          <Numero etiqueta="Litros" name="litros" requerido grande />
-        </FormaRapida>
-      );
+      return <FormularioOrdeno animal={animal} indice={indice} alGuardar={alGuardar} />;
     case "servicio":
       return (
         <FormaRapida accion="servicio" fijos={fijos} alGuardar={alGuardar} descripcion="La palpación queda programada 33 días después.">

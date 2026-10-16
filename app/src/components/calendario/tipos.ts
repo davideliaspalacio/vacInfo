@@ -43,7 +43,7 @@ export const TIPOS: Record<string, Tipo> = {
   fin_retiro: { etiqueta: "Fin de retiro", realizado: false, solido: "", contorno: "border-orange-600 bg-white text-orange-800", punto: "border-2 border-orange-600" },
   destetar: { etiqueta: "Destetar", realizado: false, solido: "", contorno: "border-pasto-oscuro bg-white text-pasto-oscuro", punto: "border-2 border-pasto-oscuro" },
   programado: {
-    etiqueta: "Agendado por el equipo",
+    etiqueta: "Agendado por los empleados",
     realizado: false,
     agenda: true,
     solido: "border-dashed border-indigo-700 bg-indigo-700 text-white",

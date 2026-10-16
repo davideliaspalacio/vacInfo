@@ -7,7 +7,7 @@ import { corteDeFinca } from "@/lib/datos";
 import { fecha, num } from "@/lib/formato";
 import { consultarPagina, leerPagina } from "@/lib/paginacion";
 import { atajosDias, completarRango, leerRangoPedido, textoRango } from "@/lib/rango";
-import { BotonVolver, Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
 import { RangoFechas } from "@/components/rango-fechas";
 import { guardarReglasFinca } from "@/app/(vacinfo)/fincas/actions";
@@ -78,7 +78,6 @@ export default async function PotrerosFinca({ params, searchParams }: PageProps<
 
   return (
     <div className="space-y-8">
-      <BotonVolver href={`/fincas/${id}`}>{finca.nombre}</BotonVolver>
 
       <Encabezado
         eyebrow={`Rotación de potreros · ${finca.nombre}`}

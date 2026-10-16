@@ -57,11 +57,13 @@ export type Database = {
           finca_id: string
           foto_url: string | null
           id: string
+          madre_chapeta: string | null
           madre_id: string | null
           madre_nombre: string | null
           metodo_adquisicion: string | null
           nombre: string
           notas: string | null
+          padre_chapeta: string | null
           padre_nombre: string | null
           peso_kg: number | null
           raza: string | null
@@ -80,11 +82,13 @@ export type Database = {
           finca_id: string
           foto_url?: string | null
           id?: string
+          madre_chapeta?: string | null
           madre_id?: string | null
           madre_nombre?: string | null
           metodo_adquisicion?: string | null
           nombre: string
           notas?: string | null
+          padre_chapeta?: string | null
           padre_nombre?: string | null
           peso_kg?: number | null
           raza?: string | null
@@ -103,11 +107,13 @@ export type Database = {
           finca_id?: string
           foto_url?: string | null
           id?: string
+          madre_chapeta?: string | null
           madre_id?: string | null
           madre_nombre?: string | null
           metodo_adquisicion?: string | null
           nombre?: string
           notas?: string | null
+          padre_chapeta?: string | null
           padre_nombre?: string | null
           peso_kg?: number | null
           raza?: string | null
@@ -1836,6 +1842,7 @@ export type Database = {
           ultimo_servicio: string
         }[]
       }
+      organizacion_de_ruta_foto: { Args: { nombre: string }; Returns: string }
       puede_gestionar_finca: { Args: { f: string }; Returns: boolean }
       puede_registrar_animal: { Args: { a: string }; Returns: boolean }
       puede_registrar_finca: { Args: { f: string }; Returns: boolean }

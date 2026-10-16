@@ -3,7 +3,7 @@ import { CalendarRange, CircleCheck, Lock } from "lucide-react";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { ANIMALES_VACIOS, type ParametrosCostos } from "@/lib/finanzas";
 import { fecha } from "@/lib/formato";
-import { BotonVolver, Encabezado, Tarjeta } from "@/components/ui";
+import { Encabezado, Tarjeta } from "@/components/ui";
 import { EditorCostos } from "@/components/fincas/editor-costos";
 import { conteoCostosPeriodo } from "@/components/fincas/conteo-animales";
 import { guardarCostos } from "./actions";
@@ -66,11 +66,10 @@ export default async function ParametrosCostosFinca({ params, searchParams }: Pa
 
   return (
     <div className="space-y-8">
-      <BotonVolver href={`/fincas/${id}`}>{finca.nombre}</BotonVolver>
       <Encabezado
-        eyebrow={`Parámetros de costos · ${finca.nombre}`}
+        eyebrow={`Ingreso costos · ${finca.nombre}`}
         titulo={`Costos de ${nombrePeriodo(periodo)}`}
-        descripcion="Precios, litros y costos mensuales que alimentan el informe contable. La cantidad de animales se toma de las fichas de la finca. La vista previa se recalcula mientras escribes."
+        descripcion="Precios, litros y costos que alimentan el informe contable. Cada costo se escribe como valor al mes o como gasto por animal (kilo, litro o unidad) y el sistema lo multiplica por los animales de la finca. La cantidad de animales se toma de las fichas. La vista previa se recalcula mientras escribes."
       />
 
       <Tarjeta className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -100,14 +99,14 @@ export default async function ParametrosCostosFinca({ params, searchParams }: Pa
       {sp.guardado === "1" && actual && (
         <p className="flex items-center gap-2 rounded-2xl bg-lima px-4 py-3 font-bold text-bosque">
           <CircleCheck className="h-5 w-5" aria-hidden />
-          Parámetros de {nombrePeriodo(periodo)} guardados.
+          Costos de {nombrePeriodo(periodo)} guardados.
         </p>
       )}
       {!actual && (
         <p className="rounded-2xl bg-dorado/90 px-4 py-3 text-sm font-bold text-bosque">
           {base
-            ? `No hay parámetros para ${nombrePeriodo(periodo)}: se copiaron los de ${nombrePeriodo(base.periodo)}. Ajusta y guarda para crear el periodo.`
-            : `No hay parámetros guardados para esta finca. Llena la plantilla y guarda para crear ${nombrePeriodo(periodo)}.`}
+            ? `No hay costos cargados para ${nombrePeriodo(periodo)}: se copiaron los de ${nombrePeriodo(base.periodo)}. Ajusta y guarda para crear el periodo.`
+            : `No hay costos cargados para esta finca. Llena la plantilla y guarda para crear ${nombrePeriodo(periodo)}.`}
         </p>
       )}
       {!gestor && (

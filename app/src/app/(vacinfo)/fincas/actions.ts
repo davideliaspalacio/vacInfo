@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { borrarFoto } from "@/lib/fotos";
 import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import type { EstadoFormulario } from "@/components/fincas/campo";
 import type { EstadoAccion } from "@/components/fincas/formulario-accion";
-import { datosDe, mensajeErrorBD, numeroOpcional, textoOpcional, textoRequerido } from "@/components/fincas/validacion";
+import { datosDe, fotoOpcional, mensajeErrorBD, numeroOpcional, textoOpcional, textoRequerido } from "@/components/fincas/validacion";
 
 /** Regla numérica de la finca: vacía → se conserva el valor actual (o el predeterminado al crear). */
 const reglaOpcional = numeroOpcional.transform((v) => v ?? undefined);
@@ -72,16 +73,25 @@ export async function guardarFinca(id: string | null, _: EstadoFormulario, formD
   const resultado = esquemaFinca.safeParse(datosDe(formData));
   if (!resultado.success) return { errores: z.flattenError(resultado.error).fieldErrors, mensaje: "Revisa los campos marcados." };
 
+  // La foto llega como ruta del bucket privado; se comprueba que sea de esta empresa y de este tipo.
+  const foto = fotoOpcional(organizacionId, "fincas").safeParse(formData.get("foto_url"));
+  if (!foto.success) return { errores: { foto_url: ["Vuelve a subir la foto"] }, mensaje: "Revisa los campos marcados." };
+  const datos = { ...resultado.data, foto_url: foto.data };
+  const fotoAnterior = id ? (await supabase.from("fincas").select("foto_url").eq("id", id).maybeSingle()).data?.foto_url : null;
+
   const consulta = id
-    ? supabase.from("fincas").update(resultado.data).eq("id", id).select("id").single()
+    ? supabase.from("fincas").update(datos).eq("id", id).select("id").single()
     : supabase
         .from("fincas")
-        .insert({ ...resultado.data, organizacion_id: organizacionId })
+        .insert({ ...datos, organizacion_id: organizacionId })
         .select("id")
         .single();
 
   const { data, error } = await consulta;
   if (error || !data) return { mensaje: error ? mensajeErrorBD(error) : "No se encontró la finca." };
+
+  // Al cambiar o quitar la foto, la anterior se borra del bucket para no acumular archivos sueltos.
+  if (fotoAnterior && fotoAnterior !== foto.data) await borrarFoto(supabase, fotoAnterior);
 
   revalidatePath("/", "layout");
   redirect(`/fincas/${data.id}`);

@@ -273,4 +273,40 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("sincronización sin duplicado
       expect(resultados[2].mensaje).toMatch(/no es de esta finca/);
     });
   });
+
+  // Respaldo del servidor cuando el teléfono no pudo saberlo (dos teléfonos a la vez, catálogo viejo).
+  describe("ordeño repetido de la misma vaca y jornada", () => {
+    const deJosefina = (jornada: "am" | "pm") =>
+      supabase.from("ordenos").select("litros", { count: "exact" }).eq("animal_id", JOSEFINA).eq("fecha", FECHA).eq("jornada", jornada);
+
+    it("no duplica la fila y el registro queda como enviado (no en rojo)", async () => {
+      const antes = await deJosefina("am");
+      expect(antes.count).toBe(1);
+
+      const [suelto] = await registrar([{ cliente_id: id(), accion: "ordeno", datos: { animal_id: JOSEFINA, fecha: FECHA, jornada: "am", litros: 7 } }]);
+      console.log("ordeño repetido · suelto", suelto);
+      expect(suelto.estado).toBe("ok");
+      expect(suelto.mensaje).toMatch(/se conservó el dato anterior/);
+
+      const [porLista] = await registrar([
+        { cliente_id: id(), accion: "ordeno_lista", datos: { fecha: FECHA, jornada: "am", items: [{ animal_id: JOSEFINA, litros: 5 }] } },
+      ]);
+      console.log("ordeño repetido · por lista", porLista);
+      expect(porLista.estado).toBe("ok");
+      expect(porLista.mensaje).toMatch(/ya tenían litros/);
+
+      const despues = await deJosefina("am");
+      expect(despues.count).toBe(1);
+      expect(despues.data).toEqual(antes.data);
+    });
+
+    it("la otra jornada del mismo día sí se puede registrar", async () => {
+      const pm = await deJosefina("pm");
+      expect(pm.count).toBe(1);
+      const [r] = await registrar([{ cliente_id: id(), accion: "ordeno", datos: { animal_id: JOSEFINA, fecha: FECHA, jornada: "pm", litros: 9 } }]);
+      expect(r.estado).toBe("ok");
+      // Ya existía en los datos de prueba: tampoco se duplica, pero es un registro aparte de la jornada AM.
+      expect((await deJosefina("pm")).count).toBe(1);
+    });
+  });
 });

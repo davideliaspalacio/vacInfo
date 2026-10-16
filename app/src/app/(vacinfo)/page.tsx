@@ -6,9 +6,9 @@ import { fecha, litros, num } from "@/lib/formato";
 import { conClave, descartesVigentes, separarAlertas } from "./mensajes/alertas";
 
 const ACCIONES = [
-  { href: "/fincas", texto: "Gestionar fincas", ayuda: "Fichas, animales, bienes y costos", icono: Warehouse, clase: "bg-lima" },
+  { href: "/fincas", texto: "Administrar fincas", ayuda: "Fichas, animales, bienes y costos", icono: Warehouse, clase: "bg-lima" },
   { href: "/informes", texto: "Ver informes", ayuda: "Operativo, administrativo y contable", icono: BarChart3, clase: "bg-lima-suave" },
-  { href: "/mensajes", texto: "Mensajes y notificaciones", ayuda: "Alertas y comentarios del equipo", icono: BellRing, clase: "bg-dorado" },
+  { href: "/mensajes", texto: "Mensajes y notificaciones", ayuda: "Alertas y comentarios de los empleados", icono: BellRing, clase: "bg-dorado" },
 ];
 
 export default async function Inicio() {
@@ -37,7 +37,7 @@ export default async function Inicio() {
         <p className="mb-4 text-sm font-bold uppercase tracking-[0.16em] text-lima">Gestión lechera</p>
         <h1 className="font-display text-6xl font-bold leading-[0.94] text-leche sm:text-7xl lg:text-8xl">VacInfo</h1>
         <p className="mt-6 max-w-2xl text-lg leading-relaxed text-leche/85">
-          Administra tu producción desde la comodidad de tu casa. Conoce tus fincas, organiza tu equipo.
+          Administra tu producción desde la comodidad de tu casa. Conoce tus fincas, organiza tus empleados.
         </p>
         <div className="divisor-campo my-8 max-w-md" />
         <nav aria-label="Accesos principales" className="grid gap-4 sm:grid-cols-3">

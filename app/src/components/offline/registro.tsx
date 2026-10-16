@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import { CircleCheck, Download, MapPin } from "lucide-react";
@@ -16,6 +16,7 @@ import {
   leerCatalogo,
   reintentar,
 } from "@/lib/offline/cliente";
+import { indiceOrdenos } from "@/lib/offline/ordenos";
 import { fechaHora } from "@/lib/offline/resumen";
 import type { Accion, AnimalCatalogo, Catalogo, RegistroCola } from "@/lib/offline/tipos";
 import { AnimalRapido } from "./animal-rapido";
@@ -57,6 +58,8 @@ export function Registro() {
 
   const catalogo = cargado && cargado.finca === fincaId ? cargado.catalogo : undefined;
   const finca = catalogo?.finca ?? fincas.find((f) => f.id === fincaId);
+  // Ordeños que el teléfono ya conoce: lo descargado de la finca, lo que sigue en la cola y lo ya enviado (funciona sin señal).
+  const indiceDeOrdenos = useMemo(() => indiceOrdenos([...cola, ...historial], catalogo), [cola, historial, catalogo]);
 
   const descargar = useCallback(async (id: string) => {
     setDescarga({ activa: true });
@@ -146,7 +149,7 @@ export function Registro() {
 
       {elegir ? (
         <TarjetaCampo>
-          <Titulo kicker="Registrar" titulo="¿En qué finca estás?" descripcion="Los datos de la finca quedan guardados en el teléfono para anotar con o sin señal." />
+          <Titulo kicker="Registrar evento finca" titulo="¿En qué finca estás?" descripcion="Los datos de la finca quedan guardados en el teléfono para anotar con o sin señal." />
           {fincas.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-slate-300 p-5 text-center text-slate-500">
               {enLinea ? "Buscando tus fincas…" : "Conéctate a internet una vez para descargar tus fincas."}
@@ -180,6 +183,8 @@ export function Registro() {
         </TarjetaCampo>
       ) : (
         <>
+          <h1 className="font-display mb-3 text-[1.45rem] font-bold leading-tight text-slate-900">Registrar evento finca</h1>
+
           <section className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-4">
             <div className="flex items-center justify-between gap-3">
               <p className="flex min-w-0 items-center gap-2 text-lg font-bold text-campo-oscuro">
@@ -237,9 +242,9 @@ export function Registro() {
                 {enLinea ? "Descargando los animales de la finca…" : "Aún no hay animales guardados en este teléfono. Descárgalos cuando tengas señal."}
               </p>
             ) : vista === "lista" ? (
-              <OrdenoLista catalogo={catalogo} alGuardar={(accion, datos) => guardar(accion, datos)} />
+              <OrdenoLista catalogo={catalogo} indice={indiceDeOrdenos} alGuardar={(accion, datos) => guardar(accion, datos)} />
             ) : (
-              <AnimalRapido key={catalogo.finca_id} catalogo={catalogo} animalInicial={animalEnlace} alGuardar={guardar} />
+              <AnimalRapido key={catalogo.finca_id} catalogo={catalogo} animalInicial={animalEnlace} indice={indiceDeOrdenos} alGuardar={guardar} />
             )}
           </TarjetaCampo>
         </>

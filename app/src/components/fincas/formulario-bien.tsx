@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import type { Database } from "@/lib/database.types";
 import { BotonPrimario } from "@/components/ui";
+import { FotoCampo } from "@/components/foto-campo";
 import { Campo, MensajeError, type EstadoFormulario } from "@/components/fincas/campo";
 import { ESTADOS_BIEN, TIPOS_BIEN } from "@/components/fincas/etiquetas";
 import type { FincaConCodigos } from "@/components/fincas/consultas";
@@ -18,12 +19,19 @@ export function FormularioBien({
   bien,
   fincaInicial,
   cancelar,
+  organizacionId,
+  fotoUrl,
+  puedeFoto,
 }: {
   accion: (estado: EstadoFormulario, datos: FormData) => Promise<EstadoFormulario>;
   fincas: FincaConCodigos[];
   bien?: Bien;
   fincaInicial?: string;
   cancelar: string;
+  organizacionId: string;
+  /** Enlace firmado de la foto guardada (vista previa al editar). */
+  fotoUrl?: string | null;
+  puedeFoto: boolean;
 }) {
   const [estado, enviar, pendiente] = useActionState(accion, {});
   const e = estado.errores ?? {};
@@ -104,11 +112,22 @@ export function FormularioBien({
         </div>
       </fieldset>
 
+      <FotoCampo
+        tipo="bienes"
+        organizacionId={organizacionId}
+        valor={bien?.foto_url}
+        url={fotoUrl}
+        alt={bien ? `Foto de ${bien.nombre}` : "Vista previa de la foto del bien"}
+        deshabilitado={!puedeFoto}
+        motivo="Solo propietarios y administradores pueden poner la foto."
+        error={e.foto_url}
+      />
+
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo etiqueta="Descripción" error={e.descripcion}>
           <textarea name="descripcion" rows={3} defaultValue={v(bien?.descripcion)} className="campo-control" />
         </Campo>
-        <Campo etiqueta="Recordatorio" error={e.recordatorio} ayuda="Instrucción de uso o cuidado que verá el equipo">
+        <Campo etiqueta="Recordatorio" error={e.recordatorio} ayuda="Instrucción de uso o cuidado que verán los empleados">
           <textarea name="recordatorio" rows={3} defaultValue={v(bien?.recordatorio)} className="campo-control" />
         </Campo>
       </div>

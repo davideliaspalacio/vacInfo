@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import Link from "next/link";
 import type { Database } from "@/lib/database.types";
 import { BotonPrimario } from "@/components/ui";
+import { FotoCampo } from "@/components/foto-campo";
 import { Campo, MensajeError, type EstadoFormulario } from "@/components/fincas/campo";
 
 type Finca = Partial<Database["public"]["Tables"]["fincas"]["Row"]>;
@@ -12,10 +13,15 @@ export function FormularioFinca({
   accion,
   finca = {},
   cancelar,
+  organizacionId,
+  fotoUrl,
 }: {
   accion: (estado: EstadoFormulario, datos: FormData) => Promise<EstadoFormulario>;
   finca?: Finca;
   cancelar: string;
+  organizacionId: string;
+  /** Enlace firmado de la foto guardada (vista previa al editar). */
+  fotoUrl?: string | null;
 }) {
   const [estado, enviar, pendiente] = useActionState(accion, {});
   const e = estado.errores ?? {};
@@ -61,6 +67,15 @@ export function FormularioFinca({
           </Campo>
         </div>
       </fieldset>
+
+      <FotoCampo
+        tipo="fincas"
+        organizacionId={organizacionId}
+        valor={finca.foto_url}
+        url={fotoUrl}
+        alt={finca.nombre ? `Foto de ${finca.nombre}` : "Vista previa de la foto de la finca"}
+        error={e.foto_url}
+      />
 
       <fieldset className="space-y-4">
         <legend className="font-display mb-3 text-xl font-bold text-bosque">Venta de leche</legend>

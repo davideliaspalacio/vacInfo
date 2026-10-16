@@ -26,6 +26,11 @@ export type Accion = (typeof ACCIONES)[number];
 
 export type FincaResumen = { id: string; nombre: string; municipio: string | null };
 
+export type Jornada = "am" | "pm";
+
+/** Ordeño que ya está registrado en el servidor (viene en el catálogo). */
+export type OrdenoRegistrado = { fecha: string; jornada: Jornada };
+
 export type AnimalCatalogo = {
   id: string;
   codigo: string;
@@ -44,6 +49,11 @@ export type AnimalCatalogo = {
   parto_esperado: string | null;
   litros_am: number | null;
   litros_pm: number | null;
+  /**
+   * Ordeños ya registrados en el servidor de los últimos días (hoy y los anteriores, más el corte de la finca).
+   * Opcional: los catálogos descargados con una versión anterior no lo traen y `completarCatalogo` lo deja en [].
+   */
+  ordenos_recientes?: OrdenoRegistrado[];
 };
 
 export type PotreroCatalogo = Database["public"]["Functions"]["estado_potreros"]["Returns"][number];

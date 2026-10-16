@@ -2,9 +2,11 @@ import Link from "next/link";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { fecha, num } from "@/lib/formato";
 import { consultarPagina, leerPagina } from "@/lib/paginacion";
-import { BotonVolver, Encabezado, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
+import { Encabezado, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
 import { ImportadorExcel } from "@/components/importador/importador-excel";
+import { ImportadorSeresVivos } from "@/components/importador/importador-seres-vivos";
+import { PestanasImportador, pestanaDe } from "@/components/importador/pestanas";
 
 export const metadata = { title: "Importar Excel" };
 
@@ -22,6 +24,7 @@ const POR_PAGINA = 20;
 export default async function ImportarPage({ searchParams }: PageProps<"/importar">) {
   const sp = await searchParams;
   const { finca } = sp;
+  const pestana = pestanaDe(sp.tab);
   const { supabase, rol, fincas } = await obtenerSesion();
   const gestor = ROLES_GESTORES.includes(rol);
 
@@ -48,14 +51,14 @@ export default async function ImportarPage({ searchParams }: PageProps<"/importa
 
   const pedida = typeof finca === "string" ? finca : undefined;
   const fincaInicial = fincas.find((f) => f.id === pedida)?.id ?? fincas[0]?.id ?? "";
+  const opciones = fincas.map((f) => ({ id: f.id, nombre: f.nombre }));
 
   return (
     <div className="space-y-8">
-      <BotonVolver href="/fincas" />
       <Encabezado
         eyebrow="Importar"
         titulo="Importar Excel de la finca"
-        descripcion="Sube el libro de planillas quincenales: se crean las vacas que falten y se cargan partos, servicios, palpaciones, secados y ordeños sin duplicar."
+        descripcion="Dos planillas: la quincenal de ordeño, que carga partos, servicios, palpaciones, secados y ordeños, y la de implementación de seres vivos, que da de alta todos los animales de la finca."
       />
 
       {!gestor ? (
@@ -73,7 +76,14 @@ export default async function ImportarPage({ searchParams }: PageProps<"/importa
           </Vacio>
         </Tarjeta>
       ) : (
-        <ImportadorExcel key={fincaInicial} fincas={fincas.map((f) => ({ id: f.id, nombre: f.nombre }))} fincaInicial={fincaInicial} />
+        <div className="space-y-6">
+          <PestanasImportador activa={pestana} fincaId={fincaInicial} />
+          {pestana === "seres-vivos" ? (
+            <ImportadorSeresVivos key={fincaInicial} fincas={opciones} fincaInicial={fincaInicial} />
+          ) : (
+            <ImportadorExcel key={fincaInicial} fincas={opciones} fincaInicial={fincaInicial} />
+          )}
+        </div>
       )}
 
       <Tarjeta id="importaciones" className="scroll-mt-6">
@@ -90,7 +100,7 @@ export default async function ImportarPage({ searchParams }: PageProps<"/importa
                   <th>Archivo</th>
                   <th className="text-right">Hojas</th>
                   <th>Cortes</th>
-                  <th className="text-right">Vacas nuevas</th>
+                  <th className="text-right">Animales nuevos</th>
                   <th className="text-right">Registros nuevos</th>
                   <th className="text-right">Advertencias</th>
                   <th>Por</th>

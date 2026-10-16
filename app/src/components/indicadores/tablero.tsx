@@ -169,9 +169,9 @@ export function TableroIndicadores({ fincaId, meses }: Props) {
           vacio={!ultimoCosto}
           vacioTexto={
             <>
-              Sin parámetros de costos en este rango.{" "}
+              Sin costos cargados en este rango.{" "}
               <Link href={`/fincas/${fincaId}/costos`} className="font-bold text-bosque underline">
-                Cargar parámetros de costos
+                Ir a Ingreso costos
               </Link>
             </>
           }
@@ -179,7 +179,7 @@ export function TableroIndicadores({ fincaId, meses }: Props) {
             ultimoCosto
               ? `En ${mesCorto(ultimoCosto.mes)} producir un litro costó ${formatear(ultimoCosto.costo_litro, "pesos")} y se vendió a ${formatear(ultimoCosto.precio_litro, "pesos")}: ${
                   Number(ultimoCosto.precio_litro) >= Number(ultimoCosto.costo_litro) ? "utilidad" : "pérdida"
-                } de ${formatear(Math.abs(Number(ultimoCosto.precio_litro) - Number(ultimoCosto.costo_litro)), "pesos")} por litro. Los meses sin parámetros quedan en blanco.`
+                } de ${formatear(Math.abs(Number(ultimoCosto.precio_litro) - Number(ultimoCosto.costo_litro)), "pesos")} por litro. Los meses sin costos cargados quedan en blanco.`
               : undefined
           }
         >

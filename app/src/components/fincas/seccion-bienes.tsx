@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { puedeRegistrar } from "@/lib/permisos";
+import { urlesFirmadasFotos } from "@/lib/fotos";
 import { obtenerSesion } from "@/lib/sesion";
 import { fecha, hoyISO } from "@/lib/formato";
 import { consultarPagina, leerPagina, type Params } from "@/lib/paginacion";
 import { Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
+import { MiniaturaFoto } from "@/components/foto";
 import { ESTADOS_BIEN, TIPOS_BIEN } from "@/components/fincas/etiquetas";
 
 const POR_PAGINA = 50;
@@ -15,7 +17,7 @@ export async function SeccionBienes({ fincaId, searchParams }: { fincaId: string
     (desde, hasta) =>
       supabase
         .from("bienes")
-        .select("id, codigo, nombre, tipo, marca, estado, garantia_hasta, recordatorio", { count: "exact" })
+        .select("id, codigo, nombre, tipo, marca, estado, garantia_hasta, recordatorio, foto_url", { count: "exact" })
         .eq("finca_id", fincaId)
         .order("codigo")
         .order("id")
@@ -23,6 +25,9 @@ export async function SeccionBienes({ fincaId, searchParams }: { fincaId: string
     leerPagina(searchParams, { tamano: POR_PAGINA }),
   );
   const hoy = hoyISO();
+  // La columna de foto solo aparece si algún bien tiene foto, para no dejar una columna vacía.
+  const fotos = await urlesFirmadasFotos(supabase, bienes.map((b) => b.foto_url));
+  const hayFotos = fotos.size > 0;
 
   return (
     <Tarjeta id="bienes" className="scroll-mt-6">
@@ -44,6 +49,7 @@ export async function SeccionBienes({ fincaId, searchParams }: { fincaId: string
           <table className="matriz w-full border-collapse bg-white text-sm">
             <thead>
               <tr>
+                {hayFotos && <th>Foto</th>}
                 <th>Código</th>
                 <th>Nombre</th>
                 <th>Tipo</th>
@@ -56,6 +62,11 @@ export async function SeccionBienes({ fincaId, searchParams }: { fincaId: string
             <tbody>
               {bienes.map((b) => (
                 <tr key={b.id} className="hover:bg-lima-suave">
+                  {hayFotos && (
+                    <td>
+                      <MiniaturaFoto url={fotos.get(b.foto_url ?? "") ?? null} alt={`Foto de ${b.nombre}`} className="h-10 w-10 rounded-lg border border-black/10 object-cover" />
+                    </td>
+                  )}
                   <td className="font-mono font-bold">
                     <Link href={`/bienes/${b.id}`} className="text-bosque hover:underline">
                       {b.codigo}

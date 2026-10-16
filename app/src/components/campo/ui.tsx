@@ -21,7 +21,8 @@ export function TarjetaCampo({ className, children, ...props }: React.ComponentP
   );
 }
 
-export function Volver({ href, children = "Volver" }: { href: string; children?: React.ReactNode }) {
+/** Botón para regresar. El cliente pidió que en VacDaTa se lea «Atrás». */
+export function Atras({ href, children = "Atrás" }: { href: string; children?: React.ReactNode }) {
   return (
     <Link
       href={href}

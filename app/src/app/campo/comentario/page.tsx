@@ -1,7 +1,7 @@
 import { obtenerSesion } from "@/lib/sesion";
 import { enviarComentario } from "@/app/campo/actions";
 import { BotonGuardar } from "@/components/campo/boton-guardar";
-import { Aviso, Campo, Opciones, TarjetaCampo, Titulo, Volver, control, param } from "@/components/campo/ui";
+import { Atras, Aviso, Campo, Opciones, TarjetaCampo, Titulo, control, param } from "@/components/campo/ui";
 
 export default async function ComentarioPage({ searchParams }: PageProps<"/campo/comentario">) {
   const sp = await searchParams;
@@ -9,7 +9,7 @@ export default async function ComentarioPage({ searchParams }: PageProps<"/campo
 
   return (
     <>
-      <Volver href="/campo" />
+      <Atras href="/campo" />
       <Aviso ok={param(sp.ok)} error={param(sp.error)} />
       <TarjetaCampo>
         <Titulo

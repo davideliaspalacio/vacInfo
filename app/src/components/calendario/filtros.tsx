@@ -58,7 +58,7 @@ export function FiltroTipos({ fincaId, mes, activos, conteo }: { fincaId: string
           <span className="h-3 w-5 rounded-sm border-2 border-sky-700 bg-white" aria-hidden /> Con borde: programado
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className={clsx("h-3 w-5 rounded-sm", TIPOS.programado.punto)} aria-hidden /> Punteado: agendado por el equipo
+          <span className={clsx("h-3 w-5 rounded-sm", TIPOS.programado.punto)} aria-hidden /> Punteado: agendado por los empleados
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className={clsx("h-3 w-5 rounded-sm border", VENCIDO)} aria-hidden /> Rojo: programado y vencido

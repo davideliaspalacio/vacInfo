@@ -53,7 +53,7 @@ const jhon = await cookiesDe("jhon@vacinfo.local");
 // ── 1. Informe administrativo compacto
 {
   const r = await pedir(admin, `/informes?tab=administrativo&finca=${T}`);
-  registrar("1 · Informe administrativo", "La página carga y agrupa los registros vacíos al final", "Responde 200 y muestra “Registros sin movimientos”", r.estado === 200 && /sin movimientos/i.test(r.texto), `HTTP ${r.estado}`);
+  registrar("1 · Informe administrativo", "La página carga y dibuja las 20 matrices aunque estén vacías", "Responde 200 y muestra “Sin registros en este periodo”", r.estado === 200 && /Sin registros en este periodo/i.test(r.texto), `HTTP ${r.estado}`);
 }
 
 // ── 2. Pestañas
@@ -155,13 +155,13 @@ select saldo from saldo_insumos('${T}', '2026-04-30') where producto = 'Sal mine
   registrar("7 · Registrar", "La app instalada abre directo en Registrar", "start_url = /campo/registrar", manifiesto.start_url === "/campo/registrar", manifiesto.start_url);
 }
 
-// ── 8 y 9. Pesaje y “Escanear chapeta” (el formulario se arma en el teléfono: se revisa el código enviado al navegador)
+// ── 8 y 9. Pesaje y digitación de chapeta (el formulario se arma en el teléfono: se revisa el código enviado al navegador)
 {
   const r = await pedir(jhon, `/campo/registrar?finca=${T}`);
   const scripts = [...r.texto.matchAll(/src="(\/_next\/static\/chunks\/[^"]+\.js)"/g)].map((m) => m[1]);
   let codigo = r.texto;
   for (const s of scripts) codigo += await (await fetch(BASE + s)).text();
-  registrar("9 · Escanear chapeta", "El botón dice “Escanear chapeta”", "Aparece “Escanear chapeta” y no “Escanear QR”", /Escanear chapeta/.test(codigo) && !/Escanear QR/.test(codigo));
+  registrar("9 · Chapeta a mano", "Ya no existe el escaneo de chapeta", "No aparece “Escanear” y sí el campo para escribir la chapeta", !/Escanear (chapeta|QR)/.test(codigo) && /Escribe la chapeta/.test(codigo));
   registrar("8 · Sin pesaje", "Las acciones del animal en VacDaTa no incluyen Pesaje", "No aparece “Peso, altura y condición”", !/Peso, altura y condici/.test(codigo));
 }
 

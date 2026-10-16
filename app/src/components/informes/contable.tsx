@@ -1,6 +1,14 @@
 import Link from "next/link";
 import clsx from "clsx";
-import { calcularInforme, type Estado, type InformeContable as Informe, type ParametrosCostos } from "@/lib/finanzas";
+import {
+  calcularInforme,
+  cantidadCosto,
+  describirItemPorAnimal,
+  textoUnidad,
+  type Estado,
+  type InformeContable as Informe,
+  type ParametrosCostos,
+} from "@/lib/finanzas";
 import { fecha, litros, num, pct, pesos } from "@/lib/formato";
 import { Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { todasLasFilas, type PropsInforme } from "./consultas";
@@ -46,9 +54,9 @@ export async function InformeContable({ supabase, rango, finca }: PropsInforme) 
       <Tarjeta>
         <TituloTarjeta>Informe contable · {finca.nombre}</TituloTarjeta>
         <Vacio>
-          No hay parámetros de costos para un periodo anterior al {fecha(hasta, true)}.{" "}
+          No hay costos cargados para un periodo anterior al {fecha(hasta, true)}.{" "}
           <Link href={`/fincas/${fincaId}/costos`} className="font-bold text-bosque underline">
-            Cargar parámetros de costos
+            Ir a Ingreso costos
           </Link>
         </Vacio>
       </Tarjeta>
@@ -70,7 +78,7 @@ export async function InformeContable({ supabase, rango, finca }: PropsInforme) 
         <div className="border-b-[3px] border-bosque pb-4 text-center">
           <h2 className="font-display text-2xl font-bold uppercase text-bosque sm:text-3xl">Informe de ingresos y gastos – finca lechera</h2>
           <p className="mt-1 text-sm text-tinta-suave">
-            Modelo de rentabilidad del consultor · parámetros de <strong className="capitalize">{nombrePeriodo(parametros.periodo)}</strong>
+            Modelo de rentabilidad del consultor · costos de <strong className="capitalize">{nombrePeriodo(parametros.periodo)}</strong>
             {parametros.periodo.slice(0, 7) !== hasta.slice(0, 7) && " (último periodo cargado antes de la fecha de corte)"}
           </p>
         </div>
@@ -164,24 +172,42 @@ export async function InformeContable({ supabase, rango, finca }: PropsInforme) 
       </Tarjeta>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        {r.categorias.map((c) => (
-          <Tarjeta key={c.categoria} className="break-inside-avoid">
-            <TituloTarjeta detalle={pct(c.pct)}>Costos {c.categoria.toLowerCase()}</TituloTarjeta>
-            <TablaDinero
-              columnas={["Vr día", "Vr mes", "%"]}
-              filas={c.items.map((i) => [
-                <span key="n">
-                  {i.nombre}
-                  {i.caja === false && <span className="ml-1 text-xs text-tinta-suave">(no sale de caja)</span>}
-                </span>,
-                pesos(i.dia),
-                pesos(i.mes),
-                pct(i.pct),
-              ])}
-              total={[`Total ${c.categoria.toLowerCase()}`, pesos(c.totalDia), pesos(c.totalMes), pct(c.pct)]}
-            />
-          </Tarjeta>
-        ))}
+        {r.categorias.map((c) => {
+          // Si la categoría tiene ítems calculados por animal se agrega la columna del consumo del mes.
+          const hayPorAnimal = c.items.some((i) => i.porAnimal);
+          return (
+            <Tarjeta key={c.categoria} className="break-inside-avoid">
+              <TituloTarjeta detalle={pct(c.pct)}>Costos {c.categoria.toLowerCase()}</TituloTarjeta>
+              <TablaDinero
+                columnas={hayPorAnimal ? ["Consumo mes", "Vr día", "Vr mes", "%"] : ["Vr día", "Vr mes", "%"]}
+                filas={c.items.map((i) => {
+                  const detalle = describirItemPorAnimal(i, r.animales);
+                  const unidad = i.unidad ?? "unidad";
+                  return [
+                    <span key="n">
+                      {i.nombre}
+                      {i.caja === false && <span className="ml-1 text-xs text-tinta-suave">(no sale de caja)</span>}
+                      {detalle && (
+                        <span className="block text-xs text-tinta-suave">
+                          {detalle} · {pesos(i.precio_unitario)} por {textoUnidad(unidad, 1)}
+                        </span>
+                      )}
+                    </span>,
+                    ...(hayPorAnimal ? [i.porAnimal ? `${cantidadCosto(i.consumoMes)} ${textoUnidad(unidad, i.consumoMes)}` : "—"] : []),
+                    pesos(i.dia),
+                    pesos(i.mes),
+                    pct(i.pct),
+                  ];
+                })}
+                total={
+                  hayPorAnimal
+                    ? [`Total ${c.categoria.toLowerCase()}`, "", pesos(c.totalDia), pesos(c.totalMes), pct(c.pct)]
+                    : [`Total ${c.categoria.toLowerCase()}`, pesos(c.totalDia), pesos(c.totalMes), pct(c.pct)]
+                }
+              />
+            </Tarjeta>
+          );
+        })}
       </div>
 
       <Tarjeta>
@@ -356,7 +382,7 @@ function recomendaciones(r: Informe, realDia: number | null) {
     lista.push(`La producción está a solo ${num(r.margenEquilibrioLitros)} L/día del punto de equilibrio: cualquier baja genera pérdida.`);
   }
   if (realDia != null && realDia < r.litrosDia) {
-    lista.push(`La producción registrada (${num(realDia)} L/día) está por debajo de la presupuestada: actualizar parámetros o revisar el hato.`);
+    lista.push(`La producción registrada (${num(realDia)} L/día) está por debajo de la presupuestada: actualizar los costos o revisar el hato.`);
   }
   if (r.caja.saldo < 0) lista.push("El flujo de caja da negativo: priorizar pagos y disminuir costos o gastos.");
   if (lista.length === 0) lista.push("Mantener la operación actual y seguir registrando los datos diarios.");

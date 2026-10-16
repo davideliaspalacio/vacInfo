@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { urlesFirmadasFotos } from "@/lib/fotos";
 import { obtenerSesion } from "@/lib/sesion";
 import { fecha, num } from "@/lib/formato";
 import { consultarPagina, leerPagina, type Params } from "@/lib/paginacion";
 import { Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
+import { MiniaturaFoto } from "@/components/foto";
 
 const VIENTRES_POR_PAGINA = 50;
 const OTROS_POR_PAGINA = 60;
@@ -25,7 +27,7 @@ export async function SeccionAnimales({ fincaId, corte, searchParams }: { fincaI
       (desde, hasta) =>
         supabase
           .from("animales")
-          .select("id, chapeta, nombre, categoria, sexo", { count: "exact" })
+          .select("id, chapeta, nombre, categoria, sexo, foto_url", { count: "exact" })
           .eq("finca_id", fincaId)
           .eq("estado", "activo")
           .or("sexo.eq.macho,categoria.not.in.(vaca,novilla)")
@@ -39,6 +41,16 @@ export async function SeccionAnimales({ fincaId, corte, searchParams }: { fincaI
   const ruta = `/fincas/${fincaId}`;
   const animales = vientres.filas;
 
+  // `estado_reproductivo` no trae la foto: se piden las rutas de los vientres visibles y se firman
+  // todas (vientres y otros animales) en una sola llamada. La columna solo aparece si hay fotos.
+  const { data: fotosVientres } = animales.length
+    ? await supabase.from("animales").select("id, foto_url").in("id", animales.map((a) => a.animal_id).filter((id): id is string => Boolean(id)))
+    : { data: [] };
+  const rutaDeVientre = new Map((fotosVientres ?? []).map((a) => [a.id, a.foto_url]));
+  const fotos = await urlesFirmadasFotos(supabase, [...(fotosVientres ?? []).map((a) => a.foto_url), ...otros.filas.map((a) => a.foto_url)]);
+  const urlDe = (ruta: string | null | undefined) => (ruta ? fotos.get(ruta) ?? null : null);
+  const hayFotosVientres = (fotosVientres ?? []).some((a) => a.foto_url && fotos.has(a.foto_url));
+
   return (
     <div className="space-y-6">
       <Tarjeta id="vientres" className="scroll-mt-6">
@@ -50,6 +62,7 @@ export async function SeccionAnimales({ fincaId, corte, searchParams }: { fincaI
             <table className="matriz w-full border-collapse bg-white text-sm">
               <thead>
                 <tr>
+                  {hayFotosVientres && <th>Foto</th>}
                   <th>Chapeta</th>
                   <th>Nombre</th>
                   <th>Estado</th>
@@ -67,6 +80,11 @@ export async function SeccionAnimales({ fincaId, corte, searchParams }: { fincaI
                   const hoyToca = (f: string | null) => f != null && f <= corte;
                   return (
                     <tr key={a.animal_id} className="hover:bg-lima-suave">
+                      {hayFotosVientres && (
+                        <td>
+                          <MiniaturaFoto url={urlDe(rutaDeVientre.get(a.animal_id ?? ""))} alt={`Foto de ${a.nombre}`} className="h-10 w-10 rounded-lg border border-black/10 object-cover" />
+                        </td>
+                      )}
                       <td className="font-mono font-bold">
                         <Link href={`/animales/${a.animal_id}`} className="text-bosque underline-offset-2 hover:underline">
                           {a.chapeta ?? a.codigo}
@@ -114,11 +132,18 @@ export async function SeccionAnimales({ fincaId, corte, searchParams }: { fincaI
 
       {otros.total > 0 && (
         <Tarjeta id="otros-seres-vivos" className="scroll-mt-6">
-          <TituloTarjeta detalle={`${num(otros.total)} animales`}>Otros seres vivos</TituloTarjeta>
+          <TituloTarjeta detalle={`${num(otros.total)} animales`}>Otros animales</TituloTarjeta>
           <div className="flex flex-wrap gap-2">
             {otros.filas.map((a) => (
-              <Link key={a.id} href={`/animales/${a.id}`} className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm hover:bg-lima-suave">
-                <strong className="text-bosque">{a.nombre}</strong> <span className="text-tinta-suave">· {a.chapeta ?? a.categoria}</span>
+              <Link
+                key={a.id}
+                href={`/animales/${a.id}`}
+                className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm hover:bg-lima-suave"
+              >
+                <MiniaturaFoto url={urlDe(a.foto_url)} alt={`Foto de ${a.nombre}`} className="h-8 w-8 rounded-lg border border-black/10 object-cover" />
+                <span>
+                  <strong className="text-bosque">{a.nombre}</strong> <span className="text-tinta-suave">· {a.chapeta ?? a.categoria}</span>
+                </span>
               </Link>
             ))}
           </div>
@@ -130,7 +155,7 @@ export async function SeccionAnimales({ fincaId, corte, searchParams }: { fincaI
             tamano={otros.pagina.tamano}
             total={otros.total}
             unidad="animales"
-            etiqueta="Páginas de otros seres vivos"
+            etiqueta="Páginas de otros animales"
             ancla="otros-seres-vivos"
           />
         </Tarjeta>

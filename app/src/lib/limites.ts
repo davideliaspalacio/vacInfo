@@ -30,6 +30,8 @@ export const REGLAS = {
   mensajes: { ambito: "campo-mensajes:usuario", maximo: 60, ventanaSegundos: MINUTO },
   analizarExcel: { ambito: "importar-analizar:usuario", maximo: 10, ventanaSegundos: HORA },
   importarExcel: { ambito: "importar-aplicar:usuario", maximo: 10, ventanaSegundos: HORA },
+  analizarSeresVivos: { ambito: "seres-vivos-analizar:usuario", maximo: 10, ventanaSegundos: HORA },
+  importarSeresVivos: { ambito: "seres-vivos-aplicar:usuario", maximo: 10, ventanaSegundos: HORA },
 } satisfies Record<string, Regla>;
 
 export type ResultadoLimite = { permitido: boolean; reintentarEn: number };

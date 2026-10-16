@@ -4,7 +4,7 @@ import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { resumenAlCorte } from "@/components/fincas/consultas";
 import { litros, num, pct } from "@/lib/formato";
 import { consultarPagina, leerPagina } from "@/lib/paginacion";
-import { BotonVolver, Encabezado, Etiqueta, Metrica, Vacio } from "@/components/ui";
+import { Encabezado, Etiqueta, Metrica, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
 
 const POR_PAGINA = 12;
@@ -39,11 +39,10 @@ export default async function Fincas({ searchParams }: PageProps<"/fincas">) {
 
   return (
     <div className="space-y-8">
-      <BotonVolver href="/" />
       <Encabezado
-        eyebrow="Gestionar fincas"
+        eyebrow="Administrar fincas"
         titulo="Tus fincas"
-        descripcion="Busca una finca para ver sus animales, bienes, alertas y parámetros de costos."
+        descripcion="Busca una finca para ver sus animales, bienes, alertas e ingreso de costos."
         acciones={
           <>
             <form role="search" className="papel flex w-full gap-2 rounded-2xl p-3 lg:w-96">
@@ -114,7 +113,7 @@ export default async function Fincas({ searchParams }: PageProps<"/fincas">) {
               </div>
               <div className="mt-7 flex flex-wrap gap-3">
                 <Link href={`/fincas/${f.id}`} className="boton-accion inline-flex items-center gap-2 rounded-xl bg-bosque px-5 py-3 font-bold text-leche">
-                  Ver finca
+                  Seleccionar finca
                   <ArrowRight className="h-5 w-5" aria-hidden />
                 </Link>
                 <Link href={`/fincas/${f.id}?tab=arbol`} className="inline-flex items-center gap-2 rounded-xl border border-bosque/20 px-5 py-3 font-bold text-bosque hover:bg-lima-suave">
@@ -122,7 +121,7 @@ export default async function Fincas({ searchParams }: PageProps<"/fincas">) {
                 </Link>
                 <Link href={`/fincas/${f.id}/costos`} className="inline-flex items-center gap-2 rounded-xl border border-bosque/20 px-5 py-3 font-bold text-bosque hover:bg-lima-suave">
                   <Calculator className="h-5 w-5" aria-hidden />
-                  Parámetros de costos
+                  Ingreso costos
                 </Link>
               </div>
             </article>
