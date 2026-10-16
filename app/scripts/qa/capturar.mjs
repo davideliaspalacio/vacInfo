@@ -8,7 +8,7 @@ const FASE = process.argv[2] ?? "antes";
 const BASE = process.argv[3] ?? "http://localhost:3100";
 // Conjunto de pantallas: "v1.1" (primera revisión) o "revision2"
 const CONJUNTO = process.argv[4] ?? "v1.1";
-const CARPETA = CONJUNTO === "revision2" ? "revision-2" : "ajustes-v1.1";
+const CARPETA = { revision2: "revision-2", revision3: "revision-3" }[CONJUNTO] ?? "ajustes-v1.1";
 const SALIDA = `/Users/1234/vacasProyecto/entregables/${CARPETA}/${FASE}`;
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PUERTO = 9355;
@@ -44,7 +44,19 @@ const TOMAS_REVISION2 = [
   { n: "09-vacdata-secas", cuenta: "trabajador", ruta: `/campo/registrar?finca=${T}`, ...CEL, alto: 1500, acciones: [clic("Finca Toneles")], espera: 5000 },
 ];
 
-export const TOMAS = CONJUNTO === "revision2" ? TOMAS_REVISION2 : [
+const TOMAS_REVISION3 = [
+  { n: "01-ingreso-costos", cuenta: "admin", ruta: `/fincas/${T}/costos`, ...WEB, alto: 1700 },
+  { n: "02-informe-contable", cuenta: "admin", ruta: "/informes?tab=contable", ...WEB, alto: 1500 },
+  { n: "03-administrativo", cuenta: "admin", ruta: `/informes?tab=administrativo&finca=${T}&desde=2020-01-01&hasta=2020-01-31`, ...WEB, alto: 1400 },
+  { n: "04-importar-animales", cuenta: "admin", ruta: "/importar", ...WEB, alto: 1300 },
+  { n: "05-nuevo-animal-foto", cuenta: "admin", ruta: `/animales/nuevo?finca=${T}`, ...WEB, alto: 1400 },
+  { n: "06-finca-textos", cuenta: "admin", ruta: `/fincas/${T}`, ...WEB, alto: 1000 },
+  { n: "07-empleados", cuenta: "admin", ruta: "/equipo", ...WEB, alto: 1200 },
+  { n: "08-vacdata-menu", cuenta: "trabajador", ruta: "/campo", ...CEL, alto: 1000 },
+  { n: "09-vacdata-chapeta", cuenta: "trabajador", ruta: `/campo/registrar?finca=${T}`, ...CEL, alto: 1500, espera: 5000 },
+];
+
+export const TOMAS = CONJUNTO === "revision3" ? TOMAS_REVISION3 : CONJUNTO === "revision2" ? TOMAS_REVISION2 : [
   // Administrador (web)
   { n: "01-informe-administrativo", cuenta: "admin", ruta: `/informes?tab=administrativo&finca=${T}`, ...WEB, alto: 2200 },
   { n: "02-calendario", cuenta: "admin", ruta: `/calendario?finca=${T}`, ...WEB, alto: 1400 },
