@@ -146,6 +146,9 @@ export async function crearInvitacion(_: EstadoInvitacion, formData: FormData): 
 
   const finca = finca_id ? sesion.fincas.find((f) => f.id === finca_id) : null;
   if (finca_id && !finca) return { error: "Esa finca no pertenece a la empresa." };
+  // Trabajadores y mayordomos entran siempre asignados a una finca: "todas" se concede después, a propósito.
+  if (!finca_id && (rol === "trabajador" || rol === "mayordomo"))
+    return { errores: { finca_id: ["Elige la finca de esta persona"] }, error: "Revisa los campos marcados." };
 
   const expira_en = new Date(Date.now() + dias * 86_400_000).toISOString();
   let creada: { codigo: string; expira_en: string } | null = null;

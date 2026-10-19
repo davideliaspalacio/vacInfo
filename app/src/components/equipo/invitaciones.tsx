@@ -23,12 +23,16 @@ export type InvitacionLista = {
 };
 
 const ROLES_INVITABLES: Rol[] = ["trabajador", "mayordomo", "administrador", "veterinario", "consultor"];
+/** Roles de campo: siempre se les asigna una finca, para que nadie entre viendo toda la empresa. */
+const ROLES_CON_FINCA_OBLIGATORIA: Rol[] = ["trabajador", "mayordomo"];
 const INICIAL: EstadoInvitacion = {};
 
 export function FormularioInvitacion({ fincas }: { fincas: { id: string; nombre: string }[] }) {
   const [estado, alEnviar, pendiente] = useAccionFormulario(crearInvitacion, INICIAL);
   const [rol, setRol] = useState<Rol>("trabajador");
+  const [fincaId, setFincaId] = useState("");
   const e = estado.errores ?? {};
+  const fincaObligatoria = ROLES_CON_FINCA_OBLIGATORIA.includes(rol);
 
   return (
     <div className="space-y-5">
@@ -36,7 +40,17 @@ export function FormularioInvitacion({ fincas }: { fincas: { id: string; nombre:
         <MensajeError>{estado.error}</MensajeError>
         <div className="grid gap-4 sm:grid-cols-2">
           <Campo etiqueta="Rol" error={e.rol} ayuda={DESCRIPCION_ROL[rol]}>
-            <select name="rol" value={rol} onChange={(ev) => setRol(ev.target.value as Rol)} className="campo-control">
+            <select
+              name="rol"
+              value={rol}
+              onChange={(ev) => {
+                const nuevo = ev.target.value as Rol;
+                setRol(nuevo);
+                // Al pasar a un rol de campo se borra "Todas las fincas": hay que elegir una.
+                if (ROLES_CON_FINCA_OBLIGATORIA.includes(nuevo) && !fincaId) setFincaId("");
+              }}
+              className="campo-control"
+            >
               {ROLES_INVITABLES.map((r) => (
                 <option key={r} value={r}>
                   {ETIQUETA_ROL[r]}
@@ -44,9 +58,13 @@ export function FormularioInvitacion({ fincas }: { fincas: { id: string; nombre:
               ))}
             </select>
           </Campo>
-          <Campo etiqueta="Finca" error={e.finca_id} ayuda="Si eliges una, solo verá esa finca">
-            <select name="finca_id" defaultValue="" className="campo-control">
-              <option value="">Todas las fincas</option>
+          <Campo
+            etiqueta={fincaObligatoria ? "Finca *" : "Finca"}
+            error={e.finca_id}
+            ayuda={fincaObligatoria ? "Solo verá esta finca. Después puedes ampliarle el acceso en la lista de empleados." : "Si eliges una, solo verá esa finca"}
+          >
+            <select name="finca_id" value={fincaId} onChange={(ev) => setFincaId(ev.target.value)} required={fincaObligatoria} className="campo-control">
+              <option value="">{fincaObligatoria ? "— Elige la finca —" : "Todas las fincas"}</option>
               {fincas.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.nombre}
