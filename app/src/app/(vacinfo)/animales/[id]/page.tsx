@@ -19,7 +19,7 @@ import { GraficoProduccion } from "@/components/fincas/grafico-produccion";
 import { edad } from "@/components/fincas/consultas";
 import { esLevante } from "@/components/levante/etiquetas";
 import { SeccionCrecimiento } from "@/components/levante/seccion-crecimiento";
-import { CATEGORIAS, ESPECIES, ESTADOS_ANIMAL, ESTADOS_SANITARIOS, SEXOS, TIPOS_BAJA, TIPOS_SANITARIOS } from "@/components/fincas/etiquetas";
+import { CATEGORIAS, ESPECIES, ESTADOS_ANIMAL, ESTADOS_SANITARIOS, SEXOS, TIPOS_BAJA, TIPOS_SANITARIOS , ETIQUETA_ETAPA_REPRODUCTIVA, etapaReproductiva} from "@/components/fincas/etiquetas";
 
 /** Rango por defecto de la ficha: el último año (producción e historiales). */
 const DIAS_POR_DEFECTO = 365;
@@ -267,8 +267,16 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
         {er ? (
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Metrica
-              valor={er.en_ordeno ? "Ordeño" : er.ultimo_parto ? "Seca" : "Novilla"}
-              etiqueta={er.en_ordeno ? `${er.dias_ordeno} días en ordeño` : er.dias_seca != null ? `${er.dias_seca} días seca` : "Sin partos"}
+              valor={ETIQUETA_ETAPA_REPRODUCTIVA[etapaReproductiva(er)]}
+              etiqueta={
+                er.en_ordeno
+                  ? `${er.dias_ordeno} días en ordeño`
+                  : er.dias_seca != null
+                    ? `${er.dias_seca} días seca`
+                    : er.ultimo_parto
+                      ? "Sin partos"
+                      : "Sin partos registrados"
+              }
             />
             <Metrica
               valor={er.prenada ? "Preñada" : er.ultimo_servicio ? "Servida" : "Vacía"}

@@ -196,3 +196,17 @@ export function codigoAnimal(nombreFinca: string, nombreAnimal: string, chapeta?
   const partes = [letrasFinca(nombreFinca), sinTildes(nombreAnimal ?? ""), sinTildes(String(chapeta ?? ""))];
   return partes.filter(Boolean).join("-");
 }
+
+/**
+ * Etapa reproductiva que se muestra. Manda la **categoría** del animal: una vaca que no está
+ * en ordeño está seca, aunque no tenga partos registrados (al cargar el hato con la plantilla
+ * nadie trae el historial). Antes se deducía solo de los partos y toda vaca sin historial
+ * aparecía como «novilla», sin importar su edad.
+ */
+export function etapaReproductiva(a: { en_ordeno: boolean; ultimo_parto: string | null; categoria: string }) {
+  if (a.en_ordeno) return "ordeno" as const;
+  if (a.ultimo_parto || a.categoria === "vaca") return "seca" as const;
+  return "novilla" as const;
+}
+
+export const ETIQUETA_ETAPA_REPRODUCTIVA = { ordeno: "Ordeño", seca: "Seca", novilla: "Novilla" } as const;

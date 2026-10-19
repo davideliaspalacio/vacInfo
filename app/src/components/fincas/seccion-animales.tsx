@@ -6,6 +6,7 @@ import { consultarPagina, leerPagina, type Params } from "@/lib/paginacion";
 import { Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
 import { MiniaturaFoto } from "@/components/foto";
+import { ETIQUETA_ETAPA_REPRODUCTIVA, etapaReproductiva } from "@/components/fincas/etiquetas";
 
 const VIENTRES_POR_PAGINA = 50;
 const OTROS_POR_PAGINA = 60;
@@ -96,13 +97,11 @@ export async function SeccionAnimales({ fincaId, corte, searchParams }: { fincaI
                         </Link>
                       </td>
                       <td>
-                        {a.en_ordeno ? (
-                          <Etiqueta tono="verde">Ordeño</Etiqueta>
-                        ) : a.ultimo_parto ? (
-                          <Etiqueta tono="amarillo">Seca</Etiqueta>
-                        ) : (
-                          <Etiqueta tono="azul">Novilla</Etiqueta>
-                        )}
+                        {(() => {
+                          const etapa = etapaReproductiva(a);
+                          const tono = etapa === "ordeno" ? "verde" : etapa === "seca" ? "amarillo" : "azul";
+                          return <Etiqueta tono={tono}>{ETIQUETA_ETAPA_REPRODUCTIVA[etapa]}</Etiqueta>;
+                        })()}
                       </td>
                       <td>{a.dias_ordeno ?? (a.dias_seca != null ? <span className="text-tinta-suave">{a.dias_seca} d seca</span> : "—")}</td>
                       <td>{a.prenada ? <Etiqueta tono="verde">Sí</Etiqueta> : a.ultimo_servicio ? <Etiqueta tono="gris">Servida</Etiqueta> : "No"}</td>

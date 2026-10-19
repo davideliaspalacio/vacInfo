@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codigoAnimal, letrasFinca } from "../etiquetas";
+import { codigoAnimal, etapaReproductiva, letrasFinca } from "../etiquetas";
 
 describe("código automático del animal", () => {
   it("usa 4 letras de la finca, el nombre y la chapeta", () => {
@@ -19,5 +19,23 @@ describe("código automático del animal", () => {
   it("arma el código con lo que haya si falta el nombre o la chapeta", () => {
     expect(codigoAnimal("Finca Toneles", "Josefina", "")).toBe("TONE-JOSEFINA");
     expect(codigoAnimal("Finca Toneles", "", "2079")).toBe("TONE-2079");
+  });
+});
+
+describe("etapa reproductiva que se muestra", () => {
+  it("una vaca sin partos registrados está seca, no es novilla", () => {
+    expect(etapaReproductiva({ en_ordeno: false, ultimo_parto: null, categoria: "vaca" })).toBe("seca");
+  });
+
+  it("una novilla sin partos sigue siendo novilla", () => {
+    expect(etapaReproductiva({ en_ordeno: false, ultimo_parto: null, categoria: "novilla" })).toBe("novilla");
+  });
+
+  it("la que está en ordeño manda sobre todo lo demás", () => {
+    expect(etapaReproductiva({ en_ordeno: true, ultimo_parto: null, categoria: "novilla" })).toBe("ordeno");
+  });
+
+  it("con parto registrado y sin ordeño, seca", () => {
+    expect(etapaReproductiva({ en_ordeno: false, ultimo_parto: "2026-01-10", categoria: "novilla" })).toBe("seca");
   });
 });
