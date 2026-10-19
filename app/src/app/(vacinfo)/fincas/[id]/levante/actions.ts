@@ -52,19 +52,3 @@ export async function registrarPesaje(fincaId: string, _: EstadoAccion, formData
   revalidatePath(`/animales/${animal.id}`);
   return { ok: `Pesaje de ${animal.nombre} guardado` };
 }
-
-export async function registrarDestete(fincaId: string, _: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
-  if (await esConsultor()) return { error: MENSAJE_SOLO_LECTURA };
-  const leido = z.object({ animal_id: uuid, fecha }).safeParse(datosDe(formData));
-  if (!leido.success) return { error: leido.error.issues[0]?.message ?? "Revisa los datos del destete." };
-
-  const { supabase, animal } = await animalDeFinca(fincaId, leido.data.animal_id);
-  if (!animal) return { error: "El animal no es de esta finca." };
-
-  const { error } = await supabase.rpc("registrar_destete", { p_animal: animal.id, p_fecha: leido.data.fecha });
-  if (error) return { error: `No se pudo guardar: ${error.message}` };
-
-  revalidatePath(`/fincas/${fincaId}`, "layout");
-  revalidatePath(`/animales/${animal.id}`);
-  return { ok: `Destete de ${animal.nombre} registrado` };
-}

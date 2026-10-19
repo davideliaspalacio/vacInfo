@@ -16,23 +16,28 @@ type Reglas = { dias_destete: number; edad_servicio_meses: number; peso_servicio
 type Levante = {
   estado: string;
   edad_meses: number | null;
-  destetar_el: string | null;
   ganancia_diaria_g: number | null;
 } | null;
 
 const diasEntre = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00`) - Date.parse(`${a}T12:00:00`)) / 86400000);
 
-/** Pesajes, curva contra la meta y datos de destete de un animal de levante. */
+/**
+ * Pesajes, curva contra la meta y datos de destete de un animal de levante.
+ * `fechaDestete` es la fecha efectiva: la registrada a mano si existe, o la que genera solo la
+ * finca (nacimiento + `dias_destete`). `destetada` dice si esa fecha ya pasó.
+ */
 export function SeccionCrecimiento({
   pesajes,
   nacimiento,
   fechaDestete,
+  destetada,
   reglas,
   levante,
 }: {
   pesajes: PesajeFila[];
   nacimiento: string | null;
   fechaDestete: string | null;
+  destetada: boolean;
   reglas: Reglas;
   levante: Levante;
 }) {
@@ -62,9 +67,9 @@ export function SeccionCrecimiento({
           tono="crema"
         />
         <Metrica
-          valor={fechaDestete ? fecha(fechaDestete) : levante?.destetar_el ? fecha(levante.destetar_el) : "—"}
-          etiqueta={fechaDestete ? "Destetada el" : levante?.destetar_el ? `Destetar el (a los ${reglas.dias_destete} días)` : "Destete"}
-          tono={!fechaDestete && levante?.estado === "destetar" ? "alerta" : "crema"}
+          valor={fechaDestete ? fecha(fechaDestete) : "—"}
+          etiqueta={fechaDestete ? (destetada ? "Destetada el" : `Destete el (a los ${reglas.dias_destete} días)`) : "Destete"}
+          tono="crema"
         />
       </div>
 

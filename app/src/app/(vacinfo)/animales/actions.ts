@@ -6,6 +6,7 @@ import { z } from "zod";
 import { borrarFoto } from "@/lib/fotos";
 import { MENSAJE_SOLO_LECTURA, soloLectura } from "@/lib/permisos";
 import { CATEGORIAS_FORMULARIO, errorMadre, especieDeCategoria, sexoDeCategoria } from "@/lib/parientes";
+import { codigoAnimal } from "@/components/fincas/etiquetas";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import type { EstadoFormulario } from "@/components/fincas/campo";
 import { datosDe, fechaOpcional, fotoOpcional, mensajeErrorBD, numeroOpcional, textoOpcional, textoRequerido } from "@/components/fincas/validacion";
@@ -15,7 +16,6 @@ const PADRE_OTRO = "__otro__";
 const esquemaAnimal = z
   .object({
     finca_id: z.uuid("Elige una finca"),
-    codigo: textoRequerido("Escribe el código del animal"),
     chapeta: textoOpcional,
     nombre: textoRequerido("Escribe el nombre"),
     categoria: z.enum(CATEGORIAS_FORMULARIO, "Elige la categoría"),
@@ -68,7 +68,19 @@ export async function guardarAnimal(id: string | null, _: EstadoFormulario, form
     if (error) return { errores: { madre_id: [error] }, mensaje: "Revisa los campos marcados." };
     madre_nombre = madre!.nombre;
   }
-  const datos = { ...base, madre_nombre, foto_url: foto.data };
+  // El código lo arma el servidor (4 letras de la finca · nombre · chapeta) y no se toma del navegador.
+  // Al editar se conserva el que ya tiene, porque el QR impreso en la chapeta lleva ese código.
+  let codigo = id ? (await supabase.from("animales").select("codigo").eq("id", id).maybeSingle()).data?.codigo : undefined;
+  if (!codigo) {
+    const nombreFinca = fincas.find((f) => f.id === base.finca_id)?.nombre ?? "";
+    const propuesto = codigoAnimal(nombreFinca, base.nombre, base.chapeta);
+    const { data: usados } = await supabase.from("animales").select("codigo").eq("finca_id", base.finca_id).like("codigo", `${propuesto}%`);
+    const tomados = new Set((usados ?? []).map((u) => u.codigo));
+    codigo = propuesto;
+    for (let n = 2; tomados.has(codigo); n++) codigo = `${propuesto}-${n}`;
+  }
+
+  const datos = { ...base, codigo, madre_nombre, foto_url: foto.data };
 
   const consulta = id
     ? supabase.from("animales").update(datos).eq("id", id).select("id").single()

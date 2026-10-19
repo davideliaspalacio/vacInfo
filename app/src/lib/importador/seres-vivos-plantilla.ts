@@ -33,7 +33,7 @@ const INSTRUCCIONES: [string, string][] = [
   ["NOMBRE", "Nombre del animal. Si no tiene nombre, deja la casilla vacía y escribe la chapeta: se usará la chapeta como nombre."],
   [
     "FECHA NACIMIENTO",
-    "Formato DD/MM/AAAA (por ejemplo 05/03/2025). Con la fecha se calcula la categoría (ternera, novilla, vaca, ternero, novillo, toro). Si la dejas vacía, la hembra queda como vaca y el macho como toro.",
+    "Formato DD/MM/AAAA (por ejemplo 05/03/2025). Con la fecha y el día de la importación se calcula la categoría: hasta 12 meses ternera o ternero, de 12 a 24 meses novilla o novillo, y de ahí en adelante vaca o toro. Si la dejas vacía, la hembra queda como vaca y el macho como toro, y la fila queda marcada en la vista previa.",
   ],
   ["CHAPETA", "Número o código de la chapeta. Sirve para no repetir animales: si la chapeta ya existe en la finca, la fila no se vuelve a crear."],
   [

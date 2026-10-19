@@ -5,7 +5,7 @@ import { urlFirmadaFoto } from "@/lib/fotos";
 import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
-import { fecha, litros, num } from "@/lib/formato";
+import { fecha, litros, num, sumarDias } from "@/lib/formato";
 import { consultarPagina, leerPagina, paginarUnion } from "@/lib/paginacion";
 import { atajosDias, completarRango, leerRangoPedido, textoRango } from "@/lib/rango";
 import { Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
@@ -61,6 +61,10 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
       : Promise.resolve({ data: null }),
   ]);
   const mostrarCrecimiento = animal.fincas && (esLevante(animal.categoria) || (pesajes.data?.length ?? 0) > 0);
+  // El destete se genera solo: nacimiento + los días de destete de la finca. Si hay una fecha
+  // registrada a mano (histórico), manda esa. Igual que lo calcula la base (levante_finca).
+  const desteteEl =
+    animal.fecha_destete ?? (animal.fecha_nacimiento && animal.fincas ? sumarDias(animal.fecha_nacimiento, animal.fincas.dias_destete) : null);
 
   const [madre, crias, ordenos, estadoRep, historial, sanidad, bajas, ultimaBaja] = await Promise.all([
     animal.madre_id ? supabase.from("animales").select("id, nombre, chapeta").eq("id", animal.madre_id).maybeSingle() : Promise.resolve({ data: null }),
@@ -289,7 +293,7 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
             detalle={
               puedeRegistrar(rol) && (
                 <Link href={`/fincas/${animal.finca_id}/levante?animal=${id}#crecimiento`} className="font-bold text-bosque hover:underline">
-                  Registrar pesaje o destete
+                  Registrar pesaje
                 </Link>
               )
             }
@@ -299,7 +303,8 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
           <SeccionCrecimiento
             pesajes={pesajes.data ?? []}
             nacimiento={levante.data?.fecha_nacimiento ?? animal.fecha_nacimiento}
-            fechaDestete={animal.fecha_destete}
+            fechaDestete={desteteEl}
+            destetada={!!desteteEl && desteteEl <= corte}
             reglas={animal.fincas}
             levante={levante.data}
           />

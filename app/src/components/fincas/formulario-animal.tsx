@@ -16,7 +16,7 @@ import {
 import { BotonPrimario } from "@/components/ui";
 import { FotoCampo } from "@/components/foto-campo";
 import { Campo, MensajeError, type EstadoFormulario } from "@/components/fincas/campo";
-import { CATEGORIAS, ESTADOS_ANIMAL, GRUPOS_CATEGORIA, METODOS_ADQUISICION, SEXOS } from "@/components/fincas/etiquetas";
+import { CATEGORIAS, ESTADOS_ANIMAL, GRUPOS_CATEGORIA, METODOS_ADQUISICION, SEXOS, codigoAnimal } from "@/components/fincas/etiquetas";
 import type { FincaConCodigos } from "@/components/fincas/consultas";
 
 type Animal = Database["public"]["Tables"]["animales"]["Row"];
@@ -66,8 +66,7 @@ export function FormularioAnimal({
 
   const [fincaId, setFincaId] = useState(animal?.finca_id ?? fincaInicial ?? fincas[0]?.id ?? "");
   const [chapeta, setChapeta] = useState(animal?.chapeta ?? "");
-  const [codigo, setCodigo] = useState(animal?.codigo ?? "");
-  const [codigoManual, setCodigoManual] = useState(Boolean(animal));
+  const [nombre, setNombre] = useState(animal?.nombre ?? "");
   const [categoria, setCategoria] = useState<string>(categoriaFormulario(animal?.categoria));
   const [sexoElegido, setSexoElegido] = useState<string>(animal?.sexo ?? "hembra");
 
@@ -94,9 +93,10 @@ export function FormularioAnimal({
     if (padre && padre !== PADRE_OTRO && !nuevas.nombresPadre.has(padre)) setPadre("");
   };
 
-  const prefijo = fincas.find((f) => f.id === fincaId)?.prefijo ?? "";
-  const sugerido = chapeta.trim() ? `${prefijo}-${chapeta.trim()}` : "";
-  const codigoMostrado = codigoManual ? codigo : sugerido;
+  // El código se arma solo: 4 letras de la finca, nombre y chapeta. Al editar no cambia,
+  // porque el QR ya impreso en la chapeta lleva el código original.
+  const nombreFinca = fincas.find((f) => f.id === fincaId)?.nombre ?? "";
+  const codigoMostrado = animal?.codigo ?? codigoAnimal(nombreFinca, nombre, chapeta);
   const metodoGuardado = animal?.metodo_adquisicion;
   const metodos = metodoGuardado && !METODOS_ADQUISICION.includes(metodoGuardado) ? [...METODOS_ADQUISICION, metodoGuardado] : METODOS_ADQUISICION;
   const v = (x: string | number | null | undefined) => (x == null ? "" : String(x));
@@ -132,33 +132,15 @@ export function FormularioAnimal({
           <Campo etiqueta="Chapeta" error={e.chapeta}>
             <input name="chapeta" value={chapeta} onChange={(ev) => setChapeta(ev.target.value)} className="campo-control font-mono" placeholder="1394" />
           </Campo>
-          <Campo
-            etiqueta="Código *"
-            error={e.codigo}
-            ayuda={
-              codigoManual && sugerido && codigo !== sugerido ? (
-                <button type="button" className="font-bold text-pasto-oscuro underline" onClick={() => setCodigoManual(false)}>
-                  Usar {sugerido}
-                </button>
-              ) : (
-                "Se imprime en el QR de la chapeta"
-              )
-            }
-          >
-            <input
-              name="codigo"
-              required
-              value={codigoMostrado}
-              onChange={(ev) => {
-                setCodigoManual(true);
-                setCodigo(ev.target.value);
-              }}
-              placeholder={prefijo ? `${prefijo}-…` : ""}
-              className="campo-control font-mono"
-            />
-          </Campo>
           <Campo etiqueta="Nombre *" error={e.nombre}>
-            <input name="nombre" required defaultValue={v(animal?.nombre)} className="campo-control" />
+            <input name="nombre" required value={nombre} onChange={(ev) => setNombre(ev.target.value)} className="campo-control" />
+          </Campo>
+          <Campo
+            etiqueta="Código"
+            error={e.codigo}
+            ayuda={animal ? "No cambia: es el que está impreso en el QR de la chapeta" : "Se arma solo con la finca, el nombre y la chapeta"}
+          >
+            <output className="campo-control block truncate bg-lima-suave font-mono text-tinta-suave">{codigoMostrado || "—"}</output>
           </Campo>
           <Campo etiqueta="Categoría *" error={e.categoria}>
             <select

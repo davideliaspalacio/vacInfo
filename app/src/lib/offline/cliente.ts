@@ -164,7 +164,7 @@ export async function leerCatalogo(fincaId: string) {
   return c && completarCatalogo(c);
 }
 
-/** Refleja en el teléfono un destete o una salida antes de volver a descargar. null = el animal sale del inventario. */
+/** Refleja en el teléfono un cambio del animal antes de volver a descargar. null = el animal sale del inventario (baja). */
 export async function actualizarAnimalLocal(fincaId: string, animalId: string, cambios: Partial<AnimalCatalogo> | null) {
   const c = await leerCatalogo(fincaId);
   if (!c) return undefined;

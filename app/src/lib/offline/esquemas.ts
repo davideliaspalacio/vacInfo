@@ -115,6 +115,8 @@ export const ESQUEMAS = {
       observaciones: texto,
     })
     .refine((d) => d.tipo !== "mastitis" || d.cuartos.length > 0, { path: ["cuartos"] }),
+  // Destete: ya no se registra desde la interfaz, pero el esquema se queda para seguir
+  // aceptando lo que haya quedado encolado en un teléfono con la app vieja.
   destete: z.object(delAnimal),
   baja: z.object({
     ...delAnimal,

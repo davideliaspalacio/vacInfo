@@ -121,6 +121,10 @@ export const TIPOS_ALERTA: Record<string, string> = {
   mora_prenez: "Mora de preñez",
   retiro_leche: "Retiro de leche",
   vacuna: "Vacuna",
+  destete: "Destete",
+  insumo: "Insumo",
+  novilla_lista: "Novilla lista",
+  programado: "Evento agendado",
 };
 
 /** La especie se deduce de la categoría: el formulario solo pide la categoría. */
@@ -163,4 +167,32 @@ export function prefijoFinca(nombre: string, codigos: string[] = []) {
     .replace(/[^a-zA-Z]/g, "")
     .toUpperCase();
   return base.slice(0, 3) || "FIN";
+}
+
+/** Las 4 letras de la finca para el código: «Finca Toneles» → TONE. */
+export function letrasFinca(nombre: string) {
+  const base = nombre
+    .replace(/^finca\s+/i, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z]/g, "")
+    .toUpperCase();
+  return (base.slice(0, 4) || "FINC").padEnd(4, "X");
+}
+
+const sinTildes = (v: string) =>
+  v
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "")
+    .toUpperCase();
+
+/**
+ * Código automático del animal: 4 letras de la finca, nombre y número de chapeta.
+ * «Finca Toneles» + «Josefina» + 2079 → TONE-JOSEFINA-2079. Si falta nombre o chapeta,
+ * se arma con lo que haya; quien llama resuelve los repetidos.
+ */
+export function codigoAnimal(nombreFinca: string, nombreAnimal: string, chapeta?: string | null) {
+  const partes = [letrasFinca(nombreFinca), sinTildes(nombreAnimal ?? ""), sinTildes(String(chapeta ?? ""))];
+  return partes.filter(Boolean).join("-");
 }

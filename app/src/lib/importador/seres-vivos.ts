@@ -118,10 +118,13 @@ export function mesesEntre(desde: string, hasta: string) {
 }
 
 /**
- * Categoría según especie, sexo y edad al momento de importar:
- * bovino hembra < 12 meses ternera y ≥ 12 novilla; bovino macho < 12 ternero, 12–24 novillo y > 24 toro.
- * Sin fecha de nacimiento la hembra queda vaca y el macho toro. Caballo, perro y cualquier otra especie
- * van a su propia categoría.
+ * Categoría según especie, sexo y edad al momento de importar. Las dos escalas son simétricas:
+ * bovino hembra < 12 meses ternera, 12–24 novilla y > 24 vaca; bovino macho < 12 ternero, 12–24 novillo
+ * y > 24 toro. Sin fecha de nacimiento la hembra queda vaca y el macho toro. Caballo, perro y cualquier
+ * otra especie van a su propia categoría.
+ *
+ * El corte de los 24 meses en las hembras es el que faltaba: sin él ninguna fecha de nacimiento podía
+ * dar «vaca» y toda hembra con fecha —de 1 año o de 10— quedaba como novilla.
  */
 export function categoriaDerivada(especie: Especie, sexo: Sexo, fechaNacimiento: string | null, hoy: string): Categoria {
   if (especie === "equino") return "caballo";
@@ -129,9 +132,9 @@ export function categoriaDerivada(especie: Especie, sexo: Sexo, fechaNacimiento:
   if (especie !== "bovino") return "otro";
   if (!fechaNacimiento) return sexo === "hembra" ? "vaca" : "toro";
   const meses = Math.max(0, mesesEntre(fechaNacimiento, hoy));
-  if (sexo === "hembra") return meses < 12 ? "ternera" : "novilla";
-  if (meses < 12) return "ternero";
-  return meses <= 24 ? "novillo" : "toro";
+  if (meses < 12) return sexo === "hembra" ? "ternera" : "ternero";
+  if (meses <= 24) return sexo === "hembra" ? "novilla" : "novillo";
+  return sexo === "hembra" ? "vaca" : "toro";
 }
 
 export interface FilaSerVivo {

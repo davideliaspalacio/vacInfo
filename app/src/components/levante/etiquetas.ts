@@ -1,5 +1,6 @@
 export const ESTADOS_LEVANTE = {
   lactante: { texto: "Lactante", plural: "Terneras lactantes", tono: "azul" },
+  /** Legado: el destete se genera solo, así que `levante_finca` ya no devuelve este estado. Se deja por si una base todavía no tiene la migración `20261018000016_destete_automatico`. */
   destetar: { texto: "Por destetar", plural: "Por destetar", tono: "amarillo" },
   levante: { texto: "Levante", plural: "Levante", tono: "gris" },
   lista_servicio: { texto: "Lista para servicio", plural: "Listas para servicio", tono: "verde" },

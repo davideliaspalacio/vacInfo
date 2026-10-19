@@ -8,6 +8,8 @@ export const ACCIONES = [
   "parto",
   "secado",
   "salud",
+  // Ya no se ofrece en VacDaTa (el destete lo genera solo el sistema con `fincas.dias_destete`);
+  // se conserva para las colas sin señal de teléfonos con la app vieja en caché.
   "destete",
   "baja",
   // Ya no se ofrece en VacDaTa; se conserva para registros que quedaron en cola.

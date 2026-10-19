@@ -11,7 +11,7 @@ export const ETIQUETA_ACCION: Record<Accion, string> = {
   parto: "Parto",
   secado: "Secado",
   salud: "Salud",
-  destete: "Destete",
+  destete: "Destete", // Ya no se registra; la etiqueta se queda para las colas viejas (ver tipos.ts).
   baja: "Muerte / venta / retiro",
   pesaje: "Pesaje",
   carro_tanque: "Carro tanque",

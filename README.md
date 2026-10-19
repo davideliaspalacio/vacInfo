@@ -195,7 +195,7 @@ flowchart LR
 | Ficha de animal | `/animales/:id` | Datos, QR imprimible, producción (60 días), reproducción, sanidad, crecimiento |
 | Nuevo ser vivo | `/animales/nuevo` | Categoría (especie derivada), adquisición, madre de la finca, padre desde lista de toros |
 | Bienes | `/bienes/:id` | Equipos con garantía, recordatorio, mantenimientos y QR |
-| Levante | `/fincas/:id/levante` | Terneras y novillas: pesajes, destete, ganancia diaria, listas para servicio |
+| Levante | `/fincas/:id/levante` | Terneras y novillas: pesajes, fecha de destete automática, ganancia diaria, listas para servicio |
 | Potreros | `/fincas/:id/potreros` | Mapa por estado, rotación de grupos, bloqueo por días de retiro, siguiente potrero sugerido |
 | Costos | `/fincas/:id/costos` | Parámetros mensuales con vista previa y semáforo de rentabilidad |
 | Informes | `/informes?tab=` | Operativo (planilla viva), Administrativo (20 registros ICA), Contable (costo por litro, equilibrio, flujo de caja) |
@@ -204,7 +204,7 @@ flowchart LR
 | Inventario | `/inventario` | Saldo por insumo, días que alcanza, mínimos, catálogo y **consumo automático** |
 | Mensajes | `/mensajes` | Alertas automáticas, comentarios de VacDaTa y mensajes al equipo |
 | Equipo | `/equipo` | Miembros, roles, fincas permitidas, invitaciones con código/enlace/QR |
-| Importar | `/importar` | Dos pestañas: planillas quincenales de ordeño y planilla de implementación de seres vivos (plantilla descargable), sin duplicar |
+| Importar | `/importar` | Planilla de implementación de seres vivos (plantilla descargable), con vista previa y sin duplicar |
 
 ---
 
@@ -264,9 +264,9 @@ sequenceDiagram
 
 | Grupo | Acciones (`lib/offline/tipos.ts`) |
 |---|---|
-| Animal | `ordeno`, `ordeno_lista`, `servicio`, `palpacion`, `parto` (crea la cría con `registrar_parto`), `secado`, `salud`, `destete`, `baja` |
+| Animal | `ordeno`, `ordeno_lista`, `servicio`, `palpacion`, `parto` (crea la cría con `registrar_parto`), `secado`, `salud`, `baja` |
 | Finca | `carro_tanque`, `consumo_diario`, `mantenimiento`, `aplicacion` (fumigación/abonos con potreros), `control_calidad` (agua y tanque), `movimiento_insumo`, `visita`, `rotacion` |
-| Legado | `pesaje` (ya no se muestra; se acepta para colas antiguas) |
+| Legado | `pesaje`, `destete` (ya no se muestran; se aceptan para colas antiguas de teléfonos con la app vieja) |
 
 ### 6.4 Piezas
 
@@ -341,7 +341,7 @@ Se calcula en `estado_reproductivo(finca, corte)`. La **fecha de corte** por def
 | Mora de preñez | en ordeño más de 40 días sin servicio (> 60 alta) | Media / Alta |
 | Retiro de leche | tratamiento con días de retiro vigentes | Alta |
 | Vacuna | próxima dosis registrada | Media |
-| Destete | cría que cumplió `fincas.dias_destete` | Media |
+| Destete (aviso) | la cría cumple su destete automático (nacimiento + `fincas.dias_destete`) dentro del horizonte; no es tarea: el sistema lo hace solo | Baja |
 | Novilla lista | edad ≥ `edad_servicio_meses` y peso ≥ `peso_servicio_kg` | Media |
 | Insumo | alcanza < 7 días o bajo el mínimo (agotado = alta) | Media / Alta |
 | Evento agendado | `eventos_programados` pendientes en el horizonte | Media |
@@ -363,6 +363,12 @@ Reglas de consumo automático: **fijo** (cantidad por día, mes o año) o **por 
 
 ### 8.4 Importador de Excel
 
+En la web solo se importa la **planilla de implementación de seres vivos**: la pestaña de planillas quincenales se retiró de `/importar` a pedido del cliente. El historial «Importaciones anteriores» sigue mostrando las dos.
+
+#### Planillas quincenales (solo histórico)
+
+Con este camino se cargó la finca Toneles la primera vez. Los módulos (`leer.ts`, `combinar.ts`, `aplicar.ts`, `normalizar.ts`, `tipos.ts`) y sus pruebas se conservan porque los usa el script `scripts/importar-toneles.test.ts`, pero ya no hay forma de llegar a ellos desde la aplicación.
+
 ```mermaid
 flowchart LR
     X["Libro .xlsx<br/>hojas quincenales"] --> P["leer.ts<br/>columnas por título"]
@@ -383,7 +389,7 @@ flowchart LR
     A --> LOG["importaciones"]
 ```
 
-La segunda pestaña de `/importar` carga el listado con el que el cliente da de alta todos los animales de una finca: `#, ESPECIE, RAZA, COLOR, SEXO, NOMBRE, FECHA NACIMIENTO, CHAPETA, PESO, PADRE, CHAPETA PADRE, MADRE, CHAPETA MADRE`. La etapa se deriva de la especie, el sexo y la edad al importar (bovino hembra < 12 meses ternera y ≥ 12 novilla; macho < 12 ternero, 12–24 novillo y > 24 toro; sin fecha de nacimiento la hembra queda vaca y el macho toro); el peso crea además un registro en `pesajes` para la curva de crecimiento de Levante, y la chapeta de la madre enlaza `madre_id` cuando coincide con un animal de la finca o con otra fila del mismo archivo (si no, se guardan `madre_nombre` y `madre_chapeta`). La chapeta es la llave para no duplicar: subir dos veces el mismo archivo no crea nada nuevo.
+`/importar` carga el listado con el que el cliente da de alta todos los animales de una finca: `#, ESPECIE, RAZA, COLOR, SEXO, NOMBRE, FECHA NACIMIENTO, CHAPETA, PESO, PADRE, CHAPETA PADRE, MADRE, CHAPETA MADRE`. La etapa se deriva de la especie, el sexo y la edad al importar, con las dos escalas simétricas (hembra < 12 meses ternera, 12–24 novilla y > 24 vaca; macho < 12 ternero, 12–24 novillo y > 24 toro; sin fecha de nacimiento la hembra queda vaca y el macho toro, y la fila sale marcada en la vista previa); el peso crea además un registro en `pesajes` para la curva de crecimiento de Levante, y el código automático se arma con `codigoAnimal` (4 letras de la finca, nombre y chapeta: `TONE-JOSEFINA-2079`, con sufijo `-2`, `-3` solo si se repite), la chapeta de la madre enlaza `madre_id` cuando coincide con un animal de la finca o con otra fila del mismo archivo (si no, se guardan `madre_nombre` y `madre_chapeta`). La chapeta es la llave para no duplicar: subir dos veces el mismo archivo no crea nada nuevo.
 
 ### 8.5 Informe contable
 
@@ -443,7 +449,7 @@ Toda tabla de eventos guarda `registrado_por` y `registrado_en`.
 | `20260912000002_seguridad_y_calculos.sql` | RLS base, `estado_reproductivo`, `resumen_finca`, `alertas_finca` |
 | `20260912000003_permisos.sql` | Privilegios del rol `authenticated` |
 | `20260912000004_fase2.sql` | Importaciones, sincronizaciones, invitaciones, pesajes, potreros, inventario, indicadores, calendario, levante |
-| `20260912000005_destete.sql` | `registrar_destete` |
+| `20260912000005_destete.sql` | `registrar_destete` (solo histórico y colas sin señal antiguas) |
 | `20260912000006_endurecer.sql` | Protección de propietarios, códigos legibles, `registrar_parto` |
 | `20260912000007_liberar_sincronizacion.sql` | Política para liberar marcas de sincronización |
 | `20260912000008_catalogos.sql` | Manual del trabajador y plan sanitario |
@@ -454,6 +460,7 @@ Toda tabla de eventos guarda `registrado_por` y `registrado_en`.
 | `20260914000013_alertas_descartadas.sql` | Notificaciones descartables por usuario |
 | `20261016000014_padres_chapeta.sql` | Chapeta del padre y de la madre en `animales` (plantilla de seres vivos) |
 | `20261016000015_fotos.sql` | Bucket `fotos` de Storage, función de ruta y políticas por empresa |
+| `20261018000016_destete_automatico.sql` | Destete calculado (`coalesce(fecha_destete, fecha_nacimiento + dias_destete)`): `levante_finca`, `alertas_finca` y `eventos_calendario` recreadas; sin registro manual |
 
 **Funciones principales:** `estado_reproductivo`, `resumen_finca`, `alertas_finca`, `eventos_calendario`, `indicadores_mensuales`, `levante_finca`, `estado_potreros`, `saldo_insumos`, `animales_por_dia`, `ultimo_ordeno`, `registrar_parto`, `registrar_destete`, `crear_organizacion`, `ver_invitacion`, `aceptar_invitacion`.
 **Ayudantes de RLS:** `es_miembro`, `es_gestor`, `puede_ver_finca`, `puede_ver_animal`, `puede_registrar_finca`, `puede_registrar_animal`, `puede_registrar_organizacion`, `puede_gestionar_finca`.

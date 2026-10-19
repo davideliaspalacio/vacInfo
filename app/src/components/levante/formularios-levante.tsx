@@ -46,17 +46,7 @@ export function FormularioPesaje({ accion, animales, corte, animal }: { accion: 
   );
 }
 
-export function FormularioDestete({ accion, animales, corte, animal }: { accion: Accion; animales: Opcion[]; corte: string; animal?: string }) {
-  if (!animales.length) return <p className="text-sm text-tinta-suave">No hay crías pendientes de destete.</p>;
-  return (
-    <FormularioAccion accion={accion} boton="Registrar destete">
-      <SelectorAnimal animales={animales} defecto={animales.some((a) => a.animal_id === animal) ? animal : undefined} />
-      <Campo etiqueta="Fecha del destete">
-        <input type="date" name="fecha" required defaultValue={corte} className="campo-control" />
-      </Campo>
-    </FormularioAccion>
-  );
-}
+// El destete ya no se registra: lo genera el sistema con `fincas.dias_destete` (migración 20261018000016).
 
 export function FormularioReglasLevante({
   accion,
@@ -67,7 +57,7 @@ export function FormularioReglasLevante({
 }) {
   return (
     <FormularioAccion accion={accion} boton="Guardar reglas" className="flex flex-wrap items-end gap-3">
-      <Campo etiqueta="Días para destete" className="w-36">
+      <Campo etiqueta="Días para destete" className="w-36" ayuda="Genera el destete solo">
         <input name="dias_destete" type="number" min="1" required defaultValue={finca.dias_destete} className="campo-control py-2" />
       </Campo>
       <Campo etiqueta="Edad servicio (meses)" className="w-40">

@@ -12,9 +12,9 @@ import { Paginacion } from "@/components/paginacion";
 import { RangoFechas } from "@/components/rango-fechas";
 import { guardarReglasFinca } from "@/app/(vacinfo)/fincas/actions";
 import { ESTADOS_LEVANTE, tonoGanancia, type EstadoLevante } from "@/components/levante/etiquetas";
-import { FormularioDestete, FormularioPesaje, FormularioReglasLevante } from "@/components/levante/formularios-levante";
+import { FormularioPesaje, FormularioReglasLevante } from "@/components/levante/formularios-levante";
 import { SeccionCrecimiento } from "@/components/levante/seccion-crecimiento";
-import { registrarDestete, registrarPesaje } from "./actions";
+import { registrarPesaje } from "./actions";
 
 export const metadata = { title: "Levante" };
 
@@ -23,9 +23,10 @@ const PESAJES_POR_PAGINA = 20;
 const DESTETES_POR_PAGINA = 20;
 const DESC = { ascending: false } as const;
 
+// El destete se genera solo (fincas.dias_destete), así que ya no hay grupo «Por destetar»:
+// la cría es lactante hasta su fecha de destete y pasa a levante después, sin registrar nada.
 const GRUPOS: { clave: string; titulo: string; estados: EstadoLevante[]; vacio: string }[] = [
   { clave: "lactante", titulo: "Terneras lactantes", estados: ["lactante"], vacio: "No hay crías lactantes." },
-  { clave: "destetar", titulo: "Por destetar", estados: ["destetar"], vacio: "Ninguna cría cumplió los días de destete." },
   { clave: "levante", titulo: "Levante", estados: ["levante"], vacio: "No hay animales en levante." },
   { clave: "lista_servicio", titulo: "Listas para servicio", estados: ["lista_servicio"], vacio: "Ninguna novilla cumple edad y peso para servicio." },
   { clave: "servidas", titulo: "Novillas servidas y preñadas", estados: ["servida", "prenada"], vacio: "No hay novillas servidas." },
@@ -51,7 +52,7 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
   const rango = completarRango(pedido, referencia);
   const hasta = rango.hasta;
 
-  const [{ data }, pesajesRango, destetesRango] = await Promise.all([
+  const [{ data }, pesajesRango] = await Promise.all([
     supabase.rpc("levante_finca", { p_finca: id, p_corte: hasta }),
     consultarPagina(
       (a, b) =>
@@ -67,21 +68,18 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
           .range(a, b),
       leerPagina(sp, { param: "ppes", tamano: PESAJES_POR_PAGINA }),
     ),
-    consultarPagina(
-      (a, b) =>
-        supabase
-          .from("animales")
-          .select("id, nombre, chapeta, codigo, categoria, fecha_nacimiento, fecha_destete", { count: "exact" })
-          .eq("finca_id", id)
-          .gte("fecha_destete", rango.desde)
-          .lte("fecha_destete", hasta)
-          .order("fecha_destete", DESC)
-          .order("id")
-          .range(a, b),
-      leerPagina(sp, { param: "pdes", tamano: DESTETES_POR_PAGINA }),
-    ),
   ]);
   const filas = data ?? [];
+
+  // Destetes del rango: `levante_finca.fecha_destete` ya es la fecha efectiva (la registrada a mano
+  // si existe, o nacimiento + dias_destete de la finca), así que se filtra en memoria sobre el
+  // levante y no con una consulta por la columna, que solo vería los destetes registrados.
+  const destetesRango = recortar(
+    filas
+      .filter((f) => f.fecha_destete && f.fecha_destete >= rango.desde && f.fecha_destete <= hasta)
+      .sort((a, b) => b.fecha_destete!.localeCompare(a.fecha_destete!) || a.nombre.localeCompare(b.nombre)),
+    leerPagina(sp, { param: "pdes", tamano: DESTETES_POR_PAGINA }),
+  );
 
   const elegido = filas.find((f) => f.animal_id === seleccion);
   // La curva de crecimiento usa todos los pesajes hasta la fecha «hasta» (necesita la historia desde el nacimiento).
@@ -98,7 +96,10 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
     const s = q.toString();
     return `/fincas/${id}/levante${s ? `?${s}` : ""}`;
   };
-  const sinDestetar = filas.filter((f) => !f.fecha_destete && ["ternera", "ternero"].includes(f.categoria));
+  // El próximo destete que hará el sistema solo (la fecha más cercana todavía por cumplir).
+  const proximoDestete = filas
+    .flatMap((f) => (!f.destetada && f.fecha_destete ? [f.fecha_destete] : []))
+    .sort()[0];
   const ruta = `/fincas/${id}/levante`;
 
   return (
@@ -107,7 +108,7 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
       <Encabezado
         eyebrow={`Terneras y novillas · ${finca.nombre}`}
         titulo="Levante"
-        descripcion={`Destete a los ${finca.dias_destete} días · servicio desde los ${finca.edad_servicio_meses} meses con ${num(finca.peso_servicio_kg)} kg.`}
+        descripcion={`El sistema desteta solo a los ${finca.dias_destete} días de nacida · servicio desde los ${finca.edad_servicio_meses} meses con ${num(finca.peso_servicio_kg)} kg.`}
       />
 
       <Tarjeta>
@@ -126,7 +127,7 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
           <Metrica valor={num(cuenta("lactante"))} etiqueta="Lactantes" tono="crema" />
-          <Metrica valor={num(cuenta("destetar"))} etiqueta="Por destetar" tono={cuenta("destetar") ? "alerta" : "crema"} />
+          <Metrica valor={proximoDestete ? fecha(proximoDestete) : "—"} etiqueta="Próximo destete automático" tono="crema" />
           <Metrica valor={num(cuenta("levante"))} etiqueta="En levante" tono="crema" />
           <Metrica valor={num(cuenta("lista_servicio"))} etiqueta="Listas para servicio" />
           <Metrica valor={`${num(cuenta("servida"))} / ${num(cuenta("prenada"))}`} etiqueta="Servidas / preñadas" />
@@ -156,6 +157,7 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
             pesajes={pesajes}
             nacimiento={elegido.fecha_nacimiento}
             fechaDestete={elegido.fecha_destete}
+            destetada={elegido.destetada ?? false}
             reglas={finca}
             levante={elegido}
           />
@@ -177,19 +179,22 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
               <Vacio>No hay animales de levante.</Vacio>
             )}
           </Tarjeta>
-          <Tarjeta>
-            <TituloTarjeta detalle={`${sinDestetar.length} sin destetar`}>Registrar destete</TituloTarjeta>
-            <FormularioDestete accion={registrarDestete.bind(null, id)} animales={sinDestetar} corte={hasta} animal={elegido?.animal_id} />
-            {gestor && (
-              <div className="mt-6 border-t border-black/10 pt-4">
-                <p className="mb-3 flex items-center gap-2 text-sm font-bold text-bosque">
-                  <Settings2 className="h-4 w-4" aria-hidden />
+          {gestor && (
+            <Tarjeta>
+              <TituloTarjeta>
+                <span className="inline-flex items-center gap-2">
+                  <Settings2 className="h-5 w-5" aria-hidden />
                   Reglas de la finca
-                </p>
-                <FormularioReglasLevante accion={guardarReglasFinca.bind(null, id)} finca={finca} />
-              </div>
-            )}
-          </Tarjeta>
+                </span>
+              </TituloTarjeta>
+              <p className="mb-4 text-sm text-tinta-suave">
+                El destete no se registra: el sistema da por destetada a cada cría a los{" "}
+                <strong className="text-bosque">{finca.dias_destete} días</strong> de nacida. Si cambias ese número, las fechas de destete se mueven solas; las crías con
+                un destete ya registrado a mano conservan su fecha.
+              </p>
+              <FormularioReglasLevante accion={guardarReglasFinca.bind(null, id)} finca={finca} />
+            </Tarjeta>
+          )}
         </div>
       )}
 
@@ -242,9 +247,8 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
                           <td className="font-bold">{f.ultimo_peso != null ? `${num(f.ultimo_peso)} kg` : "—"}</td>
                           <td>{fecha(f.fecha_ultimo_peso)}</td>
                           <td className={tonoGanancia(f.ganancia_diaria_g)}>{f.ganancia_diaria_g != null ? num(f.ganancia_diaria_g) : "—"}</td>
-                          <td className={f.estado === "destetar" ? "font-bold text-alerta" : undefined}>
-                            {f.fecha_destete ? `Destetada ${fecha(f.fecha_destete)}` : f.destetar_el ? `Destetar ${fecha(f.destetar_el)}` : "—"}
-                          </td>
+                          {/* Fecha de destete automática (o la registrada a mano, si la hay): pasada = ya destetada. */}
+                          <td>{f.fecha_destete ? `${f.destetada ? "Destetada" : "Destete"} ${fecha(f.fecha_destete)}` : "—"}</td>
                           {g.clave === "servidas" && <td>{fecha(f.ultimo_servicio)}</td>}
                           <td>{estado ? <Etiqueta tono={estado.tono}>{estado.texto}</Etiqueta> : f.estado}</td>
                           <td>
@@ -324,7 +328,7 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
         <Tarjeta id="destetes-rango" className="scroll-mt-6">
           <TituloTarjeta detalle={`${num(destetesRango.total)} · ${textoRango(rango).toLowerCase()}`}>Destetes del rango</TituloTarjeta>
           {!destetesRango.filas.length ? (
-            <Vacio>No hay destetes registrados en este rango de fechas.</Vacio>
+            <Vacio>Ninguna cría cumple su destete en este rango de fechas.</Vacio>
           ) : (
             <div className="overflow-x-auto">
               <table className="matriz w-full border-collapse bg-white text-sm">
@@ -334,20 +338,24 @@ export default async function LevanteFinca({ params, searchParams }: PageProps<"
                     <th>Animal</th>
                     <th>Categoría</th>
                     <th>Nacimiento</th>
+                    <th>Estado</th>
                   </tr>
                 </thead>
                 <tbody>
                   {destetesRango.filas.map((d) => (
-                    <tr key={d.id}>
+                    <tr key={d.animal_id}>
                       <td>{fecha(d.fecha_destete)}</td>
                       <td className="!text-left">
-                        <Link href={`/animales/${d.id}`} className="font-bold text-bosque hover:underline">
+                        <Link href={`/animales/${d.animal_id}`} className="font-bold text-bosque hover:underline">
                           {d.nombre}
                         </Link>{" "}
                         <span className="font-mono text-xs text-tinta-suave">{d.chapeta ?? d.codigo}</span>
                       </td>
                       <td className="capitalize">{d.categoria}</td>
                       <td>{fecha(d.fecha_nacimiento)}</td>
+                      <td>
+                        <Etiqueta tono={d.destetada ? "verde" : "azul"}>{d.destetada ? "Destetada" : "Por cumplir"}</Etiqueta>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

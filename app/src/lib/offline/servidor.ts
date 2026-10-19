@@ -182,6 +182,10 @@ async function aplicar(s: Cliente, v: Validado, id: string): Promise<Aplicado> {
         }),
       );
     }
+    // El destete ya no se registra: lo genera solo el sistema (nacimiento + `fincas.dias_destete`,
+    // ver migración 20261018000016_destete_automatico.sql) y desapareció de la interfaz. Esta rama
+    // se queda a propósito: un teléfono con la app vieja en caché puede enviar todavía un destete
+    // encolado y el servidor lo sigue aceptando; la fecha guardada manda sobre la automática.
     case "destete": {
       const { data: animal, error } = await s.from("animales").select("fecha_destete").eq("id", v.datos.animal_id).maybeSingle();
       if (error) return fallo(error);

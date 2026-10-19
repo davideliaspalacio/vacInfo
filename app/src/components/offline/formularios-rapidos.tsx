@@ -5,7 +5,6 @@ import clsx from "clsx";
 import { ChevronDown, CircleAlert, LoaderCircle, Save } from "lucide-react";
 import { Campo, CampoFecha, Casilla, JORNADAS, Opciones, SI_NO, control } from "@/components/campo/ui";
 import { clasesGuardar } from "@/components/campo/boton-guardar";
-import { esLevante } from "@/components/levante/etiquetas";
 import { hoyISO } from "@/lib/formato";
 import { OrdenoRepetidoError } from "@/lib/offline/cliente";
 import { CUARTOS, TIPOS_SALUD, validarDatos } from "@/lib/offline/esquemas";
@@ -238,7 +237,10 @@ export function Selector({
 }
 
 // ─────────────────────────── Animal ───────────────────────────
-export const ACCIONES_ANIMAL = ["ordeno", "servicio", "palpacion", "parto", "secado", "destete", "salud", "baja"] as const;
+// Sin «destete»: el destete lo genera solo el sistema con `fincas.dias_destete`, no se registra.
+// La acción `destete` sigue viva en la cola y en el servidor (src/lib/offline/tipos.ts) para los
+// teléfonos con la app vieja en caché que todavía tengan un destete encolado sin señal.
+export const ACCIONES_ANIMAL = ["ordeno", "servicio", "palpacion", "parto", "secado", "salud", "baja"] as const;
 export type AccionAnimal = (typeof ACCIONES_ANIMAL)[number];
 
 const SOLO_HEMBRAS: AccionAnimal[] = ["ordeno", "servicio", "palpacion", "parto", "secado"];
@@ -249,7 +251,6 @@ export const ETIQUETA_ACCION_ANIMAL: Record<AccionAnimal, string> = {
   palpacion: "Palpación",
   parto: "Parto / cría",
   secado: "Secado",
-  destete: "Destete",
   salud: "Salud",
   baja: "Muerte / venta / retiro",
 };
@@ -257,7 +258,6 @@ export const ETIQUETA_ACCION_ANIMAL: Record<AccionAnimal, string> = {
 export function accionesDe(animal: AnimalCatalogo): AccionAnimal[] {
   return ACCIONES_ANIMAL.filter((a) => {
     if (SOLO_HEMBRAS.includes(a)) return animal.sexo === "hembra";
-    if (a === "destete") return esLevante(animal.categoria) && !animal.fecha_destete;
     return true;
   });
 }
@@ -561,12 +561,6 @@ export function FormularioAnimalRapido({
             <option value="Baja producción" />
             <option value="Enfermedad" />
           </datalist>
-        </FormaRapida>
-      );
-    case "destete":
-      return (
-        <FormaRapida accion="destete" fijos={fijos} alGuardar={alGuardar} descripcion="La cría deja de tomar leche y pasa a levante." boton="Registrar destete">
-          <CampoFecha etiqueta="Fecha del destete" />
         </FormaRapida>
       );
     case "salud":

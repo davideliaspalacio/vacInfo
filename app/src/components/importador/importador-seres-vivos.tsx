@@ -125,8 +125,9 @@ export function ImportadorSeresVivos({ fincas, fincaInicial }: { fincas: { id: s
           </BotonPrimario>
         </form>
         <p className="mt-3 text-sm text-tinta-suave">
-          Las columnas se reconocen por su título, así que puedes moverlas o agregar columnas propias. La etapa (ternera, novilla, vaca, ternero,
-          novillo, toro) se calcula con la fecha de nacimiento. Nada se guarda hasta que confirmes.
+          Las columnas se reconocen por su título, así que puedes moverlas o agregar columnas propias. La etapa se calcula con la fecha de
+          nacimiento y la fecha de hoy: hasta 12 meses ternera o ternero, de 12 a 24 novilla o novillo, y de ahí en adelante vaca o toro. Sin fecha
+          de nacimiento la hembra queda como vaca y el macho como toro, y la fila sale marcada. Nada se guarda hasta que confirmes.
         </p>
       </Tarjeta>
 
@@ -214,7 +215,9 @@ function TablaFilas({ filas }: { filas: FilaVista[] }) {
               <td>{etiqueta(ESPECIES, f.especie)}</td>
               <td>{etiqueta(CATEGORIAS, f.categoria)}</td>
               <td>{etiqueta(SEXOS, f.sexo)}</td>
-              <td className="whitespace-nowrap">{f.fechaNacimiento ? fecha(f.fechaNacimiento) : "—"}</td>
+              <td className="whitespace-nowrap">
+                {f.fechaNacimiento ? fecha(f.fechaNacimiento) : <Etiqueta tono="amarillo">Sin fecha</Etiqueta>}
+              </td>
               <td className="text-right">{f.pesoKg == null ? "—" : `${num(f.pesoKg)} kg`}</td>
               <td>
                 {f.madre ? (

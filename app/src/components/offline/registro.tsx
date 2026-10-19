@@ -112,9 +112,10 @@ export function Registro() {
     async (accion: Accion, datos: Record<string, unknown>, animal?: AnimalCatalogo) => {
       if (!fincaId) throw new Error("Sin finca");
       await encolar(accion, datos, fincaId, animal);
-      if (animal && (accion === "destete" || accion === "baja")) {
-        const cambios = accion === "baja" ? null : { fecha_destete: String(datos.fecha) };
-        const nuevo = await actualizarAnimalLocal(fincaId, animal.id, cambios).catch(() => undefined);
+      // Una baja saca al animal del inventario del teléfono antes de volver a descargar el catálogo.
+      // (El destete ya no se registra: lo genera solo el sistema con `fincas.dias_destete`.)
+      if (animal && accion === "baja") {
+        const nuevo = await actualizarAnimalLocal(fincaId, animal.id, null).catch(() => undefined);
         if (nuevo) setCargado({ finca: fincaId, catalogo: nuevo });
       }
       setAviso({ id: Date.now(), texto: "Guardado en el teléfono" });

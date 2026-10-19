@@ -101,7 +101,11 @@ export function FormularioFinca({
       <fieldset className="space-y-4">
         <legend className="font-display mb-3 text-xl font-bold text-bosque">Levante y potreros</legend>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Campo etiqueta="Días para el destete" error={e.dias_destete} ayuda="Predeterminado: 90">
+          <Campo
+            etiqueta="Días para el destete"
+            error={e.dias_destete}
+            ayuda="Predeterminado: 90. El sistema genera el destete solo a los días que pongas aquí: nadie tiene que registrarlo."
+          >
             <input name="dias_destete" inputMode="numeric" defaultValue={texto("dias_destete")} className="campo-control" placeholder="90" />
           </Campo>
           <Campo etiqueta="Edad para servicio (meses)" error={e.edad_servicio_meses} ayuda="Predeterminado: 15">

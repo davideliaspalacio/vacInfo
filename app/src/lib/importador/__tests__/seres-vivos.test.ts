@@ -159,6 +159,11 @@ describe("encabezados y categorías", () => {
   it("deriva la categoría por especie, sexo y edad", () => {
     expect(categoriaDerivada("bovino", "hembra", haceMeses(6), HOY)).toBe("ternera");
     expect(categoriaDerivada("bovino", "hembra", haceMeses(12), HOY)).toBe("novilla");
+    expect(categoriaDerivada("bovino", "hembra", haceMeses(24), HOY)).toBe("novilla");
+    // El corte que faltaba: con fecha de nacimiento una hembra adulta es vaca, no novilla.
+    expect(categoriaDerivada("bovino", "hembra", haceMeses(25), HOY)).toBe("vaca");
+    expect(categoriaDerivada("bovino", "hembra", haceMeses(60), HOY)).toBe("vaca");
+    expect(categoriaDerivada("bovino", "hembra", haceMeses(120), HOY)).toBe("vaca");
     expect(categoriaDerivada("bovino", "hembra", null, HOY)).toBe("vaca");
     expect(categoriaDerivada("bovino", "macho", haceMeses(11), HOY)).toBe("ternero");
     expect(categoriaDerivada("bovino", "macho", haceMeses(12), HOY)).toBe("novillo");
@@ -190,7 +195,7 @@ describe("lectura de la planilla", () => {
 
   it("deriva categoría, especie y sexo de cada fila", () => {
     const por = (chapeta: string) => plan.filas.find((f) => f.chapeta === chapeta)!;
-    expect(por("ZPRU0").categoria).toBe("novilla");
+    expect(por("ZPRU0").categoria).toBe("vaca");
     expect(por("ZPRU0").raza).toBe("Jersey");
     expect(por("ZPRU1").categoria).toBe("ternera");
     expect(por("ZPRU1").fechaNacimiento).toBe(haceMeses(5));
@@ -291,7 +296,9 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("integración con la finca Ton
     expect(vista.omitidas).toBe(3);
     expect(vista.pesajes).toBe(9); // 10 nuevos menos el del peso fuera de rango
     expect(vista.madresEnlazadas).toBe(2); // Alegría (ya en la finca) y la madre que viene en la planilla
-    expect(vista.nuevos.map((n) => n.codigo)).toContain("TON-ZPRU0");
+    // Código nuevo: 4 letras de la finca, nombre y chapeta.
+    expect(vista.nuevos.map((n) => n.codigo)).toContain("TONE-PRUEBAMADRE-ZPRU0");
+    expect(vista.nuevos.map((n) => n.codigo)).toContain("TONE-PRUEBACABALLO-ZPRU6");
     expect(vista.advertencias.join("\n")).toMatch(/la chapeta 1003 ya está registrada en la finca/);
     expect(vista.advertencias.join("\n")).toMatch(/no se encontró ningún animal con la chapeta ZNOEXISTE/);
     expect(await contar(animalesDeToneles())).toBe(antes);
@@ -316,7 +323,13 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("integración con la finca Ton
     expect(data).toHaveLength(10);
 
     const por = (chapeta: string) => data!.find((a) => a.chapeta === chapeta)!;
-    expect(por("ZPRU0")).toMatchObject({ codigo: "TON-ZPRU0", categoria: "novilla", especie: "bovino", sexo: "hembra", madre_nombre: "Alegria" });
+    expect(por("ZPRU0")).toMatchObject({
+      codigo: "TONE-PRUEBAMADRE-ZPRU0",
+      categoria: "vaca",
+      especie: "bovino",
+      sexo: "hembra",
+      madre_nombre: "Alegria",
+    });
     expect(por("ZPRU1")).toMatchObject({ categoria: "ternera", madre_id: por("ZPRU0").id, madre_nombre: "Prueba Madre", madre_chapeta: "ZPRU0" });
     expect(por("ZPRU2").categoria).toBe("ternero");
     expect(por("ZPRU3").categoria).toBe("novillo");

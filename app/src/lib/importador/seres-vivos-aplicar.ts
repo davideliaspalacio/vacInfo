@@ -7,8 +7,9 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "../database.types";
-// Mismo generador de códigos que usa el formulario de ser vivo (`TON-01`). Ruta relativa para que vitest lo resuelva sin alias.
-import { prefijoFinca } from "../../components/fincas/etiquetas";
+// Código pedido por el cliente: 4 letras de la finca, nombre y chapeta (`TONE-JOSEFINA-2079`).
+// Ruta relativa para que vitest lo resuelva sin alias.
+import { codigoAnimal } from "../../components/fincas/etiquetas";
 import { normalizarChapeta, normalizarNombre } from "./normalizar";
 import type { FilaSerVivo, PlanSeresVivos } from "./seres-vivos";
 
@@ -86,21 +87,6 @@ interface Emparejamiento {
 
 const ETIQUETA_ESPECIE: Record<string, string> = { bovino: "Bovino", equino: "Equino", canino: "Canino", ave: "Ave", otro: "Otro" };
 
-/** Siguiente número libre para los códigos de animales sin chapeta (mismo formato que el formulario). */
-function numerador(codigos: string[], prefijo: string) {
-  const patron = new RegExp(`^${prefijo}-(\\d+)$`, "i");
-  let mayor = 0;
-  let ancho = 2;
-  for (const c of codigos) {
-    const m = patron.exec(c);
-    if (!m) continue;
-    mayor = Math.max(mayor, Number(m[1]));
-    ancho = Math.max(ancho, m[1].length);
-  }
-  let n = mayor;
-  return () => String(++n).padStart(ancho, "0");
-}
-
 async function emparejar(supabase: Cliente, fincaId: string, plan: PlanSeresVivos): Promise<Emparejamiento> {
   const { data: finca, error } = await supabase.from("fincas").select("id, nombre").eq("id", fincaId).single();
   if (error || !finca) throw new Error("No se encontró la finca o no tienes acceso a ella.");
@@ -118,10 +104,7 @@ async function emparejar(supabase: Cliente, fincaId: string, plan: PlanSeresVivo
     if (n && !porNombre.has(n)) porNombre.set(n, a);
   }
 
-  const codigos = animales.map((a) => a.codigo);
-  const usados = new Set(codigos.map((c) => c.toUpperCase()));
-  const prefijo = prefijoFinca(finca.nombre, codigos);
-  const siguiente = numerador(codigos, prefijo);
+  const usados = new Set(animales.map((a) => a.codigo.toUpperCase()));
 
   const advertencias: string[] = [];
   if (plan.fincaEnArchivo && normalizarNombre(plan.fincaEnArchivo) !== normalizarNombre(finca.nombre))
@@ -152,7 +135,8 @@ async function emparejar(supabase: Cliente, fincaId: string, plan: PlanSeresVivo
       continue;
     }
 
-    const base = ch ? `${prefijo}-${f.chapeta}` : `${prefijo}-${siguiente()}`;
+    // Cuando la fila no traía nombre, la lectura usa la chapeta como nombre: no se repite en el código.
+    const base = codigoAnimal(finca.nombre, f.nombre === f.chapeta ? "" : f.nombre, f.chapeta);
     let codigo = base;
     for (let n = 2; usados.has(codigo.toUpperCase()); n++) codigo = `${base}-${n}`;
     usados.add(codigo.toUpperCase());

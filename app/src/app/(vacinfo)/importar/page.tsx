@@ -4,11 +4,9 @@ import { fecha, num } from "@/lib/formato";
 import { consultarPagina, leerPagina } from "@/lib/paginacion";
 import { Encabezado, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
-import { ImportadorExcel } from "@/components/importador/importador-excel";
 import { ImportadorSeresVivos } from "@/components/importador/importador-seres-vivos";
-import { PestanasImportador, pestanaDe } from "@/components/importador/pestanas";
 
-export const metadata = { title: "Importar Excel" };
+export const metadata = { title: "Importar seres vivos" };
 
 type Resumen = {
   desde?: string | null;
@@ -24,7 +22,6 @@ const POR_PAGINA = 20;
 export default async function ImportarPage({ searchParams }: PageProps<"/importar">) {
   const sp = await searchParams;
   const { finca } = sp;
-  const pestana = pestanaDe(sp.tab);
   const { supabase, rol, fincas } = await obtenerSesion();
   const gestor = ROLES_GESTORES.includes(rol);
 
@@ -57,8 +54,8 @@ export default async function ImportarPage({ searchParams }: PageProps<"/importa
     <div className="space-y-8">
       <Encabezado
         eyebrow="Importar"
-        titulo="Importar Excel de la finca"
-        descripcion="Dos planillas: la quincenal de ordeño, que carga partos, servicios, palpaciones, secados y ordeños, y la de implementación de seres vivos, que da de alta todos los animales de la finca."
+        titulo="Importar los seres vivos de la finca"
+        descripcion="La planilla de implementación de seres vivos da de alta de una sola vez todos los animales de una finca: descarga la plantilla, llénala y súbela. Nada se guarda hasta que revises la vista previa."
       />
 
       {!gestor ? (
@@ -76,14 +73,7 @@ export default async function ImportarPage({ searchParams }: PageProps<"/importa
           </Vacio>
         </Tarjeta>
       ) : (
-        <div className="space-y-6">
-          <PestanasImportador activa={pestana} fincaId={fincaInicial} />
-          {pestana === "seres-vivos" ? (
-            <ImportadorSeresVivos key={fincaInicial} fincas={opciones} fincaInicial={fincaInicial} />
-          ) : (
-            <ImportadorExcel key={fincaInicial} fincas={opciones} fincaInicial={fincaInicial} />
-          )}
-        </div>
+        <ImportadorSeresVivos key={fincaInicial} fincas={opciones} fincaInicial={fincaInicial} />
       )}
 
       <Tarjeta id="importaciones" className="scroll-mt-6">
