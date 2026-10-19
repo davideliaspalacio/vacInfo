@@ -20,10 +20,13 @@ export const REGLAS = {
   // 30 y no 20: varias personas de una misma finca o de la misma red móvil pueden compartir IP.
   loginIp: { ambito: "login:ip", maximo: 30, ventanaSegundos: 15 * MINUTO },
   loginCuenta: { ambito: "login:cuenta", maximo: 5, ventanaSegundos: 15 * MINUTO, bloqueoSegundos: 15 * MINUTO },
-  registroIp: { ambito: "registro:ip", maximo: 5, ventanaSegundos: HORA },
-  invitacionIp: { ambito: "invitacion-ver:ip", maximo: 20, ventanaSegundos: 15 * MINUTO },
-  aceptarIp: { ambito: "invitacion-aceptar:ip", maximo: 10, ventanaSegundos: HORA },
-  aceptarUsuario: { ambito: "invitacion-aceptar:usuario", maximo: 10, ventanaSegundos: HORA },
+  // Varios trabajadores de una misma finca crean su cuenta desde la misma red, y suelen
+  // equivocarse al escribir: el tope es alto para no bloquearlos, solo frena abuso masivo.
+  registroIp: { ambito: "registro:ip", maximo: 40, ventanaSegundos: HORA },
+  // Leer el código no cambia nada y el código es difícil de adivinar: tope muy alto.
+  invitacionIp: { ambito: "invitacion-ver:ip", maximo: 300, ventanaSegundos: HORA },
+  aceptarIp: { ambito: "invitacion-aceptar:ip", maximo: 40, ventanaSegundos: HORA },
+  aceptarUsuario: { ambito: "invitacion-aceptar:usuario", maximo: 20, ventanaSegundos: HORA },
   organizacionUsuario: { ambito: "organizacion:usuario", maximo: 3, ventanaSegundos: 24 * HORA },
   sincronizar: { ambito: "campo-sincronizar:usuario", maximo: 60, ventanaSegundos: MINUTO },
   catalogo: { ambito: "campo-catalogo:usuario", maximo: 20, ventanaSegundos: MINUTO },

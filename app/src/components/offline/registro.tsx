@@ -95,8 +95,16 @@ export function Registro() {
   }, [fincaId, descargar]);
 
   useEffect(() => {
-    if (enLinea && fincas.length === 0) descargarFincas().catch(() => undefined);
-  }, [enLinea, fincas.length]);
+    // Siempre que haya señal se vuelve a pedir la lista de fincas, no solo cuando está vacía:
+    // si el administrador cambia a qué fincas tiene acceso esta persona, el teléfono no puede
+    // quedarse mostrando la lista vieja que guardó la primera vez.
+    if (enLinea) descargarFincas().catch(() => undefined);
+  }, [enLinea]);
+
+  useEffect(() => {
+    // Si le quitaron el acceso a la finca que tenía elegida, se suelta la selección.
+    if (fincaId && fincas.length > 0 && !fincas.some((f) => f.id === fincaId)) elegirFinca("");
+  }, [fincaId, fincas]);
 
   useEffect(() => {
     if (!fincaId && fincas.length === 1) elegirFinca(fincas[0].id);
