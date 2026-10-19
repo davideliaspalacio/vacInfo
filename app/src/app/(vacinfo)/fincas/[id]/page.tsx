@@ -13,6 +13,7 @@ import { Encabezado, Metrica, Tarjeta } from "@/components/ui";
 import { RangoFechas } from "@/components/rango-fechas";
 import { FotoFicha } from "@/components/foto";
 import { alertasDeFinca, resumenAlCorte } from "@/components/fincas/consultas";
+import { cuadreHato } from "@/components/fincas/cuadre-hato";
 import { Bloque, EsqueletoMetricas, EsqueletoTabla } from "@/components/fincas/esqueletos";
 import { Pestanas } from "@/components/fincas/pestanas";
 import { SeccionAnimales } from "@/components/fincas/seccion-animales";
@@ -171,6 +172,7 @@ async function ResumenFinca({
   searchParams: Params;
 }) {
   const [{ corte, resumen }, r, ref, prom] = await Promise.all([datos, rango, referencia, promedio]);
+  const cuadre = cuadreHato(resumen);
   return (
     <Tarjeta>
       <RangoFechas
@@ -199,16 +201,20 @@ async function ResumenFinca({
           </>
         )}
       </p>
-      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
         <Metrica valor={num(resumen?.vacas_ordeno ?? 0)} etiqueta="Vacas en ordeño" />
         <Metrica valor={num(resumen?.vacas_horras ?? 0)} etiqueta="Vacas secas" />
         <Metrica valor={num(resumen?.novillas_vientre ?? 0)} etiqueta="Novillas" />
+        <Metrica valor={num(resumen?.crias ?? 0)} etiqueta="Terneras y terneros" />
+        <Metrica valor={num(resumen?.total_animales ?? 0)} etiqueta="Animales en la finca" tono="crema" />
         <Metrica valor={num(resumen?.prenadas ?? 0)} etiqueta="Preñadas" />
         <Metrica valor={num(resumen?.servidas_sin_confirmar ?? 0)} etiqueta="Servidas sin confirmar" tono="crema" />
         <Metrica valor={num(resumen?.vacias ?? 0)} etiqueta="Vacías sin servicio" tono={resumen?.vacias ? "alerta" : "crema"} />
         <Metrica valor={litros(resumen?.litros_dia ?? 0)} etiqueta="Litros del día" />
         <Metrica valor={litros(resumen?.promedio_vaca ?? 0)} etiqueta="Promedio por vaca" />
       </div>
+      {/* La suma explícita: el ganadero ve que ningún animal se queda por fuera del cuadro. */}
+      {cuadre && <p className="mt-3 text-sm text-tinta-suave">{cuadre}</p>}
     </Tarjeta>
   );
 }
@@ -221,7 +227,7 @@ function EsqueletoResumen() {
         <Bloque className="h-10 w-96" />
       </div>
       <Bloque className="mt-3 h-7 w-full max-w-2xl" />
-      <EsqueletoMetricas className="mt-5 xl:grid-cols-8" />
+      <EsqueletoMetricas cantidad={10} className="mt-5 md:grid-cols-5" />
     </section>
   );
 }

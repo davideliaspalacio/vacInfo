@@ -216,8 +216,12 @@ export async function InformeOperativo({ supabase, rango, finca }: PropsInforme)
                 ["Vacas secas", <Con key="h" n={r.vacas_horras} p={porc(r.vacas_horras)} />],
                 ["Vacas en ordeño", <Con key="o" n={r.vacas_ordeno} p={porc(r.vacas_ordeno)} />],
                 ["Novillas de vientre", <Con key="n" n={r.novillas_vientre} p={porc(r.novillas_vientre)} />],
-                ["Terneras", num(r.terneras)],
-                ["Total", <strong key="t">{num(totalVacas)} · 100%</strong>],
+                ["Total de vientres", <strong key="t">{num(totalVacas)} · 100%</strong>],
+                // El contador decía «Terneras» pero traía también los machos y los novillos. Los
+                // porcentajes son sobre los vientres, así que estas filas van sin porcentaje.
+                ["Terneras y terneros", num(r.crias)],
+                ["Novillos, toros y otras especies", num(r.otros)],
+                ["Total de animales", <strong key="ta">{num(r.total_animales)}</strong>],
               ]}
             />
           ) : (

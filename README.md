@@ -192,7 +192,7 @@ flowchart LR
 | Módulo | Ruta | Descripción |
 |---|---|---|
 | Inicio | `/` | Resumen por finca: litros del día, vacas en ordeño, alertas altas |
-| Fincas | `/fincas`, `/fincas/:id` | Resumen del hato, estado reproductivo por vaca, alertas, bienes, árbol de elementos, historial, fecha de corte |
+| Fincas | `/fincas`, `/fincas/:id` | Resumen del hato (los contadores suman el total: vacas en ordeño, secas, novillas, terneras y terneros, y animales en la finca, con la suma escrita debajo), estado reproductivo por vaca, alertas, bienes, árbol de elementos, historial, fecha de corte |
 | Ficha de animal | `/animales/:id` | Datos, QR imprimible, producción (60 días), reproducción, sanidad, crecimiento |
 | Nuevo ser vivo | `/animales/nuevo` | Categoría (especie derivada), adquisición, madre de la finca, padre desde lista de toros |
 | Bienes | `/bienes/:id` | Equipos con garantía, recordatorio, mantenimientos y QR |
@@ -480,6 +480,7 @@ Toda tabla de eventos guarda `registrado_por` y `registrado_en`.
 | `20261019000019_etapas_por_edad.sql` | Primer intento: la etapa subía solo por edad (reemplazada por la siguiente) |
 | `20261020000020_etapa_hibrida.sql` | Regla híbrida de etapa (parto · ordeños · edad de respaldo), tabla `cambios_etapa`, disparadores en `animales`, `partos` y `ordenos` y tarea diaria |
 | `20261020000021_revisar_etapas.sql` | Pantalla «Revisar etapas»: `revision_etapas` (clasificación por caso), `aplicar_etapas_finca` y `bajar_etapa_animal` (única baja de etapa, con rastro «cambio manual») |
+| `20261021000022_contadores_finca.sql` | `resumen_finca` con `crias` y `otros`: los contadores de la finca suman exactamente `total_animales` (las crías ya no se quedan por fuera del cuadro) |
 
 **Funciones principales:** `estado_reproductivo`, `resumen_finca`, `alertas_finca`, `eventos_calendario`, `indicadores_mensuales`, `levante_finca`, `estado_potreros`, `saldo_insumos`, `animales_por_dia`, `ultimo_ordeno`, `registrar_parto`, `registrar_destete`, `crear_organizacion`, `ver_invitacion`, `aceptar_invitacion`.
 **Etapa del animal:** `etapa_de_animal` (la regla), `etapa_por_edad` (respaldo por edad), `etapa_mas_alta` (nunca baja), `motivo_etapa`, `etapas_pendientes`, `actualizar_etapas`, `actualizar_etapa_animal`. Para la pantalla «Revisar etapas», que son las únicas que el rol `authenticated` puede llamar: `revision_etapas`, `aplicar_etapas_finca`, `bajar_etapa_animal`.

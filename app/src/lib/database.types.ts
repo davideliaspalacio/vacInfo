@@ -1960,9 +1960,11 @@ export type Database = {
       resumen_finca: {
         Args: { p_corte?: string; p_finca: string }
         Returns: {
+          crias: number
           fecha_leche: string
           litros_dia: number
           novillas_vientre: number
+          otros: number
           prenadas: number
           promedio_vaca: number
           servidas_sin_confirmar: number
