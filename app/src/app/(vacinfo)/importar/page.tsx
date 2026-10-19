@@ -55,7 +55,7 @@ export default async function ImportarPage({ searchParams }: PageProps<"/importa
       <Encabezado
         eyebrow="Importar"
         titulo="Importar los seres vivos de la finca"
-        descripcion="La planilla de implementación de seres vivos da de alta de una sola vez todos los animales de una finca: descarga la plantilla, llénala y súbela. Nada se guarda hasta que revises la vista previa."
+        descripcion="La planilla de implementación de seres vivos da de alta de una sola vez todos los animales de una finca: descarga la plantilla, llénala y súbela. Llena también las tres columnas de historial (último parto, en ordeño y litros del último ordeño): son opcionales, pero sin ellas el sistema no puede calcular mora de preñez, secado ni días en ordeño. Nada se guarda hasta que revises la vista previa."
       />
 
       {!gestor ? (

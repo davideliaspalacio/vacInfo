@@ -3,7 +3,12 @@
  * da de alta todos los animales de una finca de una sola vez.
  *
  * Columnas de la planilla: #, ESPECIE, RAZA, COLOR, SEXO, NOMBRE, FECHA NACIMIENTO, CHAPETA, PESO,
- * PADRE, CHAPETA PADRE, MADRE, CHAPETA MADRE.
+ * PADRE, CHAPETA PADRE, MADRE, CHAPETA MADRE y, al final, las tres columnas opcionales de historial
+ * mínimo: ÚLTIMO PARTO, EN ORDEÑO y LITROS ÚLTIMO ORDEÑO.
+ *
+ * Las tres de historial son opcionales: una planilla vieja que no las traiga se lee igual que antes.
+ * Sin ellas, en cambio, el hato entra sin ningún antecedente y el sistema no puede calcular días en
+ * ordeño, mora de preñez ni fecha de secado, así que el lector lo advierte.
  *
  * Igual que la planilla quincenal (`leer.ts`), las columnas se reconocen por el texto de su
  * encabezado —sin tildes y en mayúsculas— y no por su posición, así que sirven planillas con las
@@ -24,6 +29,8 @@ export const TITULO_PLANILLA = "PLANILLA IMPLEMENTACIÓN SERES VIVOS";
 export const HOJA_SERES_VIVOS = "Seres vivos";
 export const FILAS_PLANTILLA = 75;
 export const PESO_MAXIMO = 1500;
+/** Litros de un solo ordeño (una jornada). Por encima de esto es un error de digitación. */
+export const LITROS_MAXIMO = 60;
 
 /** Encabezados exactos de la planilla del cliente, en orden. */
 export const COLUMNAS_PLANILLA = [
@@ -40,10 +47,26 @@ export const COLUMNAS_PLANILLA = [
   "CHAPETA PADRE",
   "MADRE",
   "CHAPETA MADRE",
+  // Historial mínimo (opcional, al final para no mover las columnas de la planilla en papel).
+  "ÚLTIMO PARTO",
+  "EN ORDEÑO",
+  "LITROS ÚLTIMO ORDEÑO",
 ] as const;
+
+/** Columnas opcionales de historial: una planilla sin ellas se sigue leyendo igual. */
+export const COLUMNAS_HISTORIAL = ["ÚLTIMO PARTO", "EN ORDEÑO", "LITROS ÚLTIMO ORDEÑO"] as const;
 
 /** Nombres de especie que se ofrecen en la plantilla (la lectura acepta más variantes). */
 export const ESPECIES_ACEPTADAS = ["Bovino", "Equino", "Canino", "Ave", "Otro"] as const;
+
+/** Especie como se escribe en las advertencias. */
+export const ETIQUETA_ESPECIE: Record<string, string> = {
+  bovino: "Bovino",
+  equino: "Equino",
+  canino: "Canino",
+  ave: "Ave",
+  otro: "Otro",
+};
 
 type Campo =
   | "numero"
@@ -58,7 +81,10 @@ type Campo =
   | "padre"
   | "chapetaPadre"
   | "madre"
-  | "chapetaMadre";
+  | "chapetaMadre"
+  | "ultimoParto"
+  | "enOrdeno"
+  | "litrosOrdeno";
 
 /**
  * Campo al que corresponde un encabezado. El orden importa: «CHAPETA PADRE» y «NOMBRE DE LA MADRE»
@@ -74,6 +100,10 @@ export function campoDeEncabezado(encabezado: string): Campo | null {
   if (/^SEXO/.test(h)) return "sexo";
   if (/^COLOR/.test(h)) return "color";
   if (/^PESO/.test(h)) return "peso";
+  // Historial: «LITROS…» antes que «ORDEÑO» porque «LITROS ÚLTIMO ORDEÑO» contiene las dos palabras.
+  if (/LITROS/.test(h)) return "litrosOrdeno";
+  if (/ORDE(Ñ|N)O/.test(h)) return "enOrdeno";
+  if (/PARTO/.test(h)) return "ultimoParto";
   if (/^(FECHA (DE )?NACIMIENTO|FECHA NAC|NACIMIENTO|NACIO)/.test(h)) return "fechaNacimiento";
   if (/PADRE/.test(h)) return /CHAPETA/.test(h) ? "chapetaPadre" : /^(NOMBRE (DEL )?)?PADRE$/.test(h) ? "padre" : null;
   if (/MADRE/.test(h)) return /CHAPETA/.test(h) ? "chapetaMadre" : /^(NOMBRE (DE LA )?)?MADRE$/.test(h) ? "madre" : null;
@@ -110,6 +140,18 @@ export function sexoDeTexto(v: string | null): Sexo | null {
   return null;
 }
 
+const SI = /^(SI|S|X|OK|YES|Y|TRUE|VERDADERO|1|EN ORDEÑO|EN ORDENO|ORDEÑANDO|ORDENANDO|ORDEÑO|ORDENO|LACTANCIA|EN LACTANCIA|PRODUCIENDO)$/;
+const NO = /^(NO|N|FALSE|FALSO|0|SECA|SECO|SECAS|HORRA|HORRAS|SIN ORDEÑO|SIN ORDENO|NO ORDEÑA|NO ORDENA)$/;
+
+/** Sí / no de la columna EN ORDEÑO. `null` = vacío o no se entendió. */
+export function siNoDeTexto(v: string | null): boolean | null {
+  if (!v) return null;
+  const t = normalizarEncabezado(v).replace(/[.]+$/, "");
+  if (SI.test(t)) return true;
+  if (NO.test(t)) return false;
+  return null;
+}
+
 /** Meses completos entre dos fechas ISO. */
 export function mesesEntre(desde: string, hasta: string) {
   const [a1, m1, d1] = desde.split("-").map(Number);
@@ -118,23 +160,27 @@ export function mesesEntre(desde: string, hasta: string) {
 }
 
 /**
- * Categoría según especie, sexo y edad al momento de importar. Las dos escalas son simétricas:
- * bovino hembra < 12 meses ternera, 12–24 novilla y > 24 vaca; bovino macho < 12 ternero, 12–24 novillo
- * y > 24 toro. Sin fecha de nacimiento la hembra queda vaca y el macho toro. Caballo, perro y cualquier
- * otra especie van a su propia categoría.
+ * Etapa del animal al importar, con la misma regla que `etapa_de_animal` en la base:
+ * si la fila trae ÚLTIMO PARTO la hembra es vaca (el hecho manda sobre la edad); si no,
+ * decide la edad: hembra < 12 meses ternera, 12–36 novilla y > 36 vaca; macho < 12 ternero,
+ * 12–24 novillo y > 24 toro. Sin fecha de nacimiento la hembra queda vaca y el macho toro.
+ * Caballo, perro y cualquier otra especie van a su propia categoría.
  *
- * El corte de los 24 meses en las hembras es el que faltaba: sin él ninguna fecha de nacimiento podía
- * dar «vaca» y toda hembra con fecha —de 1 año o de 10— quedaba como novilla.
+ * El corte de la hembra son 36 meses y no 24 porque una novilla que todavía no han servido
+ * no debe volverse vaca sola; a los 36 sin un solo dato ya es un animal cargado sin historial.
  */
-export function categoriaDerivada(especie: Especie, sexo: Sexo, fechaNacimiento: string | null, hoy: string): Categoria {
+export function categoriaDerivada(especie: Especie, sexo: Sexo, fechaNacimiento: string | null, hoy: string, tieneParto = false): Categoria {
   if (especie === "equino") return "caballo";
   if (especie === "canino") return "perro";
   if (especie !== "bovino") return "otro";
+  if (tieneParto && sexo === "hembra") return "vaca"; // el hecho manda sobre la edad
   if (!fechaNacimiento) return sexo === "hembra" ? "vaca" : "toro";
   const meses = Math.max(0, mesesEntre(fechaNacimiento, hoy));
   if (meses < 12) return sexo === "hembra" ? "ternera" : "ternero";
-  if (meses <= 24) return sexo === "hembra" ? "novilla" : "novillo";
-  return sexo === "hembra" ? "vaca" : "toro";
+  // Hembras: novilla hasta los 36 meses. Sin un solo dato, a esa edad ya es una vaca
+  // cargada sin historial. Machos: novillo hasta los 24. Misma regla que `etapa_de_animal`.
+  if (sexo === "hembra") return meses <= 36 ? "novilla" : "vaca";
+  return meses <= 24 ? "novillo" : "toro";
 }
 
 export interface FilaSerVivo {
@@ -155,6 +201,12 @@ export interface FilaSerVivo {
   padreChapeta: string | null;
   madreNombre: string | null;
   madreChapeta: string | null;
+  /** Fecha del último parto (historial, sin cría). `null` = la planilla no la trajo o no sirve. */
+  ultimoParto: string | null;
+  /** `true` en ordeño, `false` seca, `null` = la planilla no lo dijo. */
+  enOrdeno: boolean | null;
+  /** Litros del último ordeño (una jornada). */
+  litrosOrdeno: number | null;
   /** Clave de deduplicación: chapeta normalizada si hay, si no el nombre normalizado. */
   clave: string;
 }
@@ -163,8 +215,10 @@ export interface PlanSeresVivos {
   hoja: string;
   /** Texto escrito junto a «PERTENECEN A FINCA:», si venía. */
   fincaEnArchivo: string | null;
-  /** Fecha con la que se calculan las categorías y se registran los pesajes. */
+  /** Fecha con la que se calculan las categorías y se registran los pesajes y los ordeños. */
   fecha: string;
+  /** `true` si la planilla trae alguna de las tres columnas de historial. */
+  conHistorial: boolean;
   filas: FilaSerVivo[];
   /** Filas con datos que no se pueden importar (sin nombre ni chapeta, chapeta repetida, sexo ilegible). */
   omitidas: number;
@@ -335,9 +389,88 @@ export function leerHojaSeresVivos(ws: ExcelJS.Worksheet, hoy: string): PlanSere
     }
     if (pesoKg != null) pesoKg = Math.round(pesoKg * 100) / 100;
 
-    const categoria = categoriaDerivada(especie, sexo, fechaNacimiento, hoy);
+    let categoria = categoriaDerivada(especie, sexo, fechaNacimiento, hoy);
     if (especie === "bovino" && !fechaNacimiento && !leida.invalida)
       advertencias.push(`${quien}: sin fecha de nacimiento no se puede calcular la etapa; quedó como ${categoria}.`);
+
+    // ── Historial mínimo (columnas opcionales) ────────────────────────────────────────────────
+    // Solo tiene sentido en hembras bovinas adultas: un macho no se ordeña y una ternera todavía no.
+    const hembraBovina = especie === "bovino" && sexo === "hembra";
+    let puedeOrdenarse = hembraBovina && categoria !== "ternera";
+
+    const partoLeido = leerFecha(dato("ultimoParto"));
+    let ultimoParto = partoLeido.fecha;
+    if (partoLeido.invalida)
+      advertencias.push(`${quien}: la fecha del último parto «${partoLeido.invalida}» no se entendió; usa el formato DD/MM/AAAA.`);
+    if (ultimoParto && ultimoParto > hoy) {
+      advertencias.push(`${quien}: la fecha del último parto (${ultimoParto}) es futura; no se registrará el parto.`);
+      ultimoParto = null;
+    }
+    if (ultimoParto && fechaNacimiento && ultimoParto < fechaNacimiento) {
+      advertencias.push(
+        `${quien}: el último parto (${ultimoParto}) es anterior a la fecha de nacimiento (${fechaNacimiento}); no se registrará el parto.`,
+      );
+      ultimoParto = null;
+    }
+    if (ultimoParto && !hembraBovina) {
+      advertencias.push(`${quien}: solo una hembra bovina puede tener partos (esta es ${ETIQUETA_ESPECIE[especie]}, ${sexo}); no se registrará el parto.`);
+      ultimoParto = null;
+    }
+
+    // Si trae parto, es vaca aunque la edad diga otra cosa (misma regla que la base de datos).
+    if (ultimoParto && hembraBovina && categoria !== "vaca") {
+      categoria = "vaca";
+      puedeOrdenarse = true;
+    }
+
+    const enOrdenoTxt = t("enOrdeno");
+    let enOrdeno = siNoDeTexto(enOrdenoTxt);
+    if (enOrdenoTxt && enOrdeno == null)
+      advertencias.push(`${quien}: no se entendió «${enOrdenoTxt}» en la columna EN ORDEÑO; escribe sí o no.`);
+    if (enOrdeno != null && !hembraBovina) {
+      advertencias.push(
+        sexo === "macho"
+          ? `${quien}: un macho no se ordeña; se ignoró la columna EN ORDEÑO.`
+          : `${quien}: la columna EN ORDEÑO solo aplica a hembras bovinas (esta es ${ETIQUETA_ESPECIE[especie]}); se ignoró.`,
+      );
+      enOrdeno = null;
+    } else if (enOrdeno != null && !puedeOrdenarse) {
+      advertencias.push(`${quien}: por su edad es una ternera y todavía no se ordeña; se ignoró la columna EN ORDEÑO.`);
+      enOrdeno = null;
+    }
+
+    const litrosTxt = t("litrosOrdeno");
+    let litrosOrdeno = leerNumero(dato("litrosOrdeno"));
+    if (litrosTxt && litrosOrdeno == null) {
+      advertencias.push(`${quien}: los litros del último ordeño «${litrosTxt}» no son un número; se dejaron vacíos.`);
+    } else if (litrosOrdeno != null && (litrosOrdeno < 0 || litrosOrdeno > LITROS_MAXIMO)) {
+      advertencias.push(`${quien}: los litros del último ordeño (${litrosTxt}) están fuera del rango (0 a ${LITROS_MAXIMO} litros); se dejaron vacíos.`);
+      litrosOrdeno = null;
+    }
+    if (litrosOrdeno != null) litrosOrdeno = Math.round(litrosOrdeno * 100) / 100;
+    if (litrosOrdeno != null && !puedeOrdenarse) {
+      advertencias.push(
+        `${quien}: no se le puede registrar un ordeño (${ETIQUETA_ESPECIE[especie]}, ${sexo}${categoria === "ternera" ? ", ternera" : ""}); se ignoraron los litros.`,
+      );
+      litrosOrdeno = null;
+    }
+    if (litrosOrdeno != null && enOrdeno === false) {
+      advertencias.push(`${quien}: dice que NO está en ordeño pero trae litros del último ordeño; manda el «no» y se ignoraron los litros.`);
+      litrosOrdeno = null;
+    }
+
+    // «Sí» sin litros no crea un ordeño de 0 litros: ese 0 movería la fecha de corte de la finca y
+    // bajaría el promedio por vaca. Queda en ordeño por el parto y se pide el dato en la vista previa.
+    if (enOrdeno === true && litrosOrdeno == null)
+      advertencias.push(
+        `${quien}: dice que está en ordeño pero no trae LITROS ÚLTIMO ORDEÑO; no se creará ningún ordeño (uno de 0 litros ensuciaría los informes). Escribe los litros del último ordeño.`,
+      );
+    if (enOrdeno === true && !ultimoParto)
+      advertencias.push(
+        `${quien}: dice que está en ordeño pero no trae ÚLTIMO PARTO; sin esa fecha el sistema no puede calcular sus días en ordeño ni su mora de preñez.`,
+      );
+    if (enOrdeno === false && !ultimoParto)
+      advertencias.push(`${quien}: dice que está seca pero no trae ÚLTIMO PARTO; sin esa fecha no se puede registrar su secado.`);
 
     const madreTxt = t("madre");
     const madreChapeta = t("chapetaMadre");
@@ -357,15 +490,32 @@ export function leerHojaSeresVivos(ws: ExcelJS.Worksheet, hoy: string): PlanSere
       padreChapeta: t("chapetaPadre"),
       madreNombre: madreTxt ? titulo(madreTxt) : null,
       madreChapeta: madreChapeta ? madreChapeta.replace(/\.0+$/, "") : null,
+      ultimoParto,
+      enOrdeno,
+      litrosOrdeno,
       clave,
     });
     vistas.set(clave, r);
+  }
+
+  // Sin historial el sistema queda adivinando: no hay días en ordeño, ni mora de preñez, ni secado.
+  const conHistorial = (["ultimoParto", "enOrdeno", "litrosOrdeno"] as Campo[]).some((c) => columnas!.has(c));
+  const adultasSinParto = filas.filter((f) => f.especie === "bovino" && f.sexo === "hembra" && f.categoria !== "ternera" && !f.ultimoParto).length;
+  if (!conHistorial && adultasSinParto) {
+    advertencias.push(
+      `La planilla no trae las columnas de historial (${COLUMNAS_HISTORIAL.join(", ")}): ${adultasSinParto} ${adultasSinParto === 1 ? "hembra entrará" : "hembras entrarán"} sin antecedentes y el sistema no podrá calcular días en ordeño, mora de preñez ni fecha de secado. Descarga la plantilla nueva para llenarlas.`,
+    );
+  } else if (conHistorial && adultasSinParto) {
+    advertencias.push(
+      `${adultasSinParto} ${adultasSinParto === 1 ? "hembra no trae" : "hembras no traen"} ÚLTIMO PARTO: sin esa fecha el sistema no puede calcular sus días en ordeño, su mora de preñez ni su fecha de secado.`,
+    );
   }
 
   return {
     hoja: ws.name,
     fincaEnArchivo: fincaDeEncabezado(ws, filaEncabezados),
     fecha: hoy,
+    conHistorial,
     filas,
     omitidas,
     advertencias,

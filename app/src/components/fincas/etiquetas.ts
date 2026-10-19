@@ -202,6 +202,11 @@ export function codigoAnimal(nombreFinca: string, nombreAnimal: string, chapeta?
  * en ordeño está seca, aunque no tenga partos registrados (al cargar el hato con la plantilla
  * nadie trae el historial). Antes se deducía solo de los partos y toda vaca sin historial
  * aparecía como «novilla», sin importar su edad.
+ *
+ * Sigue siendo coherente con la regla híbrida de la base (`etapa_de_animal`): un animal solo
+ * queda en categoría «vaca» si parió, si da leche o si pasa de 36 meses sin un solo dato, así
+ * que confiar en la categoría ya no asciende sola a la novilla que nunca ha parido: mientras sea
+ * novilla aquí aparece «Novilla», tenga 15 meses o 30, con servicio o sin él.
  */
 export function etapaReproductiva(a: { en_ordeno: boolean; ultimo_parto: string | null; categoria: string }) {
   if (a.en_ordeno) return "ordeno" as const;

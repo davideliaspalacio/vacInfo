@@ -175,6 +175,7 @@ flowchart LR
     F --> FD["/fincas/:id<br/>animales · alertas · bienes · árbol · historial"]
     FD --> LV["/fincas/:id/levante"]
     FD --> PT["/fincas/:id/potreros"]
+    FD --> ET["/fincas/:id/etapas<br/>revisar etapas"]
     FD --> CO["/fincas/:id/costos"]
     FD --> AN["/animales/:id<br/>ficha + QR"]
     FD --> BI["/bienes/:id"]
@@ -197,6 +198,7 @@ flowchart LR
 | Bienes | `/bienes/:id` | Equipos con garantía, recordatorio, mantenimientos y QR |
 | Levante | `/fincas/:id/levante` | Terneras y novillas: pesajes, fecha de destete automática, ganancia diaria, listas para servicio |
 | Potreros | `/fincas/:id/potreros` | Mapa por estado, rotación de grupos, bloqueo por días de retiro, siguiente potrero sugerido |
+| Revisar etapas | `/fincas/:id/etapas` | Animales cuya etapa no cuadra, agrupados y explicados: los que la regla cambiaría (con «Aplicar a todos») y los casos dudosos (vaca sin partos ni ordeños, novilla con ordeños, sin fecha de nacimiento, vaca joven sin datos que se baja a mano). Solo propietario y administrador corrigen; el consultor mira |
 | Costos | `/fincas/:id/costos` | Parámetros mensuales con vista previa y semáforo de rentabilidad |
 | Informes | `/informes?tab=` | Operativo (planilla viva), Administrativo (20 registros ICA), Contable (costo por litro, equilibrio, flujo de caja) |
 | Indicadores | `/indicadores` | Litros/día, litros/vaca, % preñez, concepción, días abiertos, costo por litro, mes a mes |
@@ -331,6 +333,18 @@ stateDiagram-v2
 
 Se calcula en `estado_reproductivo(finca, corte)`. La **fecha de corte** por defecto es la del último ordeño registrado (`lib/datos.ts › corteDeFinca`).
 
+#### Etapa del animal (regla híbrida)
+
+La etapa la deciden los hechos, no el calendario: **una novilla pasa a vaca cuando tiene su primer parto**, no cuando cumple años. La decide `etapa_de_animal` en la base:
+
+| Qué tiene registrado la hembra bovina | Etapa |
+|---|---|
+| Un parto, o ordeños | `vaca` — el hecho manda, así sea joven |
+| Servicio o palpación, pero ningún parto | se queda como está: va en camino de preñez y no sube por edad |
+| Nada (hato cargado sin historial) | por edad: < 12 meses `ternera`, 12–36 `novilla`, > 36 `vaca` |
+
+Los machos van solo por edad (`ternero` < 12, `novillo` 12–24, `toro` > 24). Un animal **nunca baja de etapa**, sin fecha de nacimiento ni historial no se toca, y caballo, perro y «otro» jamás se tocan. Se pone al día en cuatro momentos: al guardar la ficha, al registrar un parto o un ordeño (disparadores por sentencia en `partos` y `ordenos`), llamando a `actualizar_etapas()` y en la tarea diaria de pg_cron de las 6 a. m. Cada cambio, automático o a mano, queda con su motivo en `cambios_etapa` y la ficha del animal lo muestra («Pasó de novilla a vaca el 14/03/26 · parto registrado»).
+
 ### 8.2 Alertas automáticas (`alertas_finca`)
 
 | Tipo | Regla | Prioridad |
@@ -461,8 +475,14 @@ Toda tabla de eventos guarda `registrado_por` y `registrado_en`.
 | `20261016000014_padres_chapeta.sql` | Chapeta del padre y de la madre en `animales` (plantilla de seres vivos) |
 | `20261016000015_fotos.sql` | Bucket `fotos` de Storage, función de ruta y políticas por empresa |
 | `20261018000016_destete_automatico.sql` | Destete calculado (`coalesce(fecha_destete, fecha_nacimiento + dias_destete)`): `levante_finca`, `alertas_finca` y `eventos_calendario` recreadas; sin registro manual |
+| `20261019000017_invitacion_finca_obligatoria.sql` | Trabajador y mayordomo entran siempre con una finca asignada |
+| `20261019000018_vaca_sin_partos.sql` | `resumen_finca`: manda la etapa, una vaca sin partos no se cuenta como novilla de vientre |
+| `20261019000019_etapas_por_edad.sql` | Primer intento: la etapa subía solo por edad (reemplazada por la siguiente) |
+| `20261020000020_etapa_hibrida.sql` | Regla híbrida de etapa (parto · ordeños · edad de respaldo), tabla `cambios_etapa`, disparadores en `animales`, `partos` y `ordenos` y tarea diaria |
+| `20261020000021_revisar_etapas.sql` | Pantalla «Revisar etapas»: `revision_etapas` (clasificación por caso), `aplicar_etapas_finca` y `bajar_etapa_animal` (única baja de etapa, con rastro «cambio manual») |
 
 **Funciones principales:** `estado_reproductivo`, `resumen_finca`, `alertas_finca`, `eventos_calendario`, `indicadores_mensuales`, `levante_finca`, `estado_potreros`, `saldo_insumos`, `animales_por_dia`, `ultimo_ordeno`, `registrar_parto`, `registrar_destete`, `crear_organizacion`, `ver_invitacion`, `aceptar_invitacion`.
+**Etapa del animal:** `etapa_de_animal` (la regla), `etapa_por_edad` (respaldo por edad), `etapa_mas_alta` (nunca baja), `motivo_etapa`, `etapas_pendientes`, `actualizar_etapas`, `actualizar_etapa_animal`. Para la pantalla «Revisar etapas», que son las únicas que el rol `authenticated` puede llamar: `revision_etapas`, `aplicar_etapas_finca`, `bajar_etapa_animal`.
 **Ayudantes de RLS:** `es_miembro`, `es_gestor`, `puede_ver_finca`, `puede_ver_animal`, `puede_registrar_finca`, `puede_registrar_animal`, `puede_registrar_organizacion`, `puede_gestionar_finca`.
 
 ---
@@ -621,7 +641,7 @@ Las fotos de animales, bienes y fincas viven en el bucket privado `fotos` de Sup
 
 ### Paginación
 
-Todas las listas que crecen se paginan en la base con `.range()` y conteo exacto (`src/lib/paginacion.ts`, `src/components/paginacion.tsx`): fincas (12), animales de la finca (50), bienes, historial de servicios (varias tablas unidas), historial reproductivo y sanitario del animal, mantenimientos, movimientos y consumos de inventario, comentarios y mensajes, equipo e invitaciones, importaciones, rotaciones de potreros y grupos de levante. Cada lista usa su propio parámetro (`?pmov=`, `?pcom=`, …) y conserva los demás filtros.
+Todas las listas que crecen se paginan en la base con `.range()` y conteo exacto (`src/lib/paginacion.ts`, `src/components/paginacion.tsx`): fincas (12), animales de la finca (50), bienes, historial de servicios (varias tablas unidas), historial reproductivo y sanitario del animal, mantenimientos, movimientos y consumos de inventario, comentarios y mensajes, equipo e invitaciones, importaciones, rotaciones de potreros, grupos de levante y grupos de la revisión de etapas. Cada lista usa su propio parámetro (`?pmov=`, `?pcom=`, …) y conserva los demás filtros.
 
 Verificación: `node scripts/qa/seguridad.mjs http://localhost:3100` (cabeceras, 429, 413 y bloqueo de login).
 

@@ -25,6 +25,8 @@ import { CATEGORIAS, ESPECIES, ESTADOS_ANIMAL, ESTADOS_SANITARIOS, SEXOS, TIPOS_
 const DIAS_POR_DEFECTO = 365;
 const POR_PAGINA = 20;
 const BAJAS_POR_PAGINA = 10;
+/** Cambios de etapa que se muestran en la ficha: los últimos, no el historial completo. */
+const CAMBIOS_ETAPA = 4;
 const CLAVES = "id, fecha, registrado_en";
 const DESC = { ascending: false } as const;
 
@@ -66,7 +68,7 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
   const desteteEl =
     animal.fecha_destete ?? (animal.fecha_nacimiento && animal.fincas ? sumarDias(animal.fecha_nacimiento, animal.fincas.dias_destete) : null);
 
-  const [madre, crias, ordenos, estadoRep, historial, sanidad, bajas, ultimaBaja] = await Promise.all([
+  const [madre, crias, ordenos, estadoRep, historial, sanidad, bajas, ultimaBaja, cambiosEtapa] = await Promise.all([
     animal.madre_id ? supabase.from("animales").select("id, nombre, chapeta").eq("id", animal.madre_id).maybeSingle() : Promise.resolve({ data: null }),
     supabase.from("animales").select("id, nombre, chapeta, sexo, fecha_nacimiento").eq("madre_id", id).order("fecha_nacimiento", { ascending: false }),
     todasLasFilas((a, b) => supabase.from("ordenos").select("id, fecha, litros").eq("animal_id", id).gte("fecha", desde).lte("fecha", corte).order("fecha").order("id").range(a, b)),
@@ -89,6 +91,8 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
       leerPagina(sp, { param: "pbajas", tamano: BAJAS_POR_PAGINA }),
     ),
     supabase.from("bajas").select("fecha, tipo, causa").eq("animal_id", id).order("fecha", DESC).order("registrado_en", DESC).limit(1).maybeSingle(),
+    // Rastro de la etapa: los últimos cambios, automáticos (parto, ordeños, edad) o a mano.
+    supabase.from("cambios_etapa").select("id, etapa_anterior, etapa_nueva, motivo, cambiado_en").eq("animal_id", id).order("cambiado_en", DESC).limit(CAMBIOS_ETAPA),
   ]);
 
   // Del historial reproductivo solo se traen completas las filas de la página visible.
@@ -234,6 +238,15 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
                 : null}
             </Dato>
           </dl>
+          {!!cambiosEtapa.data?.length && (
+            <ul className="mt-4 space-y-1 text-xs text-tinta-suave">
+              {cambiosEtapa.data.map((c) => (
+                <li key={c.id}>
+                  Pasó de {CATEGORIAS[c.etapa_anterior].toLowerCase()} a {CATEGORIAS[c.etapa_nueva].toLowerCase()} el {fecha(c.cambiado_en)} · {c.motivo}
+                </li>
+              ))}
+            </ul>
+          )}
           {animal.notas && <p className="mt-4 rounded-2xl bg-crema p-4 text-sm text-tinta">{animal.notas}</p>}
         </Tarjeta>
 

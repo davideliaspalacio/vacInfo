@@ -12,6 +12,10 @@ import { BotonPrimario, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from 
 
 const etiqueta = (mapa: Record<string, string>, valor: string) => mapa[valor] ?? valor;
 
+/** Hay algo por importar si se crean fichas o si se puede agregar historial a lo que ya existe. */
+const hayAlgoPorHacer = (vista: VistaPreviaSeresVivos) =>
+  vista.nuevos.length > 0 || vista.partos > 0 || vista.ordenos > 0 || vista.secados > 0;
+
 export function ImportadorSeresVivos({ fincas, fincaInicial }: { fincas: { id: string; nombre: string }[]; fincaInicial: string }) {
   const router = useRouter();
   const [fincaId, setFincaId] = useState(fincaInicial);
@@ -67,6 +71,12 @@ export function ImportadorSeresVivos({ fincas, fincaInicial }: { fincas: { id: s
           La plantilla trae la celda <strong>PERTENECEN A FINCA:</strong> y las columnas de la planilla en papel: #, ESPECIE, RAZA, COLOR, SEXO,
           NOMBRE, FECHA NACIMIENTO, CHAPETA, PESO, PADRE, CHAPETA PADRE, MADRE y CHAPETA MADRE, con 75 filas y una hoja de instrucciones. Se abre en
           Excel y en Google Sheets.
+        </p>
+        <p className="mt-3 text-sm text-tinta-suave">
+          Al final trae tres columnas más de <strong>historial</strong>: <strong>ÚLTIMO PARTO</strong>, <strong>EN ORDEÑO</strong> (sí / no) y{" "}
+          <strong>LITROS ÚLTIMO ORDEÑO</strong>. Son opcionales —una planilla vieja sin ellas se importa igual— pero muy recomendables:{" "}
+          <strong>sin ellas el sistema no puede calcular la mora de preñez, la fecha de secado ni los días en ordeño</strong>, porque el hato entra
+          sin ningún antecedente.
         </p>
         <a
           href="/importar/plantilla-seres-vivos"
@@ -129,6 +139,12 @@ export function ImportadorSeresVivos({ fincas, fincaInicial }: { fincas: { id: s
           nacimiento y la fecha de hoy: hasta 12 meses ternera o ternero, de 12 a 24 novilla o novillo, y de ahí en adelante vaca o toro. Sin fecha
           de nacimiento la hembra queda como vaca y el macho como toro, y la fila sale marcada. Nada se guarda hasta que confirmes.
         </p>
+        <p className="mt-3 text-sm text-tinta-suave">
+          Del historial: <strong>ÚLTIMO PARTO</strong> crea el antecedente del parto (sin cría), <strong>LITROS ÚLTIMO ORDEÑO</strong> crea un ordeño
+          de la mañana con la fecha de hoy y <strong>EN ORDEÑO: no</strong> deja a la vaca seca registrando su secado. Si dice «sí» pero no trae
+          litros no se crea ningún ordeño —uno de 0 litros ensuciaría los informes—, así que escribe los litros. Los partos y los ordeños que ya
+          estén registrados tampoco se duplican.
+        </p>
       </Tarjeta>
 
       {error && (
@@ -149,8 +165,11 @@ function Vista({ vista, onImportar, importando }: { vista: VistaPreviaSeresVivos
     <>
       <Tarjeta>
         <TituloTarjeta detalle={`Paso 3 · ${vista.fincaNombre}`}>Vista previa</TituloTarjeta>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Metrica valor={num(vista.nuevos.length)} etiqueta="Animales nuevos" />
+          <Metrica valor={num(vista.partos)} etiqueta="Partos" />
+          <Metrica valor={num(vista.ordenos)} etiqueta="Ordeños" />
+          <Metrica valor={num(vista.secados)} etiqueta="Vacas que quedan secas" />
           <Metrica valor={num(vista.existentes.length)} etiqueta="Ya registrados" tono="crema" />
           <Metrica valor={num(vista.pesajes)} etiqueta="Pesos para la curva" tono="crema" />
           <Metrica valor={num(vista.madresEnlazadas)} etiqueta="Madres enlazadas" tono="crema" />
@@ -158,15 +177,25 @@ function Vista({ vista, onImportar, importando }: { vista: VistaPreviaSeresVivos
         </div>
 
         <div className="mt-6 flex flex-wrap items-center gap-4">
-          <BotonPrimario type="button" onClick={onImportar} disabled={importando || !vista.nuevos.length}>
+          <BotonPrimario type="button" onClick={onImportar} disabled={importando || !hayAlgoPorHacer(vista)}>
             {importando ? <LoaderCircle className="h-5 w-5 animate-spin" aria-hidden /> : <Upload className="h-5 w-5" aria-hidden />}
             {importando ? "Importando…" : "Importar animales"}
           </BotonPrimario>
           <p className="text-sm text-tinta-suave">
-            Se crearán {num(vista.nuevos.length)} fichas y {num(vista.pesajes)} pesajes con fecha {fecha(vista.fecha)}. Los animales que ya están en
-            la finca no se duplican: puedes subir la misma planilla varias veces.
+            Se crearán {num(vista.nuevos.length)} fichas, {num(vista.pesajes)} pesajes, {num(vista.partos)}{" "}
+            {vista.partos === 1 ? "parto" : "partos"} y {num(vista.ordenos)} {vista.ordenos === 1 ? "ordeño" : "ordeños"} con fecha{" "}
+            {fecha(vista.fecha)}
+            {vista.secados > 0 && `, y ${num(vista.secados)} ${vista.secados === 1 ? "vaca queda seca" : "vacas quedan secas"}`}. Los animales, los
+            partos y los ordeños que ya están en la finca no se duplican: puedes subir la misma planilla varias veces.
           </p>
         </div>
+        {!vista.conHistorial && (
+          <p className="mt-4 rounded-2xl border border-dorado/40 bg-crema px-4 py-3 text-sm">
+            Esta planilla no trae las columnas <strong>ÚLTIMO PARTO</strong>, <strong>EN ORDEÑO</strong> ni{" "}
+            <strong>LITROS ÚLTIMO ORDEÑO</strong>. Se puede importar igual, pero los animales entrarán sin historial y el sistema no podrá calcular
+            la mora de preñez, la fecha de secado ni los días en ordeño. Descarga la plantilla nueva si quieres llenarlas.
+          </p>
+        )}
       </Tarjeta>
 
       <Tarjeta>
@@ -203,6 +232,9 @@ function TablaFilas({ filas }: { filas: FilaVista[] }) {
             <th>Nacimiento</th>
             <th className="text-right">Peso</th>
             <th>Madre</th>
+            <th>Último parto</th>
+            <th>En ordeño</th>
+            <th className="text-right">Litros</th>
           </tr>
         </thead>
         <tbody>
@@ -227,6 +259,43 @@ function TablaFilas({ filas }: { filas: FilaVista[] }) {
                   </span>
                 ) : (
                   "—"
+                )}
+              </td>
+              <td className="whitespace-nowrap">
+                {f.ultimoParto ? (
+                  <span className="inline-flex items-center gap-2">
+                    {fecha(f.ultimoParto)}
+                    {f.parto === "ya" && <Etiqueta tono="gris">Ya registrado</Etiqueta>}
+                  </span>
+                ) : (
+                  "—"
+                )}
+              </td>
+              <td className="whitespace-nowrap">
+                {f.enOrdeno == null ? (
+                  "—"
+                ) : f.enOrdeno ? (
+                  <Etiqueta tono="verde">Sí</Etiqueta>
+                ) : (
+                  <span className="inline-flex items-center gap-2">
+                    <Etiqueta tono="gris">No</Etiqueta>
+                    {f.secado === "crear" && <span className="text-tinta-suave">se seca</span>}
+                    {f.secado === "ya" && <span className="text-tinta-suave">ya seca</span>}
+                  </span>
+                )}
+              </td>
+              <td className="whitespace-nowrap text-right">
+                {f.litrosOrdeno == null ? (
+                  f.enOrdeno ? (
+                    <Etiqueta tono="amarillo">Faltan litros</Etiqueta>
+                  ) : (
+                    "—"
+                  )
+                ) : (
+                  <span className="inline-flex items-center gap-2">
+                    {`${num(f.litrosOrdeno)} L`}
+                    {f.ordeno === "ya" && <Etiqueta tono="gris">Ya registrado</Etiqueta>}
+                  </span>
                 )}
               </td>
             </tr>
@@ -265,11 +334,19 @@ function Resultado({ resultado }: { resultado: ResultadoSeresVivos }) {
           <CheckCircle2 className="h-8 w-8 text-pasto-oscuro" aria-hidden />
           <h2 className="font-display text-2xl font-bold text-bosque">Seres vivos importados</h2>
         </div>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Metrica valor={num(resultado.animales.creados)} etiqueta="Fichas creadas" />
+          <Metrica valor={num(resultado.partos.creados)} etiqueta="Partos creados" />
+          <Metrica valor={num(resultado.ordenos.creados)} etiqueta="Ordeños creados" />
+          <Metrica valor={num(resultado.secados.creados)} etiqueta="Vacas secas" />
           <Metrica valor={num(resultado.animales.omitidos)} etiqueta="Filas que no se crearon" tono="crema" />
           <Metrica valor={num(resultado.pesajes.creados)} etiqueta="Pesajes creados" tono="crema" />
           <Metrica valor={num(resultado.madresEnlazadas)} etiqueta="Madres enlazadas" tono="crema" />
+          <Metrica
+            valor={num(resultado.partos.omitidos + resultado.ordenos.omitidos + resultado.secados.omitidos)}
+            etiqueta="Historial ya registrado"
+            tono="crema"
+          />
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link

@@ -39,3 +39,26 @@ describe("etapa reproductiva que se muestra", () => {
     expect(etapaReproductiva({ en_ordeno: false, ultimo_parto: "2026-01-10", categoria: "novilla" })).toBe("seca");
   });
 });
+
+describe("etapa reproductiva con la regla híbrida", () => {
+  it("una novilla de 25 meses sin partos sigue apareciendo como novilla", () => {
+    // Con la regla por edad la base la volvía «vaca» y la ficha mostraba «Seca».
+    expect(etapaReproductiva({ en_ordeno: false, ultimo_parto: null, categoria: "novilla" })).toBe("novilla");
+  });
+
+  it("la novilla servida, mientras no tenga parto, sigue siendo novilla", () => {
+    expect(etapaReproductiva({ en_ordeno: false, ultimo_parto: null, categoria: "novilla" })).toBe("novilla");
+  });
+
+  it("la que da leche aparece en ordeño aunque la base la haya pasado a vaca por los ordeños", () => {
+    expect(etapaReproductiva({ en_ordeno: true, ultimo_parto: null, categoria: "vaca" })).toBe("ordeno");
+  });
+
+  it("la vaca cargada sin historial (más de 36 meses) aparece seca, no novilla", () => {
+    expect(etapaReproductiva({ en_ordeno: false, ultimo_parto: null, categoria: "vaca" })).toBe("seca");
+  });
+
+  it("la ternera sin historial no se muestra como seca", () => {
+    expect(etapaReproductiva({ en_ordeno: false, ultimo_parto: null, categoria: "ternera" })).toBe("novilla");
+  });
+});

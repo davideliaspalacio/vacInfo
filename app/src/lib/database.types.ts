@@ -299,6 +299,43 @@ export type Database = {
           },
         ]
       }
+      cambios_etapa: {
+        Row: {
+          animal_id: string
+          cambiado_en: string
+          cambiado_por: string | null
+          etapa_anterior: Database["public"]["Enums"]["categoria_animal"]
+          etapa_nueva: Database["public"]["Enums"]["categoria_animal"]
+          id: string
+          motivo: string
+        }
+        Insert: {
+          animal_id: string
+          cambiado_en?: string
+          cambiado_por?: string | null
+          etapa_anterior: Database["public"]["Enums"]["categoria_animal"]
+          etapa_nueva: Database["public"]["Enums"]["categoria_animal"]
+          id?: string
+          motivo: string
+        }
+        Update: {
+          animal_id?: string
+          cambiado_en?: string
+          cambiado_por?: string | null
+          etapa_anterior?: Database["public"]["Enums"]["categoria_animal"]
+          etapa_nueva?: Database["public"]["Enums"]["categoria_animal"]
+          id?: string
+          motivo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cambios_etapa_animal_id_fkey"
+            columns: ["animal_id"]
+            referencedRelation: "animales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comentarios: {
         Row: {
           estado: Database["public"]["Enums"]["estado_comentario"]
@@ -1686,6 +1723,9 @@ export type Database = {
     }
     Functions: {
       aceptar_invitacion: { Args: { p_codigo: string }; Returns: string }
+      actualizar_etapa_animal: { Args: { p_animal: string }; Returns: number }
+      actualizar_etapas: { Args: never; Returns: number }
+      actualizar_etapas_de: { Args: { p_animales: string[] }; Returns: number }
       alertas_finca: {
         Args: { p_corte?: string; p_finca: string; p_horizonte?: number }
         Returns: {
@@ -1708,6 +1748,17 @@ export type Database = {
           vacas_ordeno: number
         }[]
       }
+      aplicar_etapas_finca: {
+        Args: { p_animales?: string[]; p_finca: string }
+        Returns: number
+      }
+      bajar_etapa_animal: {
+        Args: {
+          p_animal: string
+          p_etapa: Database["public"]["Enums"]["categoria_animal"]
+        }
+        Returns: Database["public"]["Enums"]["categoria_animal"]
+      }
       consumir_limite: {
         Args: {
           p_bloqueo_segundos?: number
@@ -1728,6 +1779,10 @@ export type Database = {
       }
       es_gestor: { Args: { org: string }; Returns: boolean }
       es_miembro: { Args: { org: string }; Returns: boolean }
+      escala_etapa: {
+        Args: { p_categoria: Database["public"]["Enums"]["categoria_animal"] }
+        Returns: string
+      }
       estado_potreros: {
         Args: { p_corte?: string; p_finca: string }
         Returns: {
@@ -1778,6 +1833,38 @@ export type Database = {
           ultimo_parto: string
           ultimo_secado: string
           ultimo_servicio: string
+        }[]
+      }
+      etapa_de_animal: {
+        Args: {
+          p_categoria: Database["public"]["Enums"]["categoria_animal"]
+          p_nacimiento: string
+          p_ordeno: boolean
+          p_parto: boolean
+          p_repro: boolean
+        }
+        Returns: Database["public"]["Enums"]["categoria_animal"]
+      }
+      etapa_mas_alta: {
+        Args: {
+          p_pedida: Database["public"]["Enums"]["categoria_animal"]
+          p_regla: Database["public"]["Enums"]["categoria_animal"]
+        }
+        Returns: Database["public"]["Enums"]["categoria_animal"]
+      }
+      etapa_por_edad: {
+        Args: {
+          p_categoria: Database["public"]["Enums"]["categoria_animal"]
+          p_nacimiento: string
+        }
+        Returns: Database["public"]["Enums"]["categoria_animal"]
+      }
+      etapas_pendientes: {
+        Args: { p_animales?: string[] }
+        Returns: {
+          animal_id: string
+          etapa_anterior: Database["public"]["Enums"]["categoria_animal"]
+          etapa_nueva: Database["public"]["Enums"]["categoria_animal"]
         }[]
       }
       eventos_calendario: {
@@ -1842,6 +1929,14 @@ export type Database = {
           ultimo_servicio: string
         }[]
       }
+      motivo_etapa: {
+        Args: {
+          p_nueva: Database["public"]["Enums"]["categoria_animal"]
+          p_ordeno: boolean
+          p_parto: boolean
+        }
+        Returns: string
+      }
       organizacion_de_ruta_foto: { Args: { nombre: string }; Returns: string }
       puede_gestionar_finca: { Args: { f: string }; Returns: boolean }
       puede_registrar_animal: { Args: { a: string }; Returns: boolean }
@@ -1849,6 +1944,10 @@ export type Database = {
       puede_registrar_organizacion: { Args: { org: string }; Returns: boolean }
       puede_ver_animal: { Args: { a: string }; Returns: boolean }
       puede_ver_finca: { Args: { f: string }; Returns: boolean }
+      rango_etapa: {
+        Args: { p_categoria: Database["public"]["Enums"]["categoria_animal"] }
+        Returns: number
+      }
       registrar_destete: {
         Args: { p_animal: string; p_fecha?: string }
         Returns: undefined
@@ -1872,6 +1971,24 @@ export type Database = {
           vacas_horras: number
           vacas_ordeno: number
           vacias: number
+        }[]
+      }
+      revision_etapas: {
+        Args: { p_finca: string }
+        Returns: {
+          animal_id: string
+          caso: string
+          categoria: Database["public"]["Enums"]["categoria_animal"]
+          chapeta: string
+          codigo: string
+          edad_meses: number
+          etapa_nueva: Database["public"]["Enums"]["categoria_animal"]
+          fecha_nacimiento: string
+          motivo: string
+          nombre: string
+          ordenos: number
+          partos: number
+          tiene_repro: boolean
         }[]
       }
       saldo_insumos: {

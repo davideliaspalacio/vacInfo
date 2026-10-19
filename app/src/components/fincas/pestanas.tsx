@@ -6,13 +6,14 @@ import { IndicadorPestana } from "@/components/fincas/indicador-pestana";
 type Cuenta = number | null | undefined;
 type Opcion = { valor: string; texto: string; href: string; cuenta?: Cuenta | Promise<Cuenta> };
 
-/** Pestañas de la ficha de finca; con `fincaId` se agregan al final los enlaces a Levante y Potreros. */
+/** Pestañas de la ficha de finca; con `fincaId` se agregan al final los enlaces a Levante, Potreros y Revisar etapas. */
 export function Pestanas({ opciones, activa, fincaId }: { opciones: Opcion[]; activa: string; fincaId?: string }) {
   const todas: Opcion[] = fincaId
     ? [
         ...opciones,
         { valor: "levante", texto: "Levante", href: `/fincas/${fincaId}/levante` },
         { valor: "potreros", texto: "Potreros", href: `/fincas/${fincaId}/potreros` },
+        { valor: "etapas", texto: "Revisar etapas", href: `/fincas/${fincaId}/etapas` },
       ]
     : opciones;
 
