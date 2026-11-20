@@ -2,8 +2,8 @@ import { notFound, redirect } from "next/navigation";
 import { urlFirmadaFoto } from "@/lib/fotos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { Encabezado, Tarjeta } from "@/components/ui";
-import { FormularioFinca } from "@/components/fincas/formulario-finca";
-import { guardarFinca } from "../../actions";
+import { FormularioFinca, RellenoOrdenos } from "@/components/fincas/formulario-finca";
+import { aplicarRellenoOrdenos, guardarFinca } from "../../actions";
 
 export default async function EditarFinca({ params }: PageProps<"/fincas/[id]/editar">) {
   const { id } = await params;
@@ -20,6 +20,7 @@ export default async function EditarFinca({ params }: PageProps<"/fincas/[id]/ed
       <Tarjeta>
         <FormularioFinca accion={guardarFinca.bind(null, id)} finca={finca} cancelar={`/fincas/${id}`} organizacionId={organizacionId} fotoUrl={fotoUrl} />
       </Tarjeta>
+      <RellenoOrdenos activo={finca.relleno_ordenos} accion={aplicarRellenoOrdenos.bind(null, id)} />
     </div>
   );
 }

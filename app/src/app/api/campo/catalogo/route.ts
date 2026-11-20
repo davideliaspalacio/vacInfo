@@ -4,8 +4,9 @@ import { corteDeFinca } from "@/lib/datos";
 import { hoyISO, sumarDias } from "@/lib/formato";
 import { gruposDeFinca } from "@/components/potreros/rotacion";
 import { leerBandeja } from "@/lib/offline/mensajes";
+import { agruparSanidad, consultaParientes, consultaSanidad, desdeSanidad, hojaVidaDe } from "@/lib/offline/hoja-vida";
 import { REGLAS, limitar, respuestaLimite } from "@/lib/limites";
-import type { AnimalCatalogo, BandejaMensajes, Catalogo, FincaResumen, Jornada, OrdenoRegistrado } from "@/lib/offline/tipos";
+import type { AnimalCatalogo, BandejaMensajes, Catalogo, FincaResumen, Jornada, OrdenoRegistrado, ParienteCatalogo } from "@/lib/offline/tipos";
 
 const SIN_CACHE = { "Cache-Control": "no-store" };
 /** Días hacia atrás (desde hoy y desde el corte) de los que se mandan los ordeños ya registrados. */
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
   if (!limite.permitido) return respuestaLimite(limite, SIN_CACHE);
 
   const [{ data: filasFincas, error: errorFincas }, mensajes] = await Promise.all([
-    supabase.from("fincas").select("id, nombre, municipio, organizacion_id, dias_descanso_objetivo").order("nombre"),
+    supabase.from("fincas").select("id, nombre, municipio, organizacion_id, dias_descanso_objetivo, relleno_ordenos").order("nombre"),
     // Los mensajes viajan con el catálogo para poder leerlos sin señal; si fallan, el catálogo igual sirve.
     leerBandeja(supabase, user.id).catch((): BandejaMensajes | null => null),
   ]);
@@ -49,10 +50,12 @@ export async function GET(request: Request) {
   if (!finca) return NextResponse.json({ error: "No tienes acceso a esa finca." }, { status: 404, headers: SIN_CACHE });
 
   const corte = await corteDeFinca(supabase, finca.id);
-  const [animales, estados, potreros, abiertas, grupos, bienes, insumos, servicios, ordenos] = await Promise.all([
+  // Eventos sanitarios: solo los de los últimos meses, para que el catálogo del teléfono no crezca sin control.
+  const sanidadDesde = desdeSanidad(hoyISO());
+  const [animales, estados, potreros, abiertas, grupos, bienes, insumos, servicios, ordenos, sanidad, parientes] = await Promise.all([
     supabase
       .from("animales")
-      .select("id, codigo, chapeta, nombre, categoria, sexo, fecha_destete")
+      .select("id, codigo, chapeta, nombre, categoria, sexo, fecha_destete, fecha_nacimiento, madre_id, madre_nombre, madre_chapeta, padre_nombre, padre_chapeta")
       .eq("finca_id", finca.id)
       .eq("estado", "activo")
       .order("nombre"),
@@ -76,9 +79,21 @@ export async function GET(request: Request) {
       .eq("animales.finca_id", finca.id)
       .in("fecha", fechasDeOrdenos(hoyISO(), corte))
       .limit(MAX_ORDENOS),
+    // Hoja de vida (solo para ver): enfermedades, tratamientos y vacunas recientes, y las fichas para resolver la mamá.
+    consultaSanidad(supabase, finca.id, sanidadDesde),
+    consultaParientes(supabase, finca.id),
   ]);
   const fallo =
-    animales.error ?? estados.error ?? potreros.error ?? abiertas.error ?? bienes.error ?? insumos.error ?? servicios.error ?? ordenos.error;
+    animales.error ??
+    estados.error ??
+    potreros.error ??
+    abiertas.error ??
+    bienes.error ??
+    insumos.error ??
+    servicios.error ??
+    ordenos.error ??
+    sanidad.error ??
+    parientes.error;
   if (fallo) return NextResponse.json({ error: fallo.message }, { status: 500, headers: SIN_CACHE });
 
   // Toros conocidos: los usados en servicios (del más reciente al más viejo) y los toros de la finca.
@@ -91,6 +106,8 @@ export async function GET(request: Request) {
   (servicios.data ?? []).forEach((s) => agregarToro(s.toro_nombre));
 
   const estadoPorAnimal = new Map((estados.data ?? []).map((e) => [e.animal_id, e]));
+  const sanidadPorAnimal = agruparSanidad(sanidad.data ?? []);
+  const fichas = new Map<string, ParienteCatalogo>((parientes.data ?? []).map((p) => [p.id, { nombre: p.nombre, chapeta: p.chapeta }]));
   const ordenosPorAnimal = new Map<string, OrdenoRegistrado[]>();
   for (const o of ordenos.data ?? []) {
     const lista = ordenosPorAnimal.get(o.animal_id) ?? [];
@@ -103,8 +120,16 @@ export async function GET(request: Request) {
     corte,
     animales: (animales.data ?? []).map((a): AnimalCatalogo => {
       const e = estadoPorAnimal.get(a.id);
+      // Solo los campos del catálogo: lo demás (madre_id, padre_nombre…) se resume en `hoja_vida`.
+      const { id, codigo, chapeta, nombre, categoria, sexo, fecha_destete } = a;
       return {
-        ...a,
+        id,
+        codigo,
+        chapeta,
+        nombre,
+        categoria,
+        sexo,
+        fecha_destete,
         en_ordeno: e?.en_ordeno ?? false,
         prenada: e?.prenada ?? null,
         dias_ordeno: e?.dias_ordeno ?? null,
@@ -116,15 +141,19 @@ export async function GET(request: Request) {
         litros_am: e?.litros_am ?? null,
         litros_pm: e?.litros_pm ?? null,
         ordenos_recientes: (ordenosPorAnimal.get(a.id) ?? []).sort((x, y) => y.fecha.localeCompare(x.fecha) || y.jornada.localeCompare(x.jornada)),
+        hoja_vida: hojaVidaDe(a, { mora_prenez: e?.mora_prenez ?? null, sanidad: sanidadPorAnimal.get(a.id), fichas }),
       };
     }),
     potreros_estado: potreros.data ?? [],
     dias_descanso_objetivo: finca.dias_descanso_objetivo ?? 35,
+    // Con el relleno activo los formularios de ordeño registran siempre hoy y no muestran selector de fecha.
+    relleno_ordenos: finca.relleno_ordenos ?? false,
     grupos,
     rotaciones_abiertas: abiertas.data ?? [],
     bienes: bienes.data ?? [],
     insumos: insumos.data ?? [],
     toros: [...toros.values()].slice(0, 60),
+    sanidad_desde: sanidadDesde,
     descargado_en: new Date().toISOString(),
   };
 

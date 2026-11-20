@@ -1,13 +1,121 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
+import { CalendarDays, CircleCheck, TriangleAlert } from "lucide-react";
 import type { Database } from "@/lib/database.types";
 import { BotonPrimario } from "@/components/ui";
 import { FotoCampo } from "@/components/foto-campo";
 import { Campo, MensajeError, type EstadoFormulario } from "@/components/fincas/campo";
+import type { EstadoAccion } from "@/components/fincas/formulario-accion";
 
 type Finca = Partial<Database["public"]["Tables"]["fincas"]["Row"]>;
+
+/** Días que el relleno llena hacia atrás como máximo (el mismo tope del disparador en la base). */
+const TOPE_RELLENO = 15;
+
+/**
+ * «Relleno de registros de ordeño faltantes»: opción de la finca que se activa solo después de
+ * leer la explicación y darle «Aplicar a la finca», porque cambia cómo registra el ordeño todo el
+ * equipo en VacDaTa.
+ */
+export function RellenoOrdenos({
+  activo,
+  accion,
+}: {
+  activo: boolean;
+  /** `aplicarRellenoOrdenos` ya ligada al id de la finca; el formulario manda `activar`. */
+  accion: (estado: EstadoAccion, datos: FormData) => Promise<EstadoAccion>;
+}) {
+  const [estado, enviar, pendiente] = useActionState(accion, {});
+  const [leido, setLeido] = useState(false);
+
+  return (
+    <section className="papel rounded-3xl p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h2 className="font-display flex items-center gap-2 text-xl font-bold text-bosque">
+          <CalendarDays className="h-5 w-5 text-pasto-oscuro" aria-hidden />
+          Relleno de registros de ordeño faltantes
+        </h2>
+        {activo ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-lima px-3 py-1 text-xs font-bold uppercase tracking-wider text-bosque">
+            <CircleCheck className="h-4 w-4" aria-hidden />
+            Activa en esta finca
+          </span>
+        ) : (
+          <span className="inline-flex items-center rounded-full bg-black/5 px-3 py-1 text-xs font-bold uppercase tracking-wider text-tinta-suave">
+            Sin activar
+          </span>
+        )}
+      </div>
+
+      <div className="mt-4 space-y-3 text-sm leading-relaxed text-tinta-suave">
+        <p>
+          Si no se registran eventos de ordeño por un periodo de tiempo cualquiera, y después de este periodo se genera un registro, todos los días
+          faltantes de registro en el periodo van a ser llenados con el mismo dato que se acaba de registrar. Esto permite que, aunque un trabajador
+          olvide hacer registros de ordeño por varios días, al hacer uno nuevo los días anteriores se van a rellenar con este dato y por lo tanto va a
+          haber una aproximación al ordeño real de dicho periodo.
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>Se rellena desde el último ordeño registrado de esa vaca hasta el día anterior, con los mismos litros y la misma jornada.</li>
+          <li>Un día que ya tiene ordeño registrado nunca se pisa: se conserva el dato que tomó la persona.</li>
+          <li>
+            Se rellenan máximo {TOPE_RELLENO} días hacia atrás (una quincena). Si el último ordeño de la vaca es más viejo, solo se completa esa
+            última quincena.
+          </li>
+          <li>Los días rellenados quedan marcados como estimados, para poder distinguirlos del dato tomado en el corral.</li>
+          <li>Cargar un histórico (importador) no rellena nada: solo rellena el registro del día.</li>
+        </ul>
+        <p className="rounded-2xl border border-dorado/50 bg-dorado/15 p-3 font-semibold text-bosque">
+          <TriangleAlert className="mr-1.5 inline h-4 w-4 align-text-bottom" aria-hidden />
+          Posdata: si la opción está activada, afecta a VacDaTa. Al hacer un registro de ordeño no se podrá seleccionar la fecha del registro:
+          únicamente se registra sobre el día actual. Si no está activada, se mantiene la opción de elegir la fecha del registro.
+        </p>
+      </div>
+
+      <form action={enviar} className="mt-5 space-y-3">
+        <input type="hidden" name="activar" value={activo ? "no" : "si"} />
+        {!activo && (
+          <label className="flex items-start gap-3 font-bold text-bosque">
+            <input
+              type="checkbox"
+              name="lei_la_explicacion"
+              value="si"
+              checked={leido}
+              onChange={(e) => setLeido(e.target.checked)}
+              className="mt-1 h-5 w-5 shrink-0 accent-pasto-oscuro"
+            />
+            <span>Leí la explicación y entiendo que en VacDaTa el ordeño se registrará solo sobre el día actual.</span>
+          </label>
+        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            disabled={pendiente || (!activo && !leido)}
+            className={
+              activo
+                ? "inline-flex items-center justify-center rounded-xl border border-bosque/20 px-4 py-2.5 text-sm font-bold text-bosque hover:bg-lima-suave disabled:opacity-60"
+                : "boton-accion inline-flex items-center justify-center rounded-xl bg-bosque px-4 py-2.5 text-sm font-bold text-leche disabled:opacity-60"
+            }
+          >
+            {pendiente ? "Guardando…" : activo ? "Desactivar en esta finca" : "Aplicar a la finca"}
+          </button>
+          {!pendiente && estado.ok && (
+            <span role="status" className="inline-flex items-center gap-1 text-sm font-bold text-pasto-oscuro">
+              <CircleCheck className="h-4 w-4" aria-hidden />
+              {estado.ok}
+            </span>
+          )}
+          {!pendiente && estado.error && (
+            <span role="alert" className="inline-flex items-center gap-1 text-sm font-bold text-alerta">
+              <TriangleAlert className="h-4 w-4" aria-hidden />
+              {estado.error}
+            </span>
+          )}
+        </div>
+      </form>
+    </section>
+  );
+}
 
 export function FormularioFinca({
   accion,

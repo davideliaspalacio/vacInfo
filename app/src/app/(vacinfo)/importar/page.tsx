@@ -55,7 +55,7 @@ export default async function ImportarPage({ searchParams }: PageProps<"/importa
       <Encabezado
         eyebrow="Importar"
         titulo="Importar los seres vivos de la finca"
-        descripcion="La planilla de implementación de seres vivos da de alta de una sola vez todos los animales de una finca: descarga la plantilla, llénala y súbela. Llena también las tres columnas de historial (último parto, en ordeño y litros del último ordeño): son opcionales, pero sin ellas el sistema no puede calcular mora de preñez, secado ni días en ordeño. Nada se guarda hasta que revises la vista previa."
+        descripcion="La planilla de implementación de seres vivos da de alta de una sola vez todos los animales de una finca: descarga la plantilla, llénala y súbela. Llena también el bloque «Datos de vacas productivos»: de sus seis columnas solo se guardan la fecha del último parto y la fecha servida —los días en ordeño, la mora de preñez, la fecha posible de secado y la posible fecha de nacimiento de la cría los calcula el sistema—, pero sin esas dos fechas no hay con qué calcularlos. Nada se guarda hasta que revises la vista previa."
       />
 
       {!gestor ? (

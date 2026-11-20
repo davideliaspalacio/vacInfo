@@ -6,6 +6,7 @@ import { puedeRegistrar } from "@/lib/permisos";
 import { obtenerSesion, ROLES_GESTORES } from "@/lib/sesion";
 import { corteDeFinca } from "@/lib/datos";
 import { fecha, litros, num, sumarDias } from "@/lib/formato";
+import { leerMora } from "@/lib/mora";
 import { consultarPagina, leerPagina, paginarUnion } from "@/lib/paginacion";
 import { atajosDias, completarRango, leerRangoPedido, textoRango } from "@/lib/rango";
 import { Encabezado, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
@@ -20,6 +21,7 @@ import { edad } from "@/components/fincas/consultas";
 import { esLevante } from "@/components/levante/etiquetas";
 import { SeccionCrecimiento } from "@/components/levante/seccion-crecimiento";
 import { CATEGORIAS, ESPECIES, ESTADOS_ANIMAL, ESTADOS_SANITARIOS, SEXOS, TIPOS_BAJA, TIPOS_SANITARIOS , ETIQUETA_ETAPA_REPRODUCTIVA, etapaReproductiva} from "@/components/fincas/etiquetas";
+import { EliminarPerfil } from "./eliminar-perfil";
 
 /** Rango por defecto de la ficha: el último año (producción e historiales). */
 const DIAS_POR_DEFECTO = 365;
@@ -167,6 +169,31 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
 
   const er = estadoRep.data;
   const baja = ultimaBaja.data;
+  // La mora se lee siempre con `leerMora`: va con signo y se congela al confirmarse la preñez.
+  const mora = leerMora(er?.mora_prenez, !!er?.prenada);
+
+  // Qué se perdería al eliminar el perfil: se cuenta sin traer las filas (head + count exact).
+  const registros = gestor
+    ? (
+        await Promise.all(
+          (
+            [
+              ["ordenos", "ordeños"],
+              ["servicios", "servicios"],
+              ["palpaciones", "palpaciones"],
+              ["partos", "partos"],
+              ["secados", "secados"],
+              ["pesajes", "pesajes"],
+              ["eventos_sanitarios", "registros de sanidad"],
+              ["bajas", "bajas"],
+            ] as const
+          ).map(async ([tabla, etiqueta]) => {
+            const { count } = await supabase.from(tabla).select("id", { count: "exact", head: true }).eq("animal_id", id);
+            return { etiqueta, cantidad: count ?? 0 };
+          }),
+        )
+      ).filter((r) => r.cantidad > 0)
+    : [];
 
   return (
     <div className="space-y-8">
@@ -275,34 +302,50 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
         />
       </Tarjeta>
 
+      {/*
+        Estado reproductivo: los mismos seis datos que captura la planilla de implementación y que
+        muestra el formulario de la vaca. Todos salen de `estado_reproductivo` (la función de la base
+        de datos) y aquí no se recalcula ninguno: dos son datos (último parto y fecha servida) y los
+        otros cuatro los calcula la función.
+      */}
       <Tarjeta>
         <TituloTarjeta detalle={`al ${fecha(corte, true)}`}>Estado reproductivo</TituloTarjeta>
         {er ? (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Metrica
-              valor={ETIQUETA_ETAPA_REPRODUCTIVA[etapaReproductiva(er)]}
-              etiqueta={
-                er.en_ordeno
-                  ? `${er.dias_ordeno} días en ordeño`
-                  : er.dias_seca != null
-                    ? `${er.dias_seca} días seca`
-                    : er.ultimo_parto
-                      ? "Sin partos"
-                      : "Sin partos registrados"
-              }
-            />
-            <Metrica
-              valor={er.prenada ? "Preñada" : er.ultimo_servicio ? "Servida" : "Vacía"}
-              etiqueta={er.ultimo_servicio ? `Servicio ${fecha(er.ultimo_servicio)}${er.toro_nombre ? ` · ${er.toro_nombre}` : ""}` : "Sin servicio"}
-              tono={er.prenada ? "lima" : "crema"}
-            />
-            <Metrica valor={er.mora_prenez ? `${er.mora_prenez} d` : "—"} etiqueta="Mora de preñez" tono={(er.mora_prenez ?? 0) > 60 ? "alerta" : "crema"} />
-            <Metrica valor={litros(er.litros_total || null)} etiqueta="Leche del último día" />
-            <Metrica valor={fecha(er.palpar_el)} etiqueta="Palpar el" tono={er.palpar_el && er.palpar_el <= corte ? "alerta" : "crema"} />
-            <Metrica valor={fecha(er.secar_el)} etiqueta="Secar el" tono={er.en_ordeno && er.secar_el && er.secar_el <= corte ? "alerta" : "crema"} />
-            <Metrica valor={fecha(er.parto_esperado)} etiqueta="Parto esperado" tono="crema" />
-            <Metrica valor={fecha(er.ultimo_parto)} etiqueta="Último parto" tono="crema" />
-          </div>
+          <>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              <Metrica valor={fecha(er.ultimo_parto, true)} etiqueta="Fecha del último parto" />
+              <Metrica valor={er.dias_ordeno == null ? "—" : `${num(er.dias_ordeno)} d`} etiqueta="Días en ordeño" />
+              <Metrica
+                valor={
+                  mora ? (
+                    <span className={mora.clase} title={mora.detalle}>
+                      {mora.valor} d{mora.corta && <span className="ml-1 text-sm font-normal">{mora.corta}</span>}
+                    </span>
+                  ) : (
+                    "—"
+                  )
+                }
+                etiqueta="Mora de preñez"
+                tono="crema"
+              />
+              <Metrica valor={fecha(er.ultimo_servicio, true)} etiqueta="Fecha servida" tono="crema" />
+              <Metrica
+                valor={fecha(er.secar_el, true)}
+                etiqueta="Fecha posible de secado"
+                tono={er.en_ordeno && er.secar_el && er.secar_el <= corte ? "alerta" : "crema"}
+              />
+              <Metrica valor={fecha(er.parto_esperado, true)} etiqueta="Posible fecha de nacimiento de la cría" tono="crema" />
+            </div>
+            <p className="mt-4 text-xs text-tinta-suave">
+              {ETIQUETA_ETAPA_REPRODUCTIVA[etapaReproductiva(er)]}
+              {er.toro_nombre ? ` · toro ${er.toro_nombre}` : ""} · {mora?.detalle ?? "Sin mora de preñez: no está en ordeño"}
+              {!er.ultimo_servicio
+                ? " · sin fecha servida no hay con qué calcular el secado ni el nacimiento de la cría"
+                : !er.prenada
+                  ? " · el secado y el nacimiento de la cría aparecen cuando una palpación confirme la preñez de este servicio"
+                  : ""}
+            </p>
+          </>
         ) : (
           <Vacio>El estado reproductivo aplica a vacas y novillas activas.</Vacio>
         )}
@@ -484,6 +527,11 @@ export default async function FichaAnimal({ params, searchParams }: PageProps<"/
             ancla="bajas"
           />
         </Tarjeta>
+      )}
+
+      {/* Borrar el perfil: aparte del resto de la ficha y solo para propietario y administrador. */}
+      {gestor && (
+        <EliminarPerfil id={id} nombre={animal.nombre} codigo={animal.codigo} registros={registros} crias={crias.data?.length ?? 0} />
       )}
     </div>
   );

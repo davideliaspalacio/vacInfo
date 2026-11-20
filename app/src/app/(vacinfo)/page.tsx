@@ -31,8 +31,11 @@ export default async function Inicio() {
     ),
   ]);
 
+  // `items-start`: el título y los tres accesos se quedan arriba. Con `items-center` la columna
+  // izquierda se centraba contra la lista de fincas de la derecha, así que al tener muchas fincas el
+  // título bajaba hasta la mitad de la lista y los tres accesos se salían de la pantalla.
   return (
-    <div className="grid items-center gap-12 py-4 lg:grid-cols-[1.05fr_0.95fr] lg:py-10">
+    <div className="grid items-start gap-12 py-4 lg:grid-cols-[1.05fr_0.95fr] lg:py-10">
       <div>
         <p className="mb-4 text-sm font-bold uppercase tracking-[0.16em] text-lima">Gestión lechera</p>
         <h1 className="font-display text-6xl font-bold leading-[0.94] text-leche sm:text-7xl lg:text-8xl">VacInfo</h1>

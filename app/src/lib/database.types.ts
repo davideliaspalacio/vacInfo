@@ -707,6 +707,7 @@ export type Database = {
           peso_servicio_kg: number
           precio_litro: number | null
           registro_ica: string | null
+          relleno_ordenos: boolean
           ruta: string | null
           tanque_numero: string | null
           tenencia: string | null
@@ -731,6 +732,7 @@ export type Database = {
           peso_servicio_kg?: number
           precio_litro?: number | null
           registro_ica?: string | null
+          relleno_ordenos?: boolean
           ruta?: string | null
           tanque_numero?: string | null
           tenencia?: string | null
@@ -755,6 +757,7 @@ export type Database = {
           peso_servicio_kg?: number
           precio_litro?: number | null
           registro_ica?: string | null
+          relleno_ordenos?: boolean
           ruta?: string | null
           tanque_numero?: string | null
           tenencia?: string | null
@@ -1115,6 +1118,7 @@ export type Database = {
       ordenos: {
         Row: {
           animal_id: string
+          estimado: boolean
           fecha: string
           id: string
           jornada: Database["public"]["Enums"]["jornada"]
@@ -1124,6 +1128,7 @@ export type Database = {
         }
         Insert: {
           animal_id: string
+          estimado?: boolean
           fecha: string
           id?: string
           jornada: Database["public"]["Enums"]["jornada"]
@@ -1133,6 +1138,7 @@ export type Database = {
         }
         Update: {
           animal_id?: string
+          estimado?: boolean
           fecha?: string
           id?: string
           jornada?: Database["public"]["Enums"]["jornada"]

@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronRight, Search, TriangleAlert, X } from "lucide-react";
+import clsx from "clsx";
+import { ChevronRight, Eye, Search, TriangleAlert, X } from "lucide-react";
 import { control } from "@/components/campo/ui";
+import { HojaVida } from "@/components/campo/hoja-vida";
 import { fecha, hoyISO } from "@/lib/formato";
 import { jornadaLibre, textoJornadasCompletas } from "@/lib/offline/ordenos";
 import type { Accion, AnimalCatalogo, Catalogo } from "@/lib/offline/tipos";
@@ -46,7 +48,8 @@ export function AnimalRapido({
   const [animalId, setAnimalId] = useState<string | null>(() =>
     animalInicial && catalogo.animales.some((a) => a.id === animalInicial) ? animalInicial : null,
   );
-  const [accion, setAccion] = useState<AccionAnimal>("ordeno");
+  // La hoja de vida no es una acción de registro: es una pestaña para ver, al lado de las de registrar.
+  const [pestana, setPestana] = useState<AccionAnimal | "hoja_vida">("ordeno");
   const [aviso, setAviso] = useState<string | null>(() =>
     animalInicial && !catalogo.animales.some((a) => a.id === animalInicial)
       ? `El animal del enlace no está en los datos de ${catalogo.finca.nombre}. Puede ser de otra finca o haber salido del inventario.`
@@ -78,7 +81,9 @@ export function AnimalRapido({
     const libre = jornadaLibre(indice, animal.id, hoy, jornadaActual());
     const motivoOrdeno = libre ? null : `${textoJornadasCompletas(hoy, hoy)} No se puede registrar otro ordeño de esta vaca hoy.`;
     const posibles = disponibles.filter((a) => a !== "ordeno" || !motivoOrdeno);
-    const actual = posibles.includes(accion) ? accion : posibles[0];
+    const verHoja = pestana === "hoja_vida";
+    // Acción de registro activa (o la primera disponible). Mientras se ve la hoja de vida no hay ninguna marcada.
+    const actual = pestana !== "hoja_vida" && posibles.includes(pestana) ? pestana : posibles[0];
 
     return (
       <div className="space-y-4">
@@ -106,38 +111,58 @@ export function AnimalRapido({
         </div>
 
         <div>
+          <p className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Registrar</p>
           <div className="flex flex-wrap gap-2">
             {disponibles.map((a) => (
               <Chip
                 key={a}
-                activo={a === actual}
+                activo={!verHoja && a === actual}
                 bloqueado={a === "ordeno" && Boolean(motivoOrdeno)}
                 motivo={a === "ordeno" ? (motivoOrdeno ?? undefined) : undefined}
-                onClick={() => setAccion(a)}
+                onClick={() => setPestana(a)}
               >
                 {ETIQUETA_ACCION_ANIMAL[a]}
               </Chip>
             ))}
           </div>
-          {motivoOrdeno && (
+          {motivoOrdeno && !verHoja && (
             <p role="status" className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
               {motivoOrdeno}
             </p>
           )}
+
+          {/* Aparte de las opciones de registro y con otro color: esta pestaña no guarda nada. */}
+          <p className="mb-2 mt-4 text-sm font-bold uppercase tracking-wide text-slate-500">Solo para ver</p>
+          <button
+            type="button"
+            onClick={() => setPestana(verHoja ? actual : "hoja_vida")}
+            aria-pressed={verHoja}
+            className={clsx(
+              "inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 text-base font-bold",
+              verHoja ? "border-slate-700 bg-slate-800 text-white" : "border-slate-400 bg-white text-slate-700",
+            )}
+          >
+            <Eye className="h-5 w-5 shrink-0" aria-hidden />
+            Hoja de vida
+          </button>
         </div>
 
-        <FormularioAnimalRapido
-          key={`${animal.id}-${actual}`}
-          accion={actual}
-          animal={animal}
-          catalogo={catalogo}
-          indice={indice}
-          alGuardar={async (acc, datos) => {
-            await alGuardar(acc, datos, animal);
-            setAnimalId(null);
-            setBusqueda("");
-          }}
-        />
+        {verHoja ? (
+          <HojaVida animal={animal} hoy={hoy} sanidadDesde={catalogo.sanidad_desde} />
+        ) : (
+          <FormularioAnimalRapido
+            key={`${animal.id}-${actual}`}
+            accion={actual}
+            animal={animal}
+            catalogo={catalogo}
+            indice={indice}
+            alGuardar={async (acc, datos) => {
+              await alGuardar(acc, datos, animal);
+              setAnimalId(null);
+              setBusqueda("");
+            }}
+          />
+        )}
       </div>
     );
   }

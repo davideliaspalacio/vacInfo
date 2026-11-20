@@ -8,13 +8,14 @@ import { analizarSeresVivos, importarSeresVivos } from "@/app/(vacinfo)/importar
 import type { FilaVista, ResultadoSeresVivos, VistaPreviaSeresVivos } from "@/lib/importador/seres-vivos-aplicar";
 import { CATEGORIAS, ESPECIES, SEXOS } from "@/components/fincas/etiquetas";
 import { fecha, num } from "@/lib/formato";
+import { leerMora } from "@/lib/mora";
 import { BotonPrimario, Etiqueta, Metrica, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 
 const etiqueta = (mapa: Record<string, string>, valor: string) => mapa[valor] ?? valor;
 
 /** Hay algo por importar si se crean fichas o si se puede agregar historial a lo que ya existe. */
 const hayAlgoPorHacer = (vista: VistaPreviaSeresVivos) =>
-  vista.nuevos.length > 0 || vista.partos > 0 || vista.ordenos > 0 || vista.secados > 0;
+  vista.nuevos.length > 0 || vista.partos > 0 || vista.servicios > 0 || vista.ordenos > 0 || vista.secados > 0;
 
 export function ImportadorSeresVivos({ fincas, fincaInicial }: { fincas: { id: string; nombre: string }[]; fincaInicial: string }) {
   const router = useRouter();
@@ -68,15 +69,21 @@ export function ImportadorSeresVivos({ fincas, fincaInicial }: { fincas: { id: s
       <Tarjeta>
         <TituloTarjeta detalle="Paso 1">Descarga la plantilla y llénala</TituloTarjeta>
         <p className="text-sm text-tinta-suave">
-          La plantilla trae la celda <strong>PERTENECEN A FINCA:</strong> y las columnas de la planilla en papel: #, ESPECIE, RAZA, COLOR, SEXO,
-          NOMBRE, FECHA NACIMIENTO, CHAPETA, PESO, PADRE, CHAPETA PADRE, MADRE y CHAPETA MADRE, con 75 filas y una hoja de instrucciones. Se abre en
-          Excel y en Google Sheets.
+          La plantilla trae la celda <strong>PERTENECEN A FINCA:</strong> y las columnas de la planilla en papel: #, ESPECIE, RAZA, COLOR, HEMBRA O
+          MACHO, NOMBRE, FECHA NACIMIENTO, CHAPETA, PESO, PAPÁ, CHAPETA PAPÁ, MAMÁ y CHAPETA MAMÁ, con 75 filas y una hoja de instrucciones. Se abre
+          en Excel y en Google Sheets. Si ya tienes planillas llenas con los títulos viejos (SEXO, PADRE, MADRE, ÚLTIMO PARTO) se importan igual.
         </p>
         <p className="mt-3 text-sm text-tinta-suave">
-          Al final trae tres columnas más de <strong>historial</strong>: <strong>ÚLTIMO PARTO</strong>, <strong>EN ORDEÑO</strong> (sí / no) y{" "}
-          <strong>LITROS ÚLTIMO ORDEÑO</strong>. Son opcionales —una planilla vieja sin ellas se importa igual— pero muy recomendables:{" "}
-          <strong>sin ellas el sistema no puede calcular la mora de preñez, la fecha de secado ni los días en ordeño</strong>, porque el hato entra
-          sin ningún antecedente.
+          Después viene el bloque <strong>DATOS DE VACAS PRODUCTIVOS</strong>. De sus seis columnas el sistema solo guarda dos:{" "}
+          <strong>FECHA ÚLTIMO PARTO</strong> y <strong>FECHA SERVIDA</strong>. Las otras cuatro —<strong>DÍAS ORDEÑO</strong>,{" "}
+          <strong>MORA PREÑEZ</strong>, <strong>FECHA POSIBLE DE SECADO</strong> y <strong>POSIBLE FECHA NACIMIENTO CRÍA</strong>— las calcula el
+          sistema con esas dos fechas y puedes dejarlas vacías: si escribes algo ahí, la planilla se importa igual y la vista previa te lo avisa.
+        </p>
+        <p className="mt-3 text-sm text-tinta-suave">
+          Al final hay dos columnas nuestras: <strong>EN ORDEÑO</strong> (sí / no) y <strong>LITROS ÚLTIMO ORDEÑO</strong>. Todo el historial es
+          opcional —una planilla vieja sin esas columnas se importa igual— pero muy recomendable:{" "}
+          <strong>sin el parto y la fecha servida el sistema no puede calcular los días en ordeño, la mora de preñez, la fecha de secado ni el
+          nacimiento de la cría</strong>, porque el hato entra sin ningún antecedente.
         </p>
         <a
           href="/importar/plantilla-seres-vivos"
@@ -140,10 +147,11 @@ export function ImportadorSeresVivos({ fincas, fincaInicial }: { fincas: { id: s
           de nacimiento la hembra queda como vaca y el macho como toro, y la fila sale marcada. Nada se guarda hasta que confirmes.
         </p>
         <p className="mt-3 text-sm text-tinta-suave">
-          Del historial: <strong>ÚLTIMO PARTO</strong> crea el antecedente del parto (sin cría), <strong>LITROS ÚLTIMO ORDEÑO</strong> crea un ordeño
-          de la mañana con la fecha de hoy y <strong>EN ORDEÑO: no</strong> deja a la vaca seca registrando su secado. Si dice «sí» pero no trae
-          litros no se crea ningún ordeño —uno de 0 litros ensuciaría los informes—, así que escribe los litros. Los partos y los ordeños que ya
-          estén registrados tampoco se duplican.
+          Del historial: <strong>FECHA ÚLTIMO PARTO</strong> crea el antecedente del parto (sin cría), <strong>FECHA SERVIDA</strong> crea el
+          servicio del animal, <strong>LITROS ÚLTIMO ORDEÑO</strong> crea un ordeño de la mañana con la fecha de hoy y{" "}
+          <strong>EN ORDEÑO: no</strong> deja a la vaca seca registrando su secado. Si dice «sí» pero no trae litros no se crea ningún ordeño —uno de
+          0 litros ensuciaría los informes—, así que escribe los litros. Los partos, los servicios y los ordeños que ya estén registrados tampoco se
+          duplican.
         </p>
       </Tarjeta>
 
@@ -168,8 +176,9 @@ function Vista({ vista, onImportar, importando }: { vista: VistaPreviaSeresVivos
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Metrica valor={num(vista.nuevos.length)} etiqueta="Animales nuevos" />
           <Metrica valor={num(vista.partos)} etiqueta="Partos" />
+          <Metrica valor={num(vista.servicios)} etiqueta="Servicios (fecha servida)" />
           <Metrica valor={num(vista.ordenos)} etiqueta="Ordeños" />
-          <Metrica valor={num(vista.secados)} etiqueta="Vacas que quedan secas" />
+          <Metrica valor={num(vista.secados)} etiqueta="Vacas que quedan secas" tono="crema" />
           <Metrica valor={num(vista.existentes.length)} etiqueta="Ya registrados" tono="crema" />
           <Metrica valor={num(vista.pesajes)} etiqueta="Pesos para la curva" tono="crema" />
           <Metrica valor={num(vista.madresEnlazadas)} etiqueta="Madres enlazadas" tono="crema" />
@@ -183,17 +192,31 @@ function Vista({ vista, onImportar, importando }: { vista: VistaPreviaSeresVivos
           </BotonPrimario>
           <p className="text-sm text-tinta-suave">
             Se crearán {num(vista.nuevos.length)} fichas, {num(vista.pesajes)} pesajes, {num(vista.partos)}{" "}
-            {vista.partos === 1 ? "parto" : "partos"} y {num(vista.ordenos)} {vista.ordenos === 1 ? "ordeño" : "ordeños"} con fecha{" "}
-            {fecha(vista.fecha)}
+            {vista.partos === 1 ? "parto" : "partos"}, {num(vista.servicios)} {vista.servicios === 1 ? "servicio" : "servicios"} y{" "}
+            {num(vista.ordenos)} {vista.ordenos === 1 ? "ordeño" : "ordeños"} con fecha {fecha(vista.fecha)}
             {vista.secados > 0 && `, y ${num(vista.secados)} ${vista.secados === 1 ? "vaca queda seca" : "vacas quedan secas"}`}. Los animales, los
-            partos y los ordeños que ya están en la finca no se duplican: puedes subir la misma planilla varias veces.
+            partos, los servicios y los ordeños que ya están en la finca no se duplican: puedes subir la misma planilla varias veces.
           </p>
         </div>
+        <p className="mt-4 rounded-2xl border border-bosque/15 bg-lima-suave px-4 py-3 text-sm">
+          Del bloque <strong>DATOS DE VACAS PRODUCTIVOS</strong> solo se guardan <strong>FECHA ÚLTIMO PARTO</strong> y{" "}
+          <strong>FECHA SERVIDA</strong>. Los otros cuatro datos —días en ordeño, mora de preñez, fecha posible de secado y posible fecha de
+          nacimiento de la cría— <strong>los calcula el sistema</strong> con esas dos fechas y no se guardan. Aquí abajo los ves ya calculados para
+          que compruebes que cuadran; después de importar los recalcula la base de datos cada día.
+        </p>
+        {vista.calculadasConDatos.length > 0 && (
+          <p className="mt-3 rounded-2xl border border-dorado/40 bg-crema px-4 py-3 text-sm">
+            Tu planilla trae datos escritos en {vista.calculadasConDatos.length === 1 ? "la columna" : "las columnas"}{" "}
+            <strong>{vista.calculadasConDatos.join(", ")}</strong>: no se guardan, porque {vista.calculadasConDatos.length === 1 ? "esa" : "esas"}{" "}
+            {vista.calculadasConDatos.length === 1 ? "columna la calcula" : "columnas las calcula"} el sistema. Compara lo que escribiste con lo
+            calculado en la tabla de abajo.
+          </p>
+        )}
         {!vista.conHistorial && (
-          <p className="mt-4 rounded-2xl border border-dorado/40 bg-crema px-4 py-3 text-sm">
-            Esta planilla no trae las columnas <strong>ÚLTIMO PARTO</strong>, <strong>EN ORDEÑO</strong> ni{" "}
+          <p className="mt-3 rounded-2xl border border-dorado/40 bg-crema px-4 py-3 text-sm">
+            Esta planilla no trae las columnas <strong>FECHA ÚLTIMO PARTO</strong>, <strong>FECHA SERVIDA</strong>, <strong>EN ORDEÑO</strong> ni{" "}
             <strong>LITROS ÚLTIMO ORDEÑO</strong>. Se puede importar igual, pero los animales entrarán sin historial y el sistema no podrá calcular
-            la mora de preñez, la fecha de secado ni los días en ordeño. Descarga la plantilla nueva si quieres llenarlas.
+            los días en ordeño, la mora de preñez, la fecha de secado ni el nacimiento de la cría. Descarga la plantilla nueva si quieres llenarlas.
           </p>
         )}
       </Tarjeta>
@@ -233,6 +256,11 @@ function TablaFilas({ filas }: { filas: FilaVista[] }) {
             <th className="text-right">Peso</th>
             <th>Madre</th>
             <th>Último parto</th>
+            <th>Fecha servida</th>
+            <th className="text-right">Días ordeño</th>
+            <th className="text-right">Mora preñez</th>
+            <th>Posible secado</th>
+            <th>Posible parto cría</th>
             <th>En ordeño</th>
             <th className="text-right">Litros</th>
           </tr>
@@ -271,6 +299,33 @@ function TablaFilas({ filas }: { filas: FilaVista[] }) {
                   "—"
                 )}
               </td>
+              <td className="whitespace-nowrap">
+                {f.fechaServida ? (
+                  <span className="inline-flex items-center gap-2">
+                    {fecha(f.fechaServida)}
+                    {f.servicio === "ya" && <Etiqueta tono="gris">Ya registrado</Etiqueta>}
+                  </span>
+                ) : (
+                  "—"
+                )}
+              </td>
+              {/* Las cuatro que calcula el sistema: se muestran para comprobar, no se guardan. */}
+              <td className="text-right text-tinta-suave">{f.calculados.diasOrdeno == null ? "—" : num(f.calculados.diasOrdeno)}</td>
+              <td className="text-right">
+                {(() => {
+                  const mora = leerMora(f.calculados.moraPrenez);
+                  return mora ? (
+                    <span className={mora.clase} title={mora.detalle}>
+                      {mora.valor}
+                      {mora.corta && <span className="ml-1 text-xs font-normal">{mora.corta}</span>}
+                    </span>
+                  ) : (
+                    "—"
+                  );
+                })()}
+              </td>
+              <td className="whitespace-nowrap text-tinta-suave">{fecha(f.calculados.secadoEl)}</td>
+              <td className="whitespace-nowrap text-tinta-suave">{fecha(f.calculados.partoEsperado)}</td>
               <td className="whitespace-nowrap">
                 {f.enOrdeno == null ? (
                   "—"
@@ -337,13 +392,14 @@ function Resultado({ resultado }: { resultado: ResultadoSeresVivos }) {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Metrica valor={num(resultado.animales.creados)} etiqueta="Fichas creadas" />
           <Metrica valor={num(resultado.partos.creados)} etiqueta="Partos creados" />
+          <Metrica valor={num(resultado.servicios.creados)} etiqueta="Servicios creados" />
           <Metrica valor={num(resultado.ordenos.creados)} etiqueta="Ordeños creados" />
-          <Metrica valor={num(resultado.secados.creados)} etiqueta="Vacas secas" />
+          <Metrica valor={num(resultado.secados.creados)} etiqueta="Vacas secas" tono="crema" />
           <Metrica valor={num(resultado.animales.omitidos)} etiqueta="Filas que no se crearon" tono="crema" />
           <Metrica valor={num(resultado.pesajes.creados)} etiqueta="Pesajes creados" tono="crema" />
           <Metrica valor={num(resultado.madresEnlazadas)} etiqueta="Madres enlazadas" tono="crema" />
           <Metrica
-            valor={num(resultado.partos.omitidos + resultado.ordenos.omitidos + resultado.secados.omitidos)}
+            valor={num(resultado.partos.omitidos + resultado.servicios.omitidos + resultado.ordenos.omitidos + resultado.secados.omitidos)}
             etiqueta="Historial ya registrado"
             tono="crema"
           />

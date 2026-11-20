@@ -148,7 +148,14 @@ export async function descargarCatalogo(fincaId: string): Promise<Catalogo> {
 function completarCatalogo(c: Catalogo): Catalogo {
   return {
     ...c,
-    animales: c.animales.map((a) => ({ ...a, fecha_destete: a.fecha_destete ?? null, ordenos_recientes: a.ordenos_recientes ?? [] })),
+    animales: c.animales.map((a) => ({
+      ...a,
+      fecha_destete: a.fecha_destete ?? null,
+      ordenos_recientes: a.ordenos_recientes ?? [],
+      // `null` (y no un bloque vacío) para que la hoja de vida sepa que este catálogo es anterior
+      // y pida descargar de nuevo en vez de mostrar datos en blanco.
+      hoja_vida: a.hoja_vida ?? null,
+    })),
     potreros_estado: c.potreros_estado ?? [],
     dias_descanso_objetivo: c.dias_descanso_objetivo ?? 35,
     grupos: c.grupos ?? [],
@@ -156,6 +163,8 @@ function completarCatalogo(c: Catalogo): Catalogo {
     bienes: c.bienes ?? [],
     insumos: c.insumos ?? [],
     toros: c.toros ?? [],
+    sanidad_desde: c.sanidad_desde ?? null,
+    relleno_ordenos: c.relleno_ordenos ?? false,
   };
 }
 

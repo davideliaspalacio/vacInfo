@@ -11,6 +11,7 @@ import type { Database, Json } from "../database.types";
 // Ruta relativa para que vitest lo resuelva sin alias.
 import { codigoAnimal } from "../../components/fincas/etiquetas";
 import { normalizarChapeta, normalizarNombre } from "./normalizar";
+import { proyectarDatosProductivos, type ProyeccionProductiva } from "./reproduccion-proyectada";
 import { ETIQUETA_ESPECIE, type FilaSerVivo, type PlanSeresVivos } from "./seres-vivos";
 
 type Cliente = SupabaseClient<Database>;
@@ -56,11 +57,20 @@ export interface FilaVista {
   /** Historial mínimo: fecha del último parto y qué se hará con ella. */
   ultimoParto: string | null;
   parto: EstadoRegistro;
+  /** Fecha servida de la planilla y qué se hará con ella. */
+  fechaServida: string | null;
+  servicio: EstadoRegistro;
   /** `true` en ordeño, `false` seca, `null` = la planilla no lo dijo. */
   enOrdeno: boolean | null;
   litrosOrdeno: number | null;
   ordeno: EstadoRegistro;
   secado: EstadoRegistro;
+  /**
+   * Los cuatro datos que el sistema calcula y no guarda (días en ordeño, mora de preñez, secado y
+   * posible nacimiento de la cría), proyectados a la fecha de la importación para que el ganadero
+   * vea en la vista previa que cuadran. La base los vuelve a calcular con `estado_reproductivo`.
+   */
+  calculados: ProyeccionProductiva;
 }
 
 export interface VistaPreviaSeresVivos {
@@ -77,14 +87,18 @@ export interface VistaPreviaSeresVivos {
   madresEnlazadas: number;
   /** Partos de historial que se van a crear (los que ya estaban no se cuentan). */
   partos: number;
+  /** Servicios que se van a crear con la fecha servida de la planilla. */
+  servicios: number;
   /** Ordeños que se van a crear con la fecha de la importación. */
   ordenos: number;
   /** Secados de las vacas marcadas «no» en EN ORDEÑO. */
   secados: number;
   /** Registros de historial que la finca ya tenía con esa misma fecha. */
   historialYaRegistrado: number;
-  /** `true` si la planilla trae alguna de las tres columnas de historial. */
+  /** `true` si la planilla trae alguna columna de historial. */
   conHistorial: boolean;
+  /** Columnas calculadas que venían llenas: se avisa que el sistema las calcula solo. */
+  calculadasConDatos: string[];
   advertencias: string[];
 }
 
@@ -96,6 +110,7 @@ export interface ResultadoSeresVivos {
   animales: Conteo;
   pesajes: Conteo;
   partos: Conteo;
+  servicios: Conteo;
   ordenos: Conteo;
   secados: Conteo;
   madresEnlazadas: number;
@@ -209,7 +224,9 @@ function resolverMadre(f: FilaSerVivo, porChapeta: Map<string, AnimalFinca>, enP
  *
  * «En ordeño» no es una columna de la base: `estado_reproductivo` considera que una vaca está en
  * ordeño cuando tiene un parto y no tiene un secado posterior a ese parto. Por eso:
- *  - ÚLTIMO PARTO crea la fila de `partos` (historial, sin cría) y con eso la vaca ya queda en ordeño;
+ *  - FECHA ÚLTIMO PARTO crea la fila de `partos` (historial, sin cría) y con eso la vaca ya queda en ordeño;
+ *  - FECHA SERVIDA crea la fila de `servicios`, de la que salen la fecha posible de secado y la
+ *    posible fecha de nacimiento de la cría que calcula `estado_reproductivo`;
  *  - EN ORDEÑO = sí no crea nada por sí mismo (la deja como la dejó el parto) y, con litros, crea el ordeño;
  *  - EN ORDEÑO = no crea el secado con la fecha de la importación, que es lo que la deja seca;
  *  - LITROS ÚLTIMO ORDEÑO crea la fila de `ordenos` (jornada AM, fecha de la importación).
@@ -217,10 +234,13 @@ function resolverMadre(f: FilaSerVivo, porChapeta: Map<string, AnimalFinca>, enP
 interface HistorialFila {
   /** Fecha del parto a crear. */
   parto: string | null;
+  /** Fecha del servicio a crear. */
+  servicio: string | null;
   ordeno: { fecha: string; litros: number } | null;
   /** Fecha del secado a crear (vaca marcada «no» con parto). */
   secado: string | null;
   partoYa: boolean;
+  servicioYa: boolean;
   ordenoYa: boolean;
   secadoYa: boolean;
 }
@@ -229,7 +249,16 @@ type Historial = Map<string, HistorialFila>;
 
 const JORNADA_IMPORTACION = "am" as const;
 
-const vacio = (): HistorialFila => ({ parto: null, ordeno: null, secado: null, partoYa: false, ordenoYa: false, secadoYa: false });
+const vacio = (): HistorialFila => ({
+  parto: null,
+  servicio: null,
+  ordeno: null,
+  secado: null,
+  partoYa: false,
+  servicioYa: false,
+  ordenoYa: false,
+  secadoYa: false,
+});
 
 /** Qué registros de historial saldrían de cada fila, marcando los que la finca ya tiene. */
 async function planearHistorial(supabase: Cliente, plan: PlanSeresVivos, existentes: Emparejamiento["existentes"]): Promise<Historial> {
@@ -237,6 +266,7 @@ async function planearHistorial(supabase: Cliente, plan: PlanSeresVivos, existen
   for (const f of plan.filas) {
     const h = vacio();
     h.parto = f.ultimoParto;
+    h.servicio = f.fechaServida;
     // Un ordeño de 0 litros no se crea: movería la fecha de corte de la finca y bajaría el promedio
     // por vaca, así que «sí» sin litros queda solo con la advertencia de la lectura.
     if (f.enOrdeno !== false && f.litrosOrdeno != null) h.ordeno = { fecha: plan.fecha, litros: f.litrosOrdeno };
@@ -247,13 +277,14 @@ async function planearHistorial(supabase: Cliente, plan: PlanSeresVivos, existen
   // Los animales nuevos no tienen historial; los que ya están en la finca sí pueden tenerlo.
   const conId = existentes.filter((e) => {
     const h = historial.get(e.f.clave);
-    return h && (h.parto || h.ordeno || h.secado);
+    return h && (h.parto || h.servicio || h.ordeno || h.secado);
   });
   if (!conId.length) return historial;
 
   const ids = [...new Set(conId.map((e) => e.id))];
   const claves = new Map(conId.map((e) => [e.id, e.f.clave]));
   const fechasParto = [...new Set(conId.map((e) => historial.get(e.f.clave)!.parto).filter((x): x is string => !!x))];
+  const fechasServicio = [...new Set(conId.map((e) => historial.get(e.f.clave)!.servicio).filter((x): x is string => !!x))];
 
   if (fechasParto.length) {
     const previos = await todas<{ animal_id: string; fecha: string }>((a, b) =>
@@ -263,6 +294,18 @@ async function planearHistorial(supabase: Cliente, plan: PlanSeresVivos, existen
     for (const e of conId) {
       const h = historial.get(e.f.clave)!;
       if (h.parto && vistos.has(`${e.id}|${h.parto}`)) h.partoYa = true;
+    }
+  }
+
+  // `servicios_animal_fecha` es único: un servicio con esa misma fecha ya está registrado.
+  if (fechasServicio.length) {
+    const previos = await todas<{ animal_id: string; fecha: string }>((a, b) =>
+      supabase.from("servicios").select("animal_id, fecha").in("animal_id", ids).in("fecha", fechasServicio).range(a, b),
+    );
+    const vistos = new Set(previos.map((s) => `${s.animal_id}|${s.fecha}`));
+    for (const e of conId) {
+      const h = historial.get(e.f.clave)!;
+      if (h.servicio && vistos.has(`${e.id}|${h.servicio}`)) h.servicioYa = true;
     }
   }
 
@@ -301,7 +344,7 @@ const textoMadre = (f: FilaSerVivo, madre: Madre) => {
   return null;
 };
 
-const vista = (f: FilaSerVivo, codigo: string, madre: Madre, enlazada: boolean, h: HistorialFila = vacio()): FilaVista => ({
+const vista = (f: FilaSerVivo, codigo: string, madre: Madre, enlazada: boolean, h: HistorialFila, fecha: string): FilaVista => ({
   fila: f.fila,
   codigo,
   chapeta: f.chapeta,
@@ -316,10 +359,14 @@ const vista = (f: FilaSerVivo, codigo: string, madre: Madre, enlazada: boolean, 
   madreEnlazada: enlazada,
   ultimoParto: f.ultimoParto,
   parto: estado(h.parto, h.partoYa),
+  fechaServida: f.fechaServida,
+  servicio: estado(h.servicio, h.servicioYa),
   enOrdeno: f.enOrdeno,
   litrosOrdeno: f.litrosOrdeno,
   ordeno: estado(h.ordeno, h.ordenoYa),
   secado: estado(h.secado, h.secadoYa),
+  // Lo que el sistema calcula solo, a la fecha de la importación: así el ganadero comprueba que cuadra.
+  calculados: proyectarDatosProductivos({ ultimoParto: f.ultimoParto, fechaServida: f.fechaServida, seca: f.enOrdeno === false }, fecha),
 });
 
 /** Calcula qué se crearía, sin escribir nada. */
@@ -336,19 +383,21 @@ export async function previsualizarSeresVivos(supabase: Cliente, fincaId: string
     fincaEnArchivo: plan.fincaEnArchivo,
     hoja: plan.hoja,
     fecha: plan.fecha,
-    nuevos: nuevos.map((n) => vista(n.f, n.codigo, n.madre, n.madre.tipo !== "texto", h(n.f))),
-    existentes: existentes.map((e) => vista(e.f, e.codigo, { tipo: "texto" }, false, h(e.f))),
+    nuevos: nuevos.map((n) => vista(n.f, n.codigo, n.madre, n.madre.tipo !== "texto", h(n.f), plan.fecha)),
+    existentes: existentes.map((e) => vista(e.f, e.codigo, { tipo: "texto" }, false, h(e.f), plan.fecha)),
     omitidas: plan.omitidas,
     pesajes: nuevos.filter((n) => n.f.pesoKg != null).length,
     madresEnlazadas: nuevos.filter((n) => n.madre.tipo !== "texto").length,
     partos: cuenta((x) => x.parto, (x) => x.partoYa),
+    servicios: cuenta((x) => x.servicio, (x) => x.servicioYa),
     ordenos: cuenta((x) => x.ordeno, (x) => x.ordenoYa),
     secados: cuenta((x) => x.secado, (x) => x.secadoYa),
     historialYaRegistrado: todasLasFilas.reduce(
-      (s, f) => s + Number(h(f).partoYa) + Number(h(f).ordenoYa) + Number(h(f).secadoYa),
+      (s, f) => s + Number(h(f).partoYa) + Number(h(f).servicioYa) + Number(h(f).ordenoYa) + Number(h(f).secadoYa),
       0,
     ),
     conHistorial: plan.conHistorial,
+    calculadasConDatos: plan.calculadasConDatos,
     advertencias: [...plan.advertencias, ...advertencias],
   };
 }
@@ -427,6 +476,7 @@ export async function aplicarSeresVivos(supabase: Cliente, fincaId: string, plan
   // `ordenos (animal_id, fecha, jornada)`) hacen el trabajo: con `ignoreDuplicates` reimportar el
   // mismo archivo no duplica nada y lo repetido se cuenta como «ya registrado».
   const partos: Tablas["partos"]["Insert"][] = [];
+  const servicios: Tablas["servicios"]["Insert"][] = [];
   const ordenos: Tablas["ordenos"]["Insert"][] = [];
   const secados: Tablas["secados"]["Insert"][] = [];
   for (const f of [...nuevos.map((n) => n.f), ...existentes.map((e) => e.f)]) {
@@ -435,6 +485,9 @@ export async function aplicarSeresVivos(supabase: Cliente, fincaId: string, plan
     if (!id || !h) continue;
     // Historial: el parto se guarda sin cría, es un antecedente y no un parto atendido.
     if (h.parto) partos.push({ animal_id: id, fecha: h.parto, observaciones: "Último parto de la planilla de implementación" });
+    // La planilla solo da la fecha: el tipo queda en el que trae la tabla por omisión (inseminación)
+    // y sin toro ni inseminador, porque el cliente no los pide en esta planilla.
+    if (h.servicio) servicios.push({ animal_id: id, fecha: h.servicio, observaciones: "Fecha servida de la planilla de implementación" });
     if (h.ordeno) ordenos.push({ animal_id: id, fecha: h.ordeno.fecha, jornada: JORNADA_IMPORTACION, litros: h.ordeno.litros });
     if (h.secado) secados.push({ animal_id: id, fecha: h.secado, motivo: "Vaca seca según la planilla de implementación" });
   }
@@ -455,6 +508,11 @@ export async function aplicarSeresVivos(supabase: Cliente, fincaId: string, plan
     (lote) => supabase.from("partos").upsert(lote, { onConflict: "animal_id,fecha", ignoreDuplicates: true }).select("id"),
     "Las fichas se crearon, pero no se pudieron guardar los partos",
   );
+  const serviciosConteo = await guardar(
+    servicios,
+    (lote) => supabase.from("servicios").upsert(lote, { onConflict: "animal_id,fecha", ignoreDuplicates: true }).select("id"),
+    "Las fichas se crearon, pero no se pudieron guardar los servicios",
+  );
   const ordenosConteo = await guardar(
     ordenos,
     (lote) => supabase.from("ordenos").upsert(lote, { onConflict: "animal_id,fecha,jornada", ignoreDuplicates: true }).select("id"),
@@ -470,6 +528,7 @@ export async function aplicarSeresVivos(supabase: Cliente, fincaId: string, plan
     animales: { creados, omitidos: existentes.length + plan.omitidas },
     pesajes: { creados: pesajesCreados, omitidos: pesajes.length - pesajesCreados },
     partos: partosConteo,
+    servicios: serviciosConteo,
     ordenos: ordenosConteo,
     secados: secadosConteo,
   };
@@ -500,6 +559,7 @@ export async function aplicarSeresVivos(supabase: Cliente, fincaId: string, plan
     animales: conteos.animales,
     pesajes: conteos.pesajes,
     partos: conteos.partos,
+    servicios: conteos.servicios,
     ordenos: conteos.ordenos,
     secados: conteos.secados,
     madresEnlazadas,

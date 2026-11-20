@@ -41,6 +41,29 @@ export async function guardarReglasFinca(id: string, _: EstadoAccion, formData: 
   return { ok: "Reglas guardadas" };
 }
 
+/**
+ * Relleno de registros de ordeño faltantes (`fincas.relleno_ordenos`).
+ * No es una casilla más de la hoja informativa: se prende solo cuando el administrador confirma que
+ * leyó la explicación («Aplicar a la finca»), porque cambia cómo registra el ordeño todo el equipo
+ * en VacDaTa. Apagarlo no necesita confirmación.
+ */
+export async function aplicarRellenoOrdenos(id: string, _: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
+  const { supabase, rol } = await obtenerSesion();
+  if (soloLectura(rol)) return { error: MENSAJE_SOLO_LECTURA };
+  if (!ROLES_GESTORES.includes(rol)) return { error: "Solo propietarios y administradores pueden cambiar esta función." };
+
+  const activar = formData.get("activar") === "si";
+  if (activar && formData.get("lei_la_explicacion") !== "si") {
+    return { error: "Marca que leíste la explicación antes de aplicar la función a la finca." };
+  }
+
+  const { error } = await supabase.from("fincas").update({ relleno_ordenos: activar }).eq("id", id);
+  if (error) return { error: mensajeErrorBD(error) };
+
+  revalidatePath("/", "layout");
+  return { ok: activar ? "Función aplicada a la finca" : "Función desactivada" };
+}
+
 const esquemaFinca = z.object({
   nombre: textoRequerido("Escribe el nombre de la finca"),
   departamento: textoOpcional,

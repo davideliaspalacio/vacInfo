@@ -13,6 +13,8 @@ import type { Database } from "@/lib/database.types";
 import { generarPlantillaSeresVivos } from "../seres-vivos-plantilla";
 import { campoDeEncabezado, categoriaDerivada, leerPlanillaSeresVivos, siNoDeTexto, type PlanSeresVivos } from "../seres-vivos";
 import { aplicarSeresVivos, previsualizarSeresVivos } from "../seres-vivos-aplicar";
+import { DIAS_GESTACION, DIAS_MORA_PRENEZ, DIAS_SECADO_TRAS_SERVICIO, proyectarDatosProductivos } from "../reproduccion-proyectada";
+import { diasEntre, sumarDiasISO } from "../normalizar";
 
 const URL_SUPABASE = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://127.0.0.1:55321";
 const CLAVE = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH";
@@ -36,53 +38,64 @@ const ddmmaaaa = (iso: string) => iso.split("-").reverse().join("/");
 
 type Celdas = Record<string, string | number | Date | null>;
 
-/** Filas de ejemplo con los casos borde que hay que cubrir. */
+/**
+ * Filas de ejemplo con los casos borde que hay que cubrir. Usan los nombres NUEVOS de columna de la
+ * planilla del cliente (HEMBRA O MACHO, PAPÁ, MAMÁ, FECHA ÚLTIMO PARTO, FECHA SERVIDA); los viejos
+ * se prueban aparte, en «lee igual una planilla con los títulos viejos».
+ */
 const FILAS: Celdas[] = [
   // Madre que llega en la misma planilla (la hija de abajo la referencia por chapeta).
   {
     ESPECIE: "Bovino",
-    SEXO: "Hembra",
+    "HEMBRA O MACHO": "Hembra",
     NOMBRE: "Prueba Madre",
     "FECHA NACIMIENTO": comoDate(haceMeses(40)),
     CHAPETA: "ZPRU0",
     PESO: 480,
     RAZA: "Jersy",
     // Su madre sí está registrada en la finca: debe quedar enlazada por chapeta.
-    MADRE: "Alegria",
-    "CHAPETA MADRE": CHAPETA_EXISTENTE,
-    // Historial: vaca en ordeño con litros → parto + ordeño de la mañana.
-    "ÚLTIMO PARTO": comoDate(haceMeses(3)),
+    MAMÁ: "Alegria",
+    "CHAPETA MAMÁ": CHAPETA_EXISTENTE,
+    // Historial: vaca en ordeño con litros → parto + ordeño de la mañana, y servida → servicio.
+    "FECHA ÚLTIMO PARTO": comoDate(haceMeses(3)),
+    "FECHA SERVIDA": comoDate(haceMeses(1)),
     "EN ORDEÑO": "Sí",
     "LITROS ÚLTIMO ORDEÑO": 12.5,
+    // Lo que el ganadero escribió en las columnas calculadas: se avisa y no se guarda.
+    "DÍAS ORDEÑO": 999,
+    "MORA PREÑEZ": 7,
+    "FECHA POSIBLE DE SECADO": comoDate("2027-01-01"),
   },
   // Hija: ternera (5 meses) con la madre enlazada por chapeta dentro del archivo.
   {
     ESPECIE: "bovino",
-    SEXO: "h",
+    "HEMBRA O MACHO": "h",
     NOMBRE: "Prueba Cria",
     "FECHA NACIMIENTO": ddmmaaaa(haceMeses(5)),
     CHAPETA: "ZPRU1",
     PESO: 95,
-    MADRE: "Prueba Madre",
-    "CHAPETA MADRE": "ZPRU0",
+    MAMÁ: "Prueba Madre",
+    "CHAPETA MAMÁ": "ZPRU0",
   },
-  { ESPECIE: "Bovino", SEXO: "Macho", NOMBRE: "Prueba Ternero", "FECHA NACIMIENTO": comoDate(haceMeses(6)), CHAPETA: "ZPRU2", PESO: 120 },
-  { ESPECIE: "Bovino", SEXO: "Macho", NOMBRE: "Prueba Novillo", "FECHA NACIMIENTO": comoDate(haceMeses(18)), CHAPETA: "ZPRU3", PESO: 300 },
-  { ESPECIE: "Bovino", SEXO: "Macho", NOMBRE: "Prueba Toro", "FECHA NACIMIENTO": comoDate(haceMeses(40)), CHAPETA: "ZPRU4", PESO: 700 },
-  // Sin fecha de nacimiento: la hembra queda vaca. Historial: seca → parto + secado, sin ordeños.
+  { ESPECIE: "Bovino", "HEMBRA O MACHO": "Macho", NOMBRE: "Prueba Ternero", "FECHA NACIMIENTO": comoDate(haceMeses(6)), CHAPETA: "ZPRU2", PESO: 120 },
+  { ESPECIE: "Bovino", "HEMBRA O MACHO": "Macho", NOMBRE: "Prueba Novillo", "FECHA NACIMIENTO": comoDate(haceMeses(18)), CHAPETA: "ZPRU3", PESO: 300 },
+  { ESPECIE: "Bovino", "HEMBRA O MACHO": "Macho", NOMBRE: "Prueba Toro", "FECHA NACIMIENTO": comoDate(haceMeses(40)), CHAPETA: "ZPRU4", PESO: 700 },
+  // Sin fecha de nacimiento: la hembra queda vaca. Historial: seca → parto + secado, sin ordeños,
+  // y con fecha servida posterior al parto → servicio.
   {
     ESPECIE: "Bovino",
-    SEXO: "Hembra",
+    "HEMBRA O MACHO": "Hembra",
     NOMBRE: "Prueba Sin Fecha",
     CHAPETA: "ZPRU5",
     PESO: 450,
-    "ÚLTIMO PARTO": ddmmaaaa(haceMeses(10)),
+    "FECHA ÚLTIMO PARTO": ddmmaaaa(haceMeses(10)),
+    "FECHA SERVIDA": ddmmaaaa(haceMeses(4)),
     "EN ORDEÑO": "no",
   },
   // Caballo: categoría caballo y especie equino.
   {
     ESPECIE: "Caballo",
-    SEXO: "Macho",
+    "HEMBRA O MACHO": "Macho",
     NOMBRE: "Prueba Caballo",
     "FECHA NACIMIENTO": comoDate(haceMeses(60)),
     CHAPETA: "ZPRU6",
@@ -92,102 +105,123 @@ const FILAS: Celdas[] = [
   // Peso fuera de rango: se importa sin peso y sin pesaje. En ordeño con litros: parto + ordeño.
   {
     ESPECIE: "Bovino",
-    SEXO: "Hembra",
+    "HEMBRA O MACHO": "Hembra",
     NOMBRE: "Prueba Peso",
     "FECHA NACIMIENTO": comoDate(haceMeses(20)),
     CHAPETA: "ZPRU7",
     PESO: 2000,
-    "ÚLTIMO PARTO": comoDate(haceMeses(1)),
+    "FECHA ÚLTIMO PARTO": comoDate(haceMeses(1)),
     "EN ORDEÑO": "SI",
     "LITROS ÚLTIMO ORDEÑO": 8,
   },
   // Madre que no existe en ninguna parte: se guardan nombre y chapeta sin enlazar.
   {
     ESPECIE: "Bovino",
-    SEXO: "Hembra",
+    "HEMBRA O MACHO": "Hembra",
     NOMBRE: "Prueba Madre Ajena",
     "FECHA NACIMIENTO": comoDate(haceMeses(24)),
     CHAPETA: "ZPRU8",
     PESO: 380,
-    MADRE: "Fantasma",
-    "CHAPETA MADRE": "ZNOEXISTE",
-    PADRE: "Toro Prestado",
-    "CHAPETA PADRE": "ZPAD9",
+    MAMÁ: "Fantasma",
+    "CHAPETA MAMÁ": "ZNOEXISTE",
+    PAPÁ: "Toro Prestado",
+    "CHAPETA PAPÁ": "ZPAD9",
   },
   // Fecha futura: se deja vacía y la hembra queda vaca. «Sí» sin litros: no se crea ningún ordeño.
   {
     ESPECIE: "Bovino",
-    SEXO: "Hembra",
+    "HEMBRA O MACHO": "Hembra",
     NOMBRE: "Prueba Futura",
     "FECHA NACIMIENTO": comoDate("2030-01-01"),
     CHAPETA: "ZPRU9",
     PESO: 400,
-    "ÚLTIMO PARTO": comoDate(haceMeses(2)),
+    "FECHA ÚLTIMO PARTO": comoDate(haceMeses(2)),
     "EN ORDEÑO": "si",
   },
   // Parto futuro: se avisa y no se registra el parto.
   {
     ESPECIE: "Bovino",
-    SEXO: "Hembra",
+    "HEMBRA O MACHO": "Hembra",
     NOMBRE: "Prueba Parto Futuro",
     "FECHA NACIMIENTO": comoDate(haceMeses(40)),
     CHAPETA: "ZPRUB",
     PESO: 500,
-    "ÚLTIMO PARTO": comoDate("2030-05-04"),
+    "FECHA ÚLTIMO PARTO": comoDate("2030-05-04"),
   },
   // Parto anterior a la fecha de nacimiento: se avisa y no se registra el parto.
   {
     ESPECIE: "Bovino",
-    SEXO: "Hembra",
+    "HEMBRA O MACHO": "Hembra",
     NOMBRE: "Prueba Parto Viejo",
     "FECHA NACIMIENTO": comoDate(haceMeses(30)),
     CHAPETA: "ZPRUC",
     PESO: 480,
-    "ÚLTIMO PARTO": comoDate("2023-01-15"),
+    "FECHA ÚLTIMO PARTO": comoDate("2023-01-15"),
   },
   // Litros fuera del rango 0–60: se avisa, el parto sí se registra y el ordeño no.
+  // Fecha servida futura: se avisa y no se registra el servicio.
   {
     ESPECIE: "Bovino",
-    SEXO: "Hembra",
+    "HEMBRA O MACHO": "Hembra",
     NOMBRE: "Prueba Litros",
     "FECHA NACIMIENTO": comoDate(haceMeses(40)),
     CHAPETA: "ZPRUD",
     PESO: 460,
-    "ÚLTIMO PARTO": comoDate(haceMeses(2)),
+    "FECHA ÚLTIMO PARTO": comoDate(haceMeses(2)),
+    "FECHA SERVIDA": comoDate("2030-07-07"),
     "EN ORDEÑO": "Sí",
     "LITROS ÚLTIMO ORDEÑO": 80,
   },
-  // Macho con historial: no se ordeña y no puede tener partos.
+  // Macho con historial: no se ordeña y no puede tener partos ni servicios.
   {
     ESPECIE: "Bovino",
-    SEXO: "Macho",
+    "HEMBRA O MACHO": "Macho",
     NOMBRE: "Prueba Macho Ordeño",
     "FECHA NACIMIENTO": comoDate(haceMeses(40)),
     CHAPETA: "ZPRUE",
     PESO: 800,
-    "ÚLTIMO PARTO": comoDate(haceMeses(2)),
+    "FECHA ÚLTIMO PARTO": comoDate(haceMeses(2)),
+    "FECHA SERVIDA": comoDate(haceMeses(1)),
     "EN ORDEÑO": "Sí",
     "LITROS ÚLTIMO ORDEÑO": 10,
   },
-  // Ternera en ordeño: se avisa y se ignora el historial de ordeño.
+  // Ternera en ordeño y servida: se avisa y se ignoran las dos cosas.
   {
     ESPECIE: "Bovino",
-    SEXO: "Hembra",
+    "HEMBRA O MACHO": "Hembra",
     NOMBRE: "Prueba Ternera Ordeño",
     "FECHA NACIMIENTO": comoDate(haceMeses(6)),
     CHAPETA: "ZPRUF",
     PESO: 90,
+    "FECHA SERVIDA": comoDate(haceMeses(1)),
     "EN ORDEÑO": "Sí",
     "LITROS ÚLTIMO ORDEÑO": 5,
   },
+  // Novilla servida sin parto: no hay parto que registrar, pero sí el servicio.
+  {
+    ESPECIE: "Bovino",
+    "HEMBRA O MACHO": "Hembra",
+    NOMBRE: "Prueba Novilla Servida",
+    "FECHA NACIMIENTO": comoDate(haceMeses(20)),
+    CHAPETA: "ZPRUG",
+    PESO: 350,
+    "FECHA SERVIDA": comoDate(haceMeses(2)),
+  },
   // Chapeta repetida dentro del archivo.
-  { ESPECIE: "Bovino", SEXO: "Hembra", NOMBRE: "Prueba Clon", "FECHA NACIMIENTO": comoDate(haceMeses(20)), CHAPETA: "ZPRU1", PESO: 300 },
+  { ESPECIE: "Bovino", "HEMBRA O MACHO": "Hembra", NOMBRE: "Prueba Clon", "FECHA NACIMIENTO": comoDate(haceMeses(20)), CHAPETA: "ZPRU1", PESO: 300 },
   // Sexo que no se entiende.
-  { ESPECIE: "Bovino", SEXO: "???", NOMBRE: "Prueba Sin Sexo", "FECHA NACIMIENTO": comoDate(haceMeses(20)), CHAPETA: "ZPRUA", PESO: 300 },
+  { ESPECIE: "Bovino", "HEMBRA O MACHO": "???", NOMBRE: "Prueba Sin Sexo", "FECHA NACIMIENTO": comoDate(haceMeses(20)), CHAPETA: "ZPRUA", PESO: 300 },
   // Sin nombre ni chapeta.
-  { ESPECIE: "Bovino", SEXO: "Hembra", PESO: 300 },
+  { ESPECIE: "Bovino", "HEMBRA O MACHO": "Hembra", PESO: 300 },
   // Animal que ya está registrado en la finca (misma chapeta).
-  { ESPECIE: "Bovino", SEXO: "Hembra", NOMBRE: "Alegria", "FECHA NACIMIENTO": comoDate(haceMeses(50)), CHAPETA: CHAPETA_EXISTENTE, PESO: 500 },
+  {
+    ESPECIE: "Bovino",
+    "HEMBRA O MACHO": "Hembra",
+    NOMBRE: "Alegria",
+    "FECHA NACIMIENTO": comoDate(haceMeses(50)),
+    CHAPETA: CHAPETA_EXISTENTE,
+    PESO: 500,
+  },
 ];
 
 /** Llena la plantilla real con las filas de ejemplo y devuelve el .xlsx. */
@@ -242,13 +276,41 @@ describe("encabezados y categorías", () => {
     expect(campoDeEncabezado("Observaciones")).toBeNull();
   });
 
-  it("reconoce los títulos de las tres columnas de historial", () => {
+  it("reconoce los títulos nuevos de la planilla del cliente", () => {
+    expect(campoDeEncabezado("HEMBRA O MACHO")).toBe("sexo");
+    expect(campoDeEncabezado("Hembra o macho")).toBe("sexo");
+    expect(campoDeEncabezado("H/M")).toBe("sexo");
+    expect(campoDeEncabezado("PAPÁ")).toBe("padre");
+    expect(campoDeEncabezado("papa")).toBe("padre");
+    expect(campoDeEncabezado("CHAPETA PAPÁ")).toBe("chapetaPadre");
+    expect(campoDeEncabezado("MAMÁ")).toBe("madre");
+    expect(campoDeEncabezado("CHAPETA MAMÁ")).toBe("chapetaMadre");
+    // Los viejos siguen valiendo: las planillas ya repartidas se importan igual.
+    expect(campoDeEncabezado("SEXO")).toBe("sexo");
+    expect(campoDeEncabezado("PADRE")).toBe("padre");
+    expect(campoDeEncabezado("MADRE")).toBe("madre");
+    expect(campoDeEncabezado("CHAPETA MADRE")).toBe("chapetaMadre");
+  });
+
+  it("reconoce los títulos de historial y no confunde los calculados", () => {
+    expect(campoDeEncabezado("FECHA ÚLTIMO PARTO")).toBe("ultimoParto");
     expect(campoDeEncabezado("ÚLTIMO PARTO")).toBe("ultimoParto");
     expect(campoDeEncabezado("Fecha del último parto")).toBe("ultimoParto");
+    expect(campoDeEncabezado("FECHA SERVIDA")).toBe("fechaServida");
+    expect(campoDeEncabezado("Fecha de servicio")).toBe("fechaServida");
+    expect(campoDeEncabezado("Último servicio")).toBe("fechaServida");
     expect(campoDeEncabezado("EN ORDEÑO")).toBe("enOrdeno");
     expect(campoDeEncabezado("en ordeno")).toBe("enOrdeno");
     expect(campoDeEncabezado("LITROS ÚLTIMO ORDEÑO")).toBe("litrosOrdeno");
     expect(campoDeEncabezado("Litros del último ordeño")).toBe("litrosOrdeno");
+    // Las cuatro que calcula el sistema: se reconocen aparte para no leerlas como otra cosa.
+    expect(campoDeEncabezado("DÍAS ORDEÑO")).toBe("diasOrdeno");
+    expect(campoDeEncabezado("dias ordeno")).toBe("diasOrdeno");
+    expect(campoDeEncabezado("MORA PREÑEZ")).toBe("moraPrenez");
+    expect(campoDeEncabezado("FECHA POSIBLE DE SECADO")).toBe("fechaSecado");
+    expect(campoDeEncabezado("POSIBLE FECHA NACIMIENTO CRÍA")).toBe("partoEsperado");
+    // El título del bloque no es una columna.
+    expect(campoDeEncabezado("DATOS DE VACAS PRODUCTIVOS")).toBeNull();
   });
 
   it("entiende el sí y el no de la columna EN ORDEÑO", () => {
@@ -300,6 +362,44 @@ describe("encabezados y categorías", () => {
   });
 });
 
+describe("datos de vacas productivas que calcula el sistema", () => {
+  it("calcula días en ordeño, mora con signo, secado y nacimiento de la cría", () => {
+    const parto = sumarDiasISO(HOY, -100);
+    const servida = sumarDiasISO(HOY, -30);
+    expect(proyectarDatosProductivos({ ultimoParto: parto, fechaServida: servida }, HOY)).toEqual({
+      diasOrdeno: 100,
+      moraPrenez: 100 - DIAS_MORA_PRENEZ,
+      secadoEl: sumarDiasISO(servida, DIAS_SECADO_TRAS_SERVICIO),
+      partoEsperado: sumarDiasISO(servida, DIAS_GESTACION),
+    });
+  });
+
+  it("la mora es negativa mientras la vaca descansa sus 45 días", () => {
+    const recienParida = proyectarDatosProductivos({ ultimoParto: sumarDiasISO(HOY, -10), fechaServida: null }, HOY);
+    expect(recienParida.diasOrdeno).toBe(10);
+    expect(recienParida.moraPrenez).toBe(10 - DIAS_MORA_PRENEZ);
+    expect(recienParida.moraPrenez).toBeLessThan(0);
+    // El día 45 la mora llega a 0: ya se puede inseminar.
+    expect(proyectarDatosProductivos({ ultimoParto: sumarDiasISO(HOY, -DIAS_MORA_PRENEZ), fechaServida: null }, HOY).moraPrenez).toBe(0);
+  });
+
+  it("sin parto no hay días en ordeño ni mora; una vaca seca tampoco los tiene", () => {
+    expect(proyectarDatosProductivos({ ultimoParto: null, fechaServida: null }, HOY)).toMatchObject({ diasOrdeno: null, moraPrenez: null });
+    // Solo con fecha servida ya hay secado y nacimiento posible (la novilla servida).
+    const servida = sumarDiasISO(HOY, -60);
+    expect(proyectarDatosProductivos({ ultimoParto: null, fechaServida: servida }, HOY)).toEqual({
+      diasOrdeno: null,
+      moraPrenez: null,
+      secadoEl: sumarDiasISO(servida, DIAS_SECADO_TRAS_SERVICIO),
+      partoEsperado: sumarDiasISO(servida, DIAS_GESTACION),
+    });
+    expect(proyectarDatosProductivos({ ultimoParto: sumarDiasISO(HOY, -200), fechaServida: null, seca: true }, HOY)).toMatchObject({
+      diasOrdeno: null,
+      moraPrenez: null,
+    });
+  });
+});
+
 describe("lectura de la planilla", () => {
   let plan: PlanSeresVivos;
 
@@ -311,10 +411,18 @@ describe("lectura de la planilla", () => {
     expect(plan).toBeTruthy();
     expect(plan.hoja).toBe("Seres vivos");
     expect(plan.fincaEnArchivo).toBe("Finca Toneles");
-    // 19 filas: 3 se omiten (chapeta repetida, sexo ilegible, sin nombre ni chapeta).
-    expect(plan.filas).toHaveLength(16);
+    // 20 filas: 3 se omiten (chapeta repetida, sexo ilegible, sin nombre ni chapeta).
+    expect(plan.filas).toHaveLength(17);
     expect(plan.omitidas).toBe(3);
     expect(plan.conHistorial).toBe(true);
+  });
+
+  it("avisa de las columnas calculadas que el ganadero llenó y no las guarda", () => {
+    // Lo escrito en DÍAS ORDEÑO, MORA PREÑEZ y FECHA POSIBLE DE SECADO no entra en ninguna fila.
+    expect(plan.calculadasConDatos.sort()).toEqual(["DÍAS ORDEÑO", "FECHA POSIBLE DE SECADO", "MORA PREÑEZ"]);
+    expect(plan.advertencias.join("\n")).toMatch(/esas columnas las calcula el sistema a partir de FECHA ÚLTIMO PARTO y FECHA SERVIDA/);
+    // Ninguna propiedad de la fila guarda esos valores: la fila solo tiene las dos fechas.
+    expect(Object.keys(plan.filas[0])).not.toContain("diasOrdeno");
   });
 
   it("deriva categoría, especie y sexo de cada fila", () => {
@@ -340,26 +448,28 @@ describe("lectura de la planilla", () => {
 
   it("lee el historial mínimo de cada fila", () => {
     const por = (chapeta: string) => plan.filas.find((f) => f.chapeta === chapeta)!;
-    // Vaca en ordeño con litros.
-    expect(por("ZPRU0")).toMatchObject({ ultimoParto: haceMeses(3), enOrdeno: true, litrosOrdeno: 12.5 });
-    // Vaca seca: parto sí, ordeño no.
-    expect(por("ZPRU5")).toMatchObject({ ultimoParto: haceMeses(10), enOrdeno: false, litrosOrdeno: null });
-    // Novilla en ordeño con litros.
-    expect(por("ZPRU7")).toMatchObject({ ultimoParto: haceMeses(1), enOrdeno: true, litrosOrdeno: 8 });
+    // Vaca en ordeño con litros y servida.
+    expect(por("ZPRU0")).toMatchObject({ ultimoParto: haceMeses(3), fechaServida: haceMeses(1), enOrdeno: true, litrosOrdeno: 12.5 });
+    // Vaca seca: parto sí, servicio sí, ordeño no.
+    expect(por("ZPRU5")).toMatchObject({ ultimoParto: haceMeses(10), fechaServida: haceMeses(4), enOrdeno: false, litrosOrdeno: null });
+    // Novilla en ordeño con litros, sin fecha servida.
+    expect(por("ZPRU7")).toMatchObject({ ultimoParto: haceMeses(1), fechaServida: null, enOrdeno: true, litrosOrdeno: 8 });
     // «Sí» sin litros: queda en ordeño por el parto, pero sin ordeño que registrar.
     expect(por("ZPRU9")).toMatchObject({ ultimoParto: haceMeses(2), enOrdeno: true, litrosOrdeno: null });
-    // Filas sin historial: los tres campos quedan vacíos.
-    expect(por("ZPRU1")).toMatchObject({ ultimoParto: null, enOrdeno: null, litrosOrdeno: null });
-    expect(por("ZPRU8")).toMatchObject({ ultimoParto: null, enOrdeno: null, litrosOrdeno: null });
+    // Novilla servida sin parto: no es vaca (el servicio no cambia la etapa) y guarda el servicio.
+    expect(por("ZPRUG")).toMatchObject({ categoria: "novilla", ultimoParto: null, fechaServida: haceMeses(2) });
+    // Filas sin historial: los campos quedan vacíos.
+    expect(por("ZPRU1")).toMatchObject({ ultimoParto: null, fechaServida: null, enOrdeno: null, litrosOrdeno: null });
+    expect(por("ZPRU8")).toMatchObject({ ultimoParto: null, fechaServida: null, enOrdeno: null, litrosOrdeno: null });
   });
 
   it("descarta el historial que no se puede registrar", () => {
     const por = (chapeta: string) => plan.filas.find((f) => f.chapeta === chapeta)!;
     expect(por("ZPRUB").ultimoParto).toBeNull(); // parto futuro
     expect(por("ZPRUC").ultimoParto).toBeNull(); // parto anterior al nacimiento
-    expect(por("ZPRUD")).toMatchObject({ ultimoParto: haceMeses(2), litrosOrdeno: null }); // litros fuera de rango
-    expect(por("ZPRUE")).toMatchObject({ ultimoParto: null, enOrdeno: null, litrosOrdeno: null }); // macho
-    expect(por("ZPRUF")).toMatchObject({ categoria: "ternera", enOrdeno: null, litrosOrdeno: null }); // ternera
+    expect(por("ZPRUD")).toMatchObject({ ultimoParto: haceMeses(2), fechaServida: null, litrosOrdeno: null }); // servida futura, litros fuera de rango
+    expect(por("ZPRUE")).toMatchObject({ ultimoParto: null, fechaServida: null, enOrdeno: null, litrosOrdeno: null }); // macho
+    expect(por("ZPRUF")).toMatchObject({ categoria: "ternera", fechaServida: null, enOrdeno: null, litrosOrdeno: null }); // ternera
   });
 
   it("avisa de cada caso dudoso del historial en español", () => {
@@ -371,7 +481,12 @@ describe("lectura de la planilla", () => {
     expect(todas).toMatch(/solo una hembra bovina puede tener partos/);
     expect(todas).toMatch(/por su edad es una ternera y todavía no se ordeña/);
     expect(todas).toMatch(/dice que está en ordeño pero no trae LITROS ÚLTIMO ORDEÑO/);
-    expect(todas).toMatch(/hembras no traen ÚLTIMO PARTO/);
+    expect(todas).toMatch(/hembras no traen FECHA ÚLTIMO PARTO/);
+    // Fecha servida: los mismos avisos para el segundo dato que sí se captura.
+    expect(todas).toMatch(/la fecha servida \(2030-07-07\) es futura; no se registrará el servicio/);
+    expect(todas).toMatch(/solo una hembra bovina puede tener servicios/);
+    expect(todas).toMatch(/por su edad es una ternera y todavía no se sirve/);
+    expect(todas).toMatch(/vacas con parto no traen FECHA SERVIDA/);
   });
 
   it("avisa de cada caso dudoso en español", () => {
@@ -429,8 +544,61 @@ describe("lectura de la planilla", () => {
     expect(plan.filas[1]).toMatchObject({ nombre: "Vieja Ternera", categoria: "ternera", madreChapeta: "V-1" });
     // Se puede importar igual, pero se avisa de lo que el sistema no va a poder calcular.
     expect(plan.advertencias.join("\n")).toMatch(
-      /La planilla no trae las columnas de historial \(ÚLTIMO PARTO, EN ORDEÑO, LITROS ÚLTIMO ORDEÑO\): 1 hembra entrará sin antecedentes/,
+      /La planilla no trae las columnas de historial \(FECHA ÚLTIMO PARTO, FECHA SERVIDA, EN ORDEÑO, LITROS ÚLTIMO ORDEÑO\): 1 hembra entrará sin antecedentes/,
     );
+  });
+
+  it("lee igual una planilla con los títulos viejos (SEXO, PADRE, MADRE, ÚLTIMO PARTO)", async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Seres vivos");
+    ws.getRow(1).values = [
+      "#",
+      "ESPECIE",
+      "SEXO",
+      "NOMBRE",
+      "FECHA NACIMIENTO",
+      "CHAPETA",
+      "PESO",
+      "PADRE",
+      "CHAPETA PADRE",
+      "MADRE",
+      "CHAPETA MADRE",
+      "ÚLTIMO PARTO",
+      "EN ORDEÑO",
+      "LITROS ÚLTIMO ORDEÑO",
+    ];
+    ws.getRow(2).values = [
+      1,
+      "Bovino",
+      "Hembra",
+      "Vieja Vaca",
+      comoDate(haceMeses(50)),
+      "V-1",
+      520,
+      "Toro Viejo",
+      "T-9",
+      "",
+      "",
+      comoDate(haceMeses(3)),
+      "Sí",
+      10,
+    ];
+    const plan = (await leerPlanillaSeresVivos(Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer), HOY))!;
+    expect(plan.conHistorial).toBe(true);
+    expect(plan.filas).toHaveLength(1);
+    expect(plan.filas[0]).toMatchObject({
+      nombre: "Vieja Vaca",
+      categoria: "vaca",
+      sexo: "hembra",
+      padreNombre: "Toro Viejo",
+      padreChapeta: "T-9",
+      ultimoParto: haceMeses(3),
+      // La planilla vieja no tiene FECHA SERVIDA: el servicio queda vacío y no se inventa.
+      fechaServida: null,
+      enOrdeno: true,
+      litrosOrdeno: 10,
+    });
+    expect(plan.calculadasConDatos).toEqual([]);
   });
 });
 
@@ -444,7 +612,7 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("integración con la finca Ton
 
   const contar = async (consulta: PromiseLike<{ count: number | null }>) => (await consulta).count ?? 0;
   const animalesDeToneles = () => supabase.from("animales").select("*", { count: "exact", head: true }).eq("finca_id", TONELES);
-  const deToneles = (tabla: "pesajes" | "partos" | "ordenos" | "secados") =>
+  const deToneles = (tabla: "pesajes" | "partos" | "servicios" | "ordenos" | "secados") =>
     // `partos` tiene dos llaves hacia `animales` (madre y cría): hay que decir por cuál se une.
     supabase
       .from(tabla)
@@ -457,6 +625,7 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("integración con la finca Ton
     animales: await contar(animalesDeToneles()),
     pesajes: await contar(deToneles("pesajes")),
     partos: await contar(deToneles("partos")),
+    servicios: await contar(deToneles("servicios")),
     ordenos: await contar(deToneles("ordenos")),
     secados: await contar(deToneles("secados")),
   });
@@ -479,22 +648,45 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("integración con la finca Ton
     const plan = (await leerPlanillaSeresVivos(archivo, HOY))!;
     const vista = await previsualizarSeresVivos(supabase, TONELES, plan);
     expect(vista.fincaNombre).toBe("Finca Toneles");
-    expect(vista.nuevos).toHaveLength(15);
+    expect(vista.nuevos).toHaveLength(16);
     expect(vista.existentes).toHaveLength(1);
     expect(vista.existentes[0].chapeta).toBe(CHAPETA_EXISTENTE);
     expect(vista.omitidas).toBe(3);
-    expect(vista.pesajes).toBe(14); // 15 nuevos menos el del peso fuera de rango
+    expect(vista.pesajes).toBe(15); // 16 nuevos menos el del peso fuera de rango
     expect(vista.madresEnlazadas).toBe(2); // Alegría (ya en la finca) y la madre que viene en la planilla
-    // Historial: 5 partos (los 2 inválidos y el del macho no cuentan), 2 ordeños y 1 secado.
+    // Historial: 5 partos (los 2 inválidos y el del macho no cuentan), 3 servicios, 2 ordeños y 1 secado.
     expect(vista.conHistorial).toBe(true);
     expect(vista.partos).toBe(5);
+    expect(vista.servicios).toBe(3);
     expect(vista.ordenos).toBe(2);
     expect(vista.secados).toBe(1);
     expect(vista.historialYaRegistrado).toBe(0);
     const porChapeta = (chapeta: string) => vista.nuevos.find((n) => n.chapeta === chapeta)!;
-    expect(porChapeta("ZPRU0")).toMatchObject({ parto: "crear", enOrdeno: true, litrosOrdeno: 12.5, ordeno: "crear", secado: null });
-    expect(porChapeta("ZPRU5")).toMatchObject({ parto: "crear", enOrdeno: false, ordeno: null, secado: "crear" });
-    expect(porChapeta("ZPRU9")).toMatchObject({ parto: "crear", enOrdeno: true, litrosOrdeno: null, ordeno: null });
+    expect(porChapeta("ZPRU0")).toMatchObject({
+      parto: "crear",
+      fechaServida: haceMeses(1),
+      servicio: "crear",
+      enOrdeno: true,
+      litrosOrdeno: 12.5,
+      ordeno: "crear",
+      secado: null,
+    });
+    expect(porChapeta("ZPRU5")).toMatchObject({ parto: "crear", servicio: "crear", enOrdeno: false, ordeno: null, secado: "crear" });
+    expect(porChapeta("ZPRU9")).toMatchObject({ parto: "crear", servicio: null, enOrdeno: true, litrosOrdeno: null, ordeno: null });
+    expect(porChapeta("ZPRUG")).toMatchObject({ categoria: "novilla", parto: null, servicio: "crear" });
+
+    // Los cuatro datos calculados viajan en la vista previa para que el ganadero los compruebe.
+    expect(porChapeta("ZPRU0").calculados).toEqual({
+      diasOrdeno: diasEntre(haceMeses(3), HOY),
+      moraPrenez: diasEntre(haceMeses(3), HOY) - DIAS_MORA_PRENEZ,
+      secadoEl: sumarDiasISO(haceMeses(1), DIAS_SECADO_TRAS_SERVICIO),
+      partoEsperado: sumarDiasISO(haceMeses(1), DIAS_GESTACION),
+    });
+    // Vaca seca: no tiene días en ordeño ni mora, pero sí secado y parto posibles por el servicio.
+    expect(porChapeta("ZPRU5").calculados).toMatchObject({ diasOrdeno: null, moraPrenez: null, partoEsperado: sumarDiasISO(haceMeses(4), DIAS_GESTACION) });
+    // Lo que el ganadero escribió en las columnas calculadas no entró a ninguna parte.
+    expect(vista.calculadasConDatos.sort()).toEqual(["DÍAS ORDEÑO", "FECHA POSIBLE DE SECADO", "MORA PREÑEZ"]);
+    expect(porChapeta("ZPRU0").calculados.diasOrdeno).not.toBe(999);
     // Código nuevo: 4 letras de la finca, nombre y chapeta.
     expect(vista.nuevos.map((n) => n.codigo)).toContain("TONE-PRUEBAMADRE-ZPRU0");
     expect(vista.nuevos.map((n) => n.codigo)).toContain("TONE-PRUEBACABALLO-ZPRU6");
@@ -507,9 +699,10 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("integración con la finca Ton
     const plan = (await leerPlanillaSeresVivos(archivo, HOY))!;
     const r = await aplicarSeresVivos(supabase, TONELES, plan, "prueba-seres-vivos.xlsx");
     if (r.importacionId) importaciones.push(r.importacionId);
-    expect(r.animales.creados).toBe(15);
-    expect(r.pesajes.creados).toBe(14);
+    expect(r.animales.creados).toBe(16);
+    expect(r.pesajes.creados).toBe(15);
     expect(r.partos.creados).toBe(5);
+    expect(r.servicios.creados).toBe(3);
     expect(r.ordenos.creados).toBe(2);
     expect(r.secados.creados).toBe(1);
     expect(r.madresEnlazadas).toBe(2); // la de la finca (Alegría) y la que venía en la planilla
@@ -522,7 +715,7 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("integración con la finca Ton
       .eq("finca_id", TONELES)
       .like("chapeta", "ZPRU%");
     creados.push(...(data ?? []).map((a) => a.id));
-    expect(data).toHaveLength(15);
+    expect(data).toHaveLength(16);
 
     const por = (chapeta: string) => data!.find((a) => a.chapeta === chapeta)!;
     expect(por("ZPRU0")).toMatchObject({
@@ -560,10 +753,10 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("integración con la finca Ton
     expect(por("ZPRU0").madre_id).toBe(alegria!.id);
 
     const { data: pesajes } = await supabase.from("pesajes").select("animal_id, fecha, peso_kg").in("animal_id", creados);
-    expect(pesajes).toHaveLength(14);
+    expect(pesajes).toHaveLength(15);
     expect(pesajes!.every((p) => p.fecha === HOY)).toBe(true);
     expect(pesajes!.find((p) => p.animal_id === por("ZPRU0").id)!.peso_kg).toBe(480);
-    expect(await contar(animalesDeToneles())).toBe(antes.animales + 15);
+    expect(await contar(animalesDeToneles())).toBe(antes.animales + 16);
   }, 120_000);
 
   it("crea el historial: partos sin cría, ordeños de la mañana y el secado de la vaca seca", async () => {
@@ -589,6 +782,15 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("integración con la finca Ton
     const { data: secados } = await supabase.from("secados").select("animal_id, fecha").in("animal_id", creados);
     expect(secados).toHaveLength(1);
     expect(secados![0]).toMatchObject({ animal_id: id("ZPRU5"), fecha: HOY });
+
+    // Servicios: la fecha servida de la planilla, tal cual, con el tipo por omisión y sin toro.
+    const { data: servicios } = await supabase.from("servicios").select("animal_id, fecha, tipo, toro_nombre").in("animal_id", creados);
+    expect(servicios).toHaveLength(3);
+    expect(servicios!.find((s) => s.animal_id === id("ZPRU0"))).toMatchObject({ fecha: haceMeses(1), tipo: "inseminacion", toro_nombre: null });
+    expect(servicios!.find((s) => s.animal_id === id("ZPRU5"))!.fecha).toBe(haceMeses(4));
+    expect(servicios!.find((s) => s.animal_id === id("ZPRUG"))!.fecha).toBe(haceMeses(2));
+    // La servida futura, la del macho y la de la ternera no se registraron.
+    for (const chapeta of ["ZPRUD", "ZPRUE", "ZPRUF"]) expect(servicios!.some((s) => s.animal_id === id(chapeta))).toBe(false);
   }, 120_000);
 
   it("ahora sí calcula días en ordeño, mora de preñez y vaca seca", async () => {
@@ -596,13 +798,19 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("integración con la finca Ton
     expect(error).toBeNull();
     const por = (chapeta: string) => data!.find((e) => e.chapeta === chapeta)!;
 
-    // Vaca en ordeño: parto hace 3 meses, con litros del ordeño de hoy y mora de preñez (sin servicio).
+    // Vaca en ordeño: parto hace 3 meses, con litros del ordeño de hoy, su servicio y su mora.
     const enOrdeno = por("ZPRU0");
     expect(enOrdeno.en_ordeno).toBe(true);
     expect(enOrdeno.ultimo_parto).toBe(haceMeses(3));
+    expect(enOrdeno.ultimo_servicio).toBe(haceMeses(1));
     expect(enOrdeno.dias_ordeno).toBeGreaterThan(80);
-    expect(enOrdeno.mora_prenez).toBe(enOrdeno.dias_ordeno - 40);
     expect(Number(enOrdeno.litros_am)).toBe(12.5);
+
+    // La base y la proyección que muestran la vista previa y el formulario dan lo mismo: si la
+    // función SQL cambia sus constantes, esta comparación lo delata.
+    const proyectado = proyectarDatosProductivos({ ultimoParto: enOrdeno.ultimo_parto, fechaServida: enOrdeno.ultimo_servicio }, HOY);
+    expect(enOrdeno.dias_ordeno).toBe(proyectado.diasOrdeno);
+    expect(enOrdeno.mora_prenez).toBe(proyectado.moraPrenez);
 
     // Vaca seca: el secado posterior al parto la saca del ordeño.
     const seca = por("ZPRU5");
@@ -617,23 +825,55 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("integración con la finca Ton
     expect(sinLitros.dias_ordeno).toBeGreaterThan(50);
     expect(sinLitros.litros_am).toBeNull();
 
+    // Novilla servida sin parto: la función la ve servida y le pone fecha de palpación.
+    const novilla = por("ZPRUG");
+    expect(novilla.ultimo_servicio).toBe(haceMeses(2));
+    expect(novilla.en_ordeno).toBe(false);
+    expect(novilla.palpar_el).toBe(sumarDiasISO(haceMeses(2), 33));
+
     // Antes del cambio esta vaca no tenía parto y el sistema no podía decir nada de ella.
     const sinHistorial = por("ZPRU8");
     expect(sinHistorial.ultimo_parto).toBeNull();
     expect(sinHistorial.en_ordeno).toBe(false);
   }, 120_000);
 
+  it("con la preñez confirmada da la fecha de secado y la de nacimiento de la cría", async () => {
+    // La planilla no trae palpaciones: el secado y el parto esperado solo salen de `estado_reproductivo`
+    // cuando una palpación confirma la preñez de ese servicio. Se registra una para comprobarlo (se va
+    // en cascada al borrar el animal, igual que el resto de su historial).
+    const { data: animales } = await supabase.from("animales").select("id, chapeta").eq("finca_id", TONELES).like("chapeta", "ZPRU%");
+    const id = (chapeta: string) => animales!.find((a) => a.chapeta === chapeta)!.id;
+    const servicio = haceMeses(1);
+    const { error } = await supabase
+      .from("palpaciones")
+      // 20 días después del servicio: posterior al servicio y anterior al corte, como pide la función.
+      .upsert({ animal_id: id("ZPRU0"), fecha: sumarDiasISO(servicio, 20), resultado: "prenada" }, { onConflict: "animal_id,fecha", ignoreDuplicates: true });
+    expect(error).toBeNull();
+
+    const { data } = await supabase.rpc("estado_reproductivo", { p_finca: TONELES, p_corte: HOY });
+    const vaca = data!.find((e) => e.chapeta === "ZPRU0")!;
+    expect(vaca.prenada).toBe(true);
+    const proyectado = proyectarDatosProductivos({ ultimoParto: vaca.ultimo_parto, fechaServida: servicio }, HOY);
+    // Secado y parto esperado: los mismos que muestra la vista previa (servicio + 210 y + 280).
+    expect(vaca.secar_el).toBe(proyectado.secadoEl);
+    expect(vaca.parto_esperado).toBe(proyectado.partoEsperado);
+    // Con la preñez confirmada la mora queda congelada en el día del servicio.
+    expect(vaca.mora_prenez).toBe(diasEntre(vaca.ultimo_parto!, servicio) - DIAS_MORA_PRENEZ);
+  }, 120_000);
+
   it("no duplica nada si se importa la misma planilla otra vez", async () => {
     const plan = (await leerPlanillaSeresVivos(archivo, HOY))!;
     const vista = await previsualizarSeresVivos(supabase, TONELES, plan);
     expect(vista.nuevos).toHaveLength(0);
-    expect(vista.existentes).toHaveLength(16);
+    expect(vista.existentes).toHaveLength(17);
     // El historial ya está: la vista previa no ofrece crear nada y lo cuenta como ya registrado.
     expect(vista.partos).toBe(0);
+    expect(vista.servicios).toBe(0);
     expect(vista.ordenos).toBe(0);
     expect(vista.secados).toBe(0);
-    expect(vista.historialYaRegistrado).toBe(8); // 5 partos + 2 ordeños + 1 secado
+    expect(vista.historialYaRegistrado).toBe(11); // 5 partos + 3 servicios + 2 ordeños + 1 secado
     expect(vista.existentes.filter((e) => e.parto === "ya")).toHaveLength(5);
+    expect(vista.existentes.filter((e) => e.servicio === "ya")).toHaveLength(3);
     expect(vista.existentes.filter((e) => e.ordeno === "ya")).toHaveLength(2);
     expect(vista.existentes.filter((e) => e.secado === "ya")).toHaveLength(1);
 
@@ -643,16 +883,76 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("integración con la finca Ton
     expect(r.animales.creados).toBe(0);
     expect(r.pesajes.creados).toBe(0);
     expect(r.partos).toEqual({ creados: 0, omitidos: 5 });
+    expect(r.servicios).toEqual({ creados: 0, omitidos: 3 });
     expect(r.ordenos).toEqual({ creados: 0, omitidos: 2 });
     expect(r.secados).toEqual({ creados: 0, omitidos: 1 });
     // Ni un registro más en la finca que antes de reimportar.
     expect(await conteos()).toEqual(despues);
     expect(despues).toEqual({
-      animales: antes.animales + 15,
-      pesajes: antes.pesajes + 14,
+      animales: antes.animales + 16,
+      pesajes: antes.pesajes + 15,
       partos: antes.partos + 5,
+      servicios: antes.servicios + 3,
       ordenos: antes.ordenos + 2,
       secados: antes.secados + 1,
     });
+  }, 120_000);
+
+  // Va al final a propósito: crea un animal más y movería los conteos de las pruebas anteriores.
+  it("importa igual una planilla con los títulos viejos (SEXO, PADRE, MADRE, ÚLTIMO PARTO)", async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Seres vivos");
+    ws.getCell("A1").value = "PLANILLA IMPLEMENTACIÓN SERES VIVOS";
+    ws.getCell("A2").value = "PERTENECEN A FINCA:";
+    ws.getCell("B2").value = "Finca Toneles";
+    ws.getRow(4).values = [
+      "#",
+      "ESPECIE",
+      "SEXO",
+      "NOMBRE",
+      "FECHA NACIMIENTO",
+      "CHAPETA",
+      "PESO",
+      "PADRE",
+      "CHAPETA PADRE",
+      "MADRE",
+      "CHAPETA MADRE",
+      "ÚLTIMO PARTO",
+      "EN ORDEÑO",
+      "LITROS ÚLTIMO ORDEÑO",
+    ];
+    ws.getRow(5).values = [1, "Bovino", "Hembra", "Prueba Vieja", comoDate(haceMeses(45)), "ZVIEJ1", 505, "Toro Viejo", "T-9", "", "", comoDate(haceMeses(2)), "Sí", 9];
+    const archivoViejo = Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer);
+
+    const plan = (await leerPlanillaSeresVivos(archivoViejo, HOY))!;
+    expect(plan.filas).toHaveLength(1);
+    const vista = await previsualizarSeresVivos(supabase, TONELES, plan);
+    expect(vista.nuevos).toHaveLength(1);
+    expect(vista.partos).toBe(1);
+    expect(vista.ordenos).toBe(1);
+    expect(vista.servicios).toBe(0); // la planilla vieja no tiene FECHA SERVIDA
+
+    const r = await aplicarSeresVivos(supabase, TONELES, plan, "prueba-seres-vivos-vieja.xlsx");
+    if (r.importacionId) importaciones.push(r.importacionId);
+    expect(r.animales.creados).toBe(1);
+    expect(r.partos.creados).toBe(1);
+    expect(r.ordenos.creados).toBe(1);
+    expect(r.servicios.creados).toBe(0);
+
+    const { data: creada } = await supabase
+      .from("animales")
+      .select("id, codigo, categoria, padre_nombre, padre_chapeta")
+      .eq("finca_id", TONELES)
+      .eq("chapeta", "ZVIEJ1")
+      .single();
+    creados.push(creada!.id);
+    expect(creada).toMatchObject({ codigo: "TONE-PRUEBAVIEJA-ZVIEJ1", categoria: "vaca", padre_nombre: "Toro Viejo", padre_chapeta: "T-9" });
+
+    // La base calcula sus días en ordeño y su mora igual que la proyección de la vista previa.
+    const { data } = await supabase.rpc("estado_reproductivo", { p_finca: TONELES, p_corte: HOY });
+    const er = data!.find((e) => e.chapeta === "ZVIEJ1")!;
+    expect(er.en_ordeno).toBe(true);
+    expect(er.dias_ordeno).toBe(diasEntre(haceMeses(2), HOY));
+    expect(er.mora_prenez).toBe(diasEntre(haceMeses(2), HOY) - DIAS_MORA_PRENEZ);
   }, 120_000);
 });

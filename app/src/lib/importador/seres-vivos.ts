@@ -2,13 +2,19 @@
  * Lectura de la «PLANILLA IMPLEMENTACIÓN SERES VIVOS»: el listado en papel con el que el cliente
  * da de alta todos los animales de una finca de una sola vez.
  *
- * Columnas de la planilla: #, ESPECIE, RAZA, COLOR, SEXO, NOMBRE, FECHA NACIMIENTO, CHAPETA, PESO,
- * PADRE, CHAPETA PADRE, MADRE, CHAPETA MADRE y, al final, las tres columnas opcionales de historial
- * mínimo: ÚLTIMO PARTO, EN ORDEÑO y LITROS ÚLTIMO ORDEÑO.
+ * Columnas de la planilla del cliente, en su orden: #, ESPECIE, RAZA, COLOR, HEMBRA O MACHO, NOMBRE,
+ * FECHA NACIMIENTO, CHAPETA, PESO, PAPÁ, CHAPETA PAPÁ, MAMÁ, CHAPETA MAMÁ y el bloque
+ * «DATOS DE VACAS PRODUCTIVOS» con FECHA ÚLTIMO PARTO, DÍAS ORDEÑO, MORA PREÑEZ, FECHA SERVIDA,
+ * FECHA POSIBLE DE SECADO y POSIBLE FECHA NACIMIENTO CRÍA. Nuestra plantilla agrega al final dos
+ * columnas opcionales propias: EN ORDEÑO y LITROS ÚLTIMO ORDEÑO.
  *
- * Las tres de historial son opcionales: una planilla vieja que no las traiga se lee igual que antes.
- * Sin ellas, en cambio, el hato entra sin ningún antecedente y el sistema no puede calcular días en
- * ordeño, mora de preñez ni fecha de secado, así que el lector lo advierte.
+ * Del bloque de vacas productivas **solo se capturan dos datos**: FECHA ÚLTIMO PARTO (crea el parto
+ * de historial) y FECHA SERVIDA (crea el servicio). Los otros cuatro —DÍAS ORDEÑO, MORA PREÑEZ,
+ * FECHA POSIBLE DE SECADO y POSIBLE FECHA NACIMIENTO CRÍA— los calcula el sistema a partir del parto
+ * y del servicio y no se guardan: si el ganadero escribió algo ahí, se lee sin romper y se avisa.
+ *
+ * Los nombres viejos de nuestra plantilla (SEXO, PADRE, MADRE, ÚLTIMO PARTO…) siguen valiendo: el
+ * mapeo es por el texto del encabezado, así que las planillas ya repartidas se importan igual.
  *
  * Igual que la planilla quincenal (`leer.ts`), las columnas se reconocen por el texto de su
  * encabezado —sin tildes y en mayúsculas— y no por su posición, así que sirven planillas con las
@@ -38,23 +44,45 @@ export const COLUMNAS_PLANILLA = [
   "ESPECIE",
   "RAZA",
   "COLOR",
-  "SEXO",
+  "HEMBRA O MACHO",
   "NOMBRE",
   "FECHA NACIMIENTO",
   "CHAPETA",
   "PESO",
-  "PADRE",
-  "CHAPETA PADRE",
-  "MADRE",
-  "CHAPETA MADRE",
-  // Historial mínimo (opcional, al final para no mover las columnas de la planilla en papel).
-  "ÚLTIMO PARTO",
+  "PAPÁ",
+  "CHAPETA PAPÁ",
+  "MAMÁ",
+  "CHAPETA MAMÁ",
+  // Bloque «DATOS DE VACAS PRODUCTIVOS» de la planilla del cliente.
+  "FECHA ÚLTIMO PARTO",
+  "DÍAS ORDEÑO",
+  "MORA PREÑEZ",
+  "FECHA SERVIDA",
+  "FECHA POSIBLE DE SECADO",
+  "POSIBLE FECHA NACIMIENTO CRÍA",
+  // Dos columnas propias nuestras, al final para no mover las de la planilla en papel.
   "EN ORDEÑO",
   "LITROS ÚLTIMO ORDEÑO",
 ] as const;
 
+/** Título del bloque que el cliente dibuja encima de las seis columnas de vacas productivas. */
+export const TITULO_BLOQUE_PRODUCTIVAS = "DATOS DE VACAS PRODUCTIVOS";
+
+/** Las seis columnas del bloque «DATOS DE VACAS PRODUCTIVOS», en el orden del cliente. */
+export const COLUMNAS_PRODUCTIVAS = [
+  "FECHA ÚLTIMO PARTO",
+  "DÍAS ORDEÑO",
+  "MORA PREÑEZ",
+  "FECHA SERVIDA",
+  "FECHA POSIBLE DE SECADO",
+  "POSIBLE FECHA NACIMIENTO CRÍA",
+] as const;
+
+/** Las cuatro del bloque que el sistema calcula solo: se leen, se avisan y no se guardan. */
+export const COLUMNAS_CALCULADAS = ["DÍAS ORDEÑO", "MORA PREÑEZ", "FECHA POSIBLE DE SECADO", "POSIBLE FECHA NACIMIENTO CRÍA"] as const;
+
 /** Columnas opcionales de historial: una planilla sin ellas se sigue leyendo igual. */
-export const COLUMNAS_HISTORIAL = ["ÚLTIMO PARTO", "EN ORDEÑO", "LITROS ÚLTIMO ORDEÑO"] as const;
+export const COLUMNAS_HISTORIAL = ["FECHA ÚLTIMO PARTO", "FECHA SERVIDA", "EN ORDEÑO", "LITROS ÚLTIMO ORDEÑO"] as const;
 
 /** Nombres de especie que se ofrecen en la plantilla (la lectura acepta más variantes). */
 export const ESPECIES_ACEPTADAS = ["Bovino", "Equino", "Canino", "Ave", "Otro"] as const;
@@ -83,12 +111,33 @@ type Campo =
   | "madre"
   | "chapetaMadre"
   | "ultimoParto"
+  | "fechaServida"
   | "enOrdeno"
-  | "litrosOrdeno";
+  | "litrosOrdeno"
+  // Las cuatro que el sistema calcula: se reconocen para no confundirlas con otras y se ignoran.
+  | "diasOrdeno"
+  | "moraPrenez"
+  | "fechaSecado"
+  | "partoEsperado";
+
+/** Los cuatro campos del bloque productivo que no se guardan, con el título con que se avisan. */
+export const CAMPOS_CALCULADOS: Record<"diasOrdeno" | "moraPrenez" | "fechaSecado" | "partoEsperado", string> = {
+  diasOrdeno: "DÍAS ORDEÑO",
+  moraPrenez: "MORA PREÑEZ",
+  fechaSecado: "FECHA POSIBLE DE SECADO",
+  partoEsperado: "POSIBLE FECHA NACIMIENTO CRÍA",
+};
 
 /**
- * Campo al que corresponde un encabezado. El orden importa: «CHAPETA PADRE» y «NOMBRE DE LA MADRE»
- * se resuelven antes que «CHAPETA» y «NOMBRE».
+ * Campo al que corresponde un encabezado. Acepta los nombres nuevos del cliente (HEMBRA O MACHO,
+ * PAPÁ, MAMÁ, FECHA ÚLTIMO PARTO, FECHA SERVIDA…) y los viejos de nuestra plantilla (SEXO, PADRE,
+ * MADRE, ÚLTIMO PARTO…).
+ *
+ * El orden importa:
+ *  - las cuatro columnas calculadas se resuelven antes que las parecidas («DÍAS ORDEÑO» antes que
+ *    «EN ORDEÑO», «POSIBLE FECHA NACIMIENTO CRÍA» antes que «FECHA NACIMIENTO», «FECHA POSIBLE DE
+ *    SECADO» antes que cualquier otra fecha);
+ *  - «CHAPETA PAPÁ» y «NOMBRE DE LA MAMÁ» antes que «CHAPETA» y «NOMBRE».
  */
 export function campoDeEncabezado(encabezado: string): Campo | null {
   const h = normalizarEncabezado(encabezado)
@@ -97,16 +146,26 @@ export function campoDeEncabezado(encabezado: string): Campo | null {
   if (!h) return null;
   if (/^(#|N|N°|NO|NRO|NUM|NUMERO|ITEM|ORDEN)$/.test(h)) return "numero";
   if (/^ESPECIE/.test(h)) return "especie";
-  if (/^SEXO/.test(h)) return "sexo";
+  // Sexo: «SEXO», «HEMBRA O MACHO», «H/M»… (el cliente escribe la pregunta completa).
+  if (/^(SEXO|HEMBRA|MACHO|H ?\/ ?M|M ?\/ ?H|H O M|M O H)/.test(h)) return "sexo";
   if (/^COLOR/.test(h)) return "color";
   if (/^PESO/.test(h)) return "peso";
+
+  // ── Las cuatro que el sistema calcula: primero, porque su texto choca con otras columnas ──
+  if (/^(DIAS|D[IÍ]AS)( EN)? ORDE(Ñ|N)O/.test(h) || /^DIAS (DE )?LECHE/.test(h)) return "diasOrdeno";
+  if (/MORA/.test(h)) return "moraPrenez";
+  if (/SECADO|SECAR/.test(h)) return "fechaSecado";
+  if (/CRIA|CRÍA/.test(h)) return "partoEsperado";
+
   // Historial: «LITROS…» antes que «ORDEÑO» porque «LITROS ÚLTIMO ORDEÑO» contiene las dos palabras.
   if (/LITROS/.test(h)) return "litrosOrdeno";
   if (/ORDE(Ñ|N)O/.test(h)) return "enOrdeno";
   if (/PARTO/.test(h)) return "ultimoParto";
+  // «FECHA SERVIDA», «SERVIDA EL», «FECHA DE SERVICIO», «ÚLTIMO SERVICIO», «MONTA»…
+  if (/SERVI|MONTA|INSEMINA/.test(h)) return "fechaServida";
   if (/^(FECHA (DE )?NACIMIENTO|FECHA NAC|NACIMIENTO|NACIO)/.test(h)) return "fechaNacimiento";
-  if (/PADRE/.test(h)) return /CHAPETA/.test(h) ? "chapetaPadre" : /^(NOMBRE (DEL )?)?PADRE$/.test(h) ? "padre" : null;
-  if (/MADRE/.test(h)) return /CHAPETA/.test(h) ? "chapetaMadre" : /^(NOMBRE (DE LA )?)?MADRE$/.test(h) ? "madre" : null;
+  if (/PADRE|PAPA/.test(h)) return /CHAPETA/.test(h) ? "chapetaPadre" : /^(NOMBRE (DEL )?)?(PADRE|PAPA)$/.test(h) ? "padre" : null;
+  if (/MADRE|MAMA/.test(h)) return /CHAPETA/.test(h) ? "chapetaMadre" : /^(NOMBRE (DE LA )?)?(MADRE|MAMA)$/.test(h) ? "madre" : null;
   if (/^CHAPETA/.test(h)) return "chapeta";
   if (/^RAZA/.test(h)) return "raza";
   if (/^NOMBRE/.test(h)) return "nombre";
@@ -203,6 +262,8 @@ export interface FilaSerVivo {
   madreChapeta: string | null;
   /** Fecha del último parto (historial, sin cría). `null` = la planilla no la trajo o no sirve. */
   ultimoParto: string | null;
+  /** Fecha servida: crea el servicio del animal. `null` = la planilla no la trajo o no sirve. */
+  fechaServida: string | null;
   /** `true` en ordeño, `false` seca, `null` = la planilla no lo dijo. */
   enOrdeno: boolean | null;
   /** Litros del último ordeño (una jornada). */
@@ -217,8 +278,10 @@ export interface PlanSeresVivos {
   fincaEnArchivo: string | null;
   /** Fecha con la que se calculan las categorías y se registran los pesajes y los ordeños. */
   fecha: string;
-  /** `true` si la planilla trae alguna de las tres columnas de historial. */
+  /** `true` si la planilla trae alguna columna de historial (parto, servida, ordeño o litros). */
   conHistorial: boolean;
+  /** Títulos de las columnas calculadas que venían con algo escrito: se avisa que no se guardan. */
+  calculadasConDatos: string[];
   filas: FilaSerVivo[];
   /** Filas con datos que no se pueden importar (sin nombre ni chapeta, chapeta repetida, sexo ilegible). */
   omitidas: number;
@@ -280,6 +343,8 @@ export function leerHojaSeresVivos(ws: ExcelJS.Worksheet, hoy: string): PlanSere
   const filas: FilaSerVivo[] = [];
   const vistas = new Map<string, number>();
   let omitidas = 0;
+  /** Columnas calculadas en las que el ganadero escribió algo (se leen y no se guardan). */
+  const calculadasConDatos = new Set<string>();
 
   const faltantes = (["especie", "sexo", "nombre", "chapeta", "fechaNacimiento"] as Campo[]).filter((c) => !columnas!.has(c));
   if (faltantes.length) {
@@ -300,6 +365,9 @@ export function leerHojaSeresVivos(ws: ExcelJS.Worksheet, hoy: string): PlanSere
       return c ? valor(fila.getCell(c)) : null;
     };
     const t = (campo: Campo) => texto(dato(campo));
+
+    // Las cuatro columnas calculadas se leen solo para avisar: nunca se guardan.
+    for (const [campo, titulo] of Object.entries(CAMPOS_CALCULADOS)) if (t(campo as Campo) != null) calculadasConDatos.add(titulo);
 
     const nombreTxt = t("nombre");
     const chapetaTxt = t("chapeta");
@@ -423,6 +491,38 @@ export function leerHojaSeresVivos(ws: ExcelJS.Worksheet, hoy: string): PlanSere
       puedeOrdenarse = true;
     }
 
+    // ── FECHA SERVIDA: el segundo dato que sí se captura del bloque de vacas productivas ──
+    const servidaLeida = leerFecha(dato("fechaServida"));
+    let fechaServida = servidaLeida.fecha;
+    if (servidaLeida.invalida)
+      advertencias.push(`${quien}: la fecha servida «${servidaLeida.invalida}» no se entendió; usa el formato DD/MM/AAAA.`);
+    if (fechaServida && fechaServida > hoy) {
+      advertencias.push(`${quien}: la fecha servida (${fechaServida}) es futura; no se registrará el servicio.`);
+      fechaServida = null;
+    }
+    if (fechaServida && fechaNacimiento && fechaServida < fechaNacimiento) {
+      advertencias.push(
+        `${quien}: la fecha servida (${fechaServida}) es anterior a la fecha de nacimiento (${fechaNacimiento}); no se registrará el servicio.`,
+      );
+      fechaServida = null;
+    }
+    if (fechaServida && !hembraBovina) {
+      advertencias.push(
+        `${quien}: solo una hembra bovina puede tener servicios (esta es ${ETIQUETA_ESPECIE[especie]}, ${sexo}); no se registrará el servicio.`,
+      );
+      fechaServida = null;
+    }
+    if (fechaServida && hembraBovina && categoria === "ternera") {
+      advertencias.push(`${quien}: por su edad es una ternera y todavía no se sirve; no se registrará el servicio.`);
+      fechaServida = null;
+    }
+    // El estado reproductivo solo mira los servicios posteriores al último parto: uno anterior se
+    // guarda como antecedente, pero no mueve la mora de preñez ni las fechas que calcula el sistema.
+    if (fechaServida && ultimoParto && fechaServida <= ultimoParto)
+      advertencias.push(
+        `${quien}: la fecha servida (${fechaServida}) no es posterior al último parto (${ultimoParto}); el servicio se guarda como antecedente, pero el sistema no lo tomará para la preñez de esta lactancia.`,
+      );
+
     const enOrdenoTxt = t("enOrdeno");
     let enOrdeno = siNoDeTexto(enOrdenoTxt);
     if (enOrdenoTxt && enOrdeno == null)
@@ -467,10 +567,10 @@ export function leerHojaSeresVivos(ws: ExcelJS.Worksheet, hoy: string): PlanSere
       );
     if (enOrdeno === true && !ultimoParto)
       advertencias.push(
-        `${quien}: dice que está en ordeño pero no trae ÚLTIMO PARTO; sin esa fecha el sistema no puede calcular sus días en ordeño ni su mora de preñez.`,
+        `${quien}: dice que está en ordeño pero no trae FECHA ÚLTIMO PARTO; sin esa fecha el sistema no puede calcular sus días en ordeño ni su mora de preñez.`,
       );
     if (enOrdeno === false && !ultimoParto)
-      advertencias.push(`${quien}: dice que está seca pero no trae ÚLTIMO PARTO; sin esa fecha no se puede registrar su secado.`);
+      advertencias.push(`${quien}: dice que está seca pero no trae FECHA ÚLTIMO PARTO; sin esa fecha no se puede registrar su secado.`);
 
     const madreTxt = t("madre");
     const madreChapeta = t("chapetaMadre");
@@ -491,6 +591,7 @@ export function leerHojaSeresVivos(ws: ExcelJS.Worksheet, hoy: string): PlanSere
       madreNombre: madreTxt ? titulo(madreTxt) : null,
       madreChapeta: madreChapeta ? madreChapeta.replace(/\.0+$/, "") : null,
       ultimoParto,
+      fechaServida,
       enOrdeno,
       litrosOrdeno,
       clave,
@@ -498,8 +599,14 @@ export function leerHojaSeresVivos(ws: ExcelJS.Worksheet, hoy: string): PlanSere
     vistas.set(clave, r);
   }
 
+  // Lo que el ganadero escribió en las cuatro columnas calculadas no se guarda: se avisa una vez.
+  if (calculadasConDatos.size)
+    advertencias.push(
+      `${[...calculadasConDatos].join(", ")}: ${calculadasConDatos.size === 1 ? "esa columna la calcula" : "esas columnas las calcula"} el sistema a partir de ${COLUMNAS_PRODUCTIVAS[0]} y ${COLUMNAS_PRODUCTIVAS[3]}; lo que escribiste ahí no se guarda. En la vista previa puedes comprobar que los números cuadran.`,
+    );
+
   // Sin historial el sistema queda adivinando: no hay días en ordeño, ni mora de preñez, ni secado.
-  const conHistorial = (["ultimoParto", "enOrdeno", "litrosOrdeno"] as Campo[]).some((c) => columnas!.has(c));
+  const conHistorial = (["ultimoParto", "fechaServida", "enOrdeno", "litrosOrdeno"] as Campo[]).some((c) => columnas!.has(c));
   const adultasSinParto = filas.filter((f) => f.especie === "bovino" && f.sexo === "hembra" && f.categoria !== "ternera" && !f.ultimoParto).length;
   if (!conHistorial && adultasSinParto) {
     advertencias.push(
@@ -507,15 +614,23 @@ export function leerHojaSeresVivos(ws: ExcelJS.Worksheet, hoy: string): PlanSere
     );
   } else if (conHistorial && adultasSinParto) {
     advertencias.push(
-      `${adultasSinParto} ${adultasSinParto === 1 ? "hembra no trae" : "hembras no traen"} ÚLTIMO PARTO: sin esa fecha el sistema no puede calcular sus días en ordeño, su mora de preñez ni su fecha de secado.`,
+      `${adultasSinParto} ${adultasSinParto === 1 ? "hembra no trae" : "hembras no traen"} FECHA ÚLTIMO PARTO: sin esa fecha el sistema no puede calcular sus días en ordeño, su mora de preñez ni su fecha de secado.`,
     );
   }
+
+  // Sin FECHA SERVIDA no hay de dónde sacar el secado ni el posible nacimiento de la cría.
+  const enOrdenoSinServicio = filas.filter((f) => f.ultimoParto && f.enOrdeno !== false && !f.fechaServida).length;
+  if (columnas.has("fechaServida") && enOrdenoSinServicio)
+    advertencias.push(
+      `${enOrdenoSinServicio} ${enOrdenoSinServicio === 1 ? "vaca con parto no trae" : "vacas con parto no traen"} FECHA SERVIDA: sin esa fecha el sistema no puede calcular la fecha posible de secado ni la posible fecha de nacimiento de la cría.`,
+    );
 
   return {
     hoja: ws.name,
     fincaEnArchivo: fincaDeEncabezado(ws, filaEncabezados),
     fecha: hoy,
     conHistorial,
+    calculadasConDatos: [...calculadasConDatos],
     filas,
     omitidas,
     advertencias,

@@ -11,7 +11,7 @@ import { validarDatos } from "@/lib/offline/esquemas";
 import { yaOrdenada } from "@/lib/offline/ordenos";
 import { formatoNumero } from "@/lib/offline/resumen";
 import type { AnimalCatalogo, Catalogo, Jornada } from "@/lib/offline/tipos";
-import { Chip, type Guardar } from "./formularios-rapidos";
+import { AvisoRellenoOrdenos, Chip, rellenoOrdenosActivo, type Guardar } from "./formularios-rapidos";
 
 type Valores = Record<string, string>;
 
@@ -50,6 +50,8 @@ export function OrdenoLista({ catalogo, indice, alGuardar }: { catalogo: Catalog
     const clave = claveBorrador(catalogo.finca_id, fecha, jornada);
     return { fecha, jornada, clave, valores: leerBorrador(clave) };
   });
+  // Con el relleno de ordeños faltantes activo no se elige fecha: la lista se registra sobre hoy.
+  const relleno = rellenoOrdenosActivo(catalogo);
   const [todas, setTodas] = useState(false);
   const [filtro, setFiltro] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -128,12 +130,17 @@ export function OrdenoLista({ catalogo, indice, alGuardar }: { catalogo: Catalog
         <p className="text-sm text-slate-500">Anota los litros de cada vaca y pasa a la siguiente con Enter / Siguiente. Lo escrito no se pierde si cierras la app.</p>
       </div>
 
-      <div className="grid grid-cols-[1fr_auto] items-end gap-3">
-        <label className="block">
-          <span className="mb-2 block font-bold text-slate-800">Fecha</span>
-          <input type="date" value={fecha} max={hoyISO()} onChange={(e) => e.target.value && cambiarTurno(e.target.value, jornada)} className={control} />
-        </label>
-        <div className="flex gap-2 pb-1.5">
+      {relleno && <AvisoRellenoOrdenos />}
+
+      <div className={clsx("gap-3", relleno ? "flex items-center" : "grid grid-cols-[1fr_auto] items-end")}>
+        {!relleno && (
+          <label className="block">
+            <span className="mb-2 block font-bold text-slate-800">Fecha</span>
+            <input type="date" value={fecha} max={hoyISO()} onChange={(e) => e.target.value && cambiarTurno(e.target.value, jornada)} className={control} />
+          </label>
+        )}
+        <div className={clsx("flex gap-2", !relleno && "pb-1.5")}>
+          {relleno && <span className="self-center font-bold text-slate-800">Jornada</span>}
           {(["am", "pm"] as const).map((j) => (
             <Chip key={j} activo={jornada === j} onClick={() => cambiarTurno(fecha, j)}>
               {j.toUpperCase()}

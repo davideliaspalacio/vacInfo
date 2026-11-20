@@ -7,6 +7,7 @@ import { Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { Paginacion } from "@/components/paginacion";
 import { MiniaturaFoto } from "@/components/foto";
 import { ETIQUETA_ETAPA_REPRODUCTIVA, etapaReproductiva } from "@/components/fincas/etiquetas";
+import { leerMora } from "@/lib/mora";
 
 const VIENTRES_POR_PAGINA = 50;
 const OTROS_POR_PAGINA = 60;
@@ -79,6 +80,8 @@ export async function SeccionAnimales({ fincaId, corte, searchParams }: { fincaI
               <tbody>
                 {animales.map((a) => {
                   const hoyToca = (f: string | null) => f != null && f <= corte;
+                  // Mora con signo: negativa es descanso (no alarma), positiva es retraso para inseminar.
+                  const mora = leerMora(a.mora_prenez, a.prenada);
                   return (
                     <tr key={a.animal_id} className="hover:bg-lima-suave">
                       {hayFotosVientres && (
@@ -105,7 +108,16 @@ export async function SeccionAnimales({ fincaId, corte, searchParams }: { fincaI
                       </td>
                       <td>{a.dias_ordeno ?? (a.dias_seca != null ? <span className="text-tinta-suave">{a.dias_seca} d seca</span> : "—")}</td>
                       <td>{a.prenada ? <Etiqueta tono="verde">Sí</Etiqueta> : a.ultimo_servicio ? <Etiqueta tono="gris">Servida</Etiqueta> : "No"}</td>
-                      <td className={a.mora_prenez && a.mora_prenez > 60 ? "font-bold text-alerta" : undefined}>{a.mora_prenez || "—"}</td>
+                      <td className={mora?.clase} title={mora?.detalle}>
+                        {mora ? (
+                          <>
+                            {mora.valor}
+                            {mora.corta && <span className="ml-1 text-xs font-normal text-tinta-suave">{mora.corta}</span>}
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td className={hoyToca(a.palpar_el) ? "font-bold text-alerta" : undefined}>{fecha(a.palpar_el)}</td>
                       <td className={a.en_ordeno && hoyToca(a.secar_el) ? "font-bold text-alerta" : undefined}>{fecha(a.secar_el)}</td>
                       <td>{fecha(a.parto_esperado)}</td>

@@ -193,8 +193,8 @@ flowchart LR
 |---|---|---|
 | Inicio | `/` | Resumen por finca: litros del día, vacas en ordeño, alertas altas |
 | Fincas | `/fincas`, `/fincas/:id` | Resumen del hato (los contadores suman el total: vacas en ordeño, secas, novillas, terneras y terneros, y animales en la finca, con la suma escrita debajo), estado reproductivo por vaca, alertas, bienes, árbol de elementos, historial, fecha de corte |
-| Ficha de animal | `/animales/:id` | Datos, QR imprimible, producción (60 días), reproducción, sanidad, crecimiento |
-| Nuevo ser vivo | `/animales/nuevo` | Categoría (especie derivada), adquisición, madre de la finca, padre desde lista de toros |
+| Ficha de animal | `/animales/:id` | Datos, QR imprimible, producción (60 días), estado reproductivo (último parto, días en ordeño, mora de preñez, fecha servida, fecha posible de secado y posible nacimiento de la cría, todos leídos de `estado_reproductivo`), reproducción, sanidad, crecimiento y **eliminar el perfil** (borrado duro, solo propietario y administrador) |
+| Nuevo ser vivo | `/animales/nuevo` | Categoría (especie derivada), adquisición, madre de la finca, padre desde lista de toros y, en las vacas, «Datos de vacas productivas»: último parto y fecha servida (crean el parto y el servicio) con los cuatro derivados calculados en vivo |
 | Bienes | `/bienes/:id` | Equipos con garantía, recordatorio, mantenimientos y QR |
 | Levante | `/fincas/:id/levante` | Terneras y novillas: pesajes, fecha de destete automática, ganancia diaria, listas para servicio |
 | Potreros | `/fincas/:id/potreros` | Mapa por estado, rotación de grupos, bloqueo por días de retiro, siguiente potrero sugerido |
@@ -321,13 +321,13 @@ stateDiagram-v2
     EnOrdeno: En ordeño
     Parto --> EnOrdeno
     EnOrdeno --> Servida: servicio
-    EnOrdeno --> Mora: más de 40 días sin servicio
+    EnOrdeno --> Mora: pasados los 45 días de descanso sin servicio
     Mora --> Servida: servicio
     Servida --> Palpacion: servicio + 33 días
     Palpacion --> Prenada: preñada
     Palpacion --> Servida: vacía → nuevo servicio
     Prenada --> Seca: secar a servicio + 210 días
-    Seca --> Parto: parto esperado servicio + 275 días
+    Seca --> Parto: parto esperado servicio + 280 días
     Parto --> [*]
 ```
 
@@ -352,7 +352,7 @@ Los machos van solo por edad (`ternero` < 12, `novillo` 12–24, `toro` > 24). U
 | Palpar | servicio + 33 días sin palpación | Media |
 | Secar | preñada y en ordeño a servicio + 210 días | Alta |
 | Parto | parto esperado dentro del horizonte | Alta |
-| Mora de preñez | en ordeño más de 40 días sin servicio (> 60 alta) | Media / Alta |
+| Mora de preñez | contador con signo: días desde el parto − 45. Negativo = descanso (sin alerta); positivo = retraso (> 60 alta). Se congela el día del servicio cuando la palpación confirma preñez | Media / Alta |
 | Retiro de leche | tratamiento con días de retiro vigentes | Alta |
 | Vacuna | próxima dosis registrada | Media |
 | Destete (aviso) | la cría cumple su destete automático (nacimiento + `fincas.dias_destete`) dentro del horizonte; no es tarea: el sistema lo hace solo | Baja |
@@ -403,7 +403,7 @@ flowchart LR
     A --> LOG["importaciones"]
 ```
 
-`/importar` carga el listado con el que el cliente da de alta todos los animales de una finca: `#, ESPECIE, RAZA, COLOR, SEXO, NOMBRE, FECHA NACIMIENTO, CHAPETA, PESO, PADRE, CHAPETA PADRE, MADRE, CHAPETA MADRE`. La etapa se deriva de la especie, el sexo y la edad al importar, con las dos escalas simétricas (hembra < 12 meses ternera, 12–24 novilla y > 24 vaca; macho < 12 ternero, 12–24 novillo y > 24 toro; sin fecha de nacimiento la hembra queda vaca y el macho toro, y la fila sale marcada en la vista previa); el peso crea además un registro en `pesajes` para la curva de crecimiento de Levante, y el código automático se arma con `codigoAnimal` (4 letras de la finca, nombre y chapeta: `TONE-JOSEFINA-2079`, con sufijo `-2`, `-3` solo si se repite), la chapeta de la madre enlaza `madre_id` cuando coincide con un animal de la finca o con otra fila del mismo archivo (si no, se guardan `madre_nombre` y `madre_chapeta`). La chapeta es la llave para no duplicar: subir dos veces el mismo archivo no crea nada nuevo.
+`/importar` carga el listado con el que el cliente da de alta todos los animales de una finca, con las columnas de su planilla: `#, ESPECIE, RAZA, COLOR, HEMBRA O MACHO, NOMBRE, FECHA NACIMIENTO, CHAPETA, PESO, PAPÁ, CHAPETA PAPÁ, MAMÁ, CHAPETA MAMÁ` y el bloque **DATOS DE VACAS PRODUCTIVOS** (`FECHA ÚLTIMO PARTO, DÍAS ORDEÑO, MORA PREÑEZ, FECHA SERVIDA, FECHA POSIBLE DE SECADO, POSIBLE FECHA NACIMIENTO CRÍA`), más dos columnas propias al final (`EN ORDEÑO, LITROS ÚLTIMO ORDEÑO`). Los títulos viejos (`SEXO, PADRE, CHAPETA PADRE, MADRE, CHAPETA MADRE, ÚLTIMO PARTO`) siguen valiendo, así que las planillas ya repartidas se importan igual. De ese bloque **solo se capturan dos datos**: `FECHA ÚLTIMO PARTO` crea la fila de `partos` (historial, sin cría) y `FECHA SERVIDA` la de `servicios` (índice único `servicios_animal_fecha`, así que reimportar no duplica); los otros cuatro los calcula `estado_reproductivo` y no se guardan: si vienen llenos se avisa en la vista previa, que además los muestra calculados (`lib/importador/reproduccion-proyectada.ts`, espejo de la función solo para la captura). La etapa se deriva de la especie, el sexo y la edad al importar, con las dos escalas simétricas (hembra < 12 meses ternera, 12–24 novilla y > 24 vaca; macho < 12 ternero, 12–24 novillo y > 24 toro; sin fecha de nacimiento la hembra queda vaca y el macho toro, y la fila sale marcada en la vista previa); el peso crea además un registro en `pesajes` para la curva de crecimiento de Levante, y el código automático se arma con `codigoAnimal` (4 letras de la finca, nombre y chapeta: `TONE-JOSEFINA-2079`, con sufijo `-2`, `-3` solo si se repite), la chapeta de la madre enlaza `madre_id` cuando coincide con un animal de la finca o con otra fila del mismo archivo (si no, se guardan `madre_nombre` y `madre_chapeta`). La chapeta es la llave para no duplicar: subir dos veces el mismo archivo no crea nada nuevo.
 
 ### 8.5 Informe contable
 

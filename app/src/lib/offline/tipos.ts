@@ -33,6 +33,38 @@ export type Jornada = "am" | "pm";
 /** Ordeño que ya está registrado en el servidor (viene en el catálogo). */
 export type OrdenoRegistrado = { fecha: string; jornada: Jornada };
 
+/** Mamá o papá del animal, como se puede mostrar sin señal (nombre y chapeta, si se conocen). */
+export type ParienteCatalogo = { nombre: string | null; chapeta: string | null };
+
+/** Enfermedad, tratamiento o vacuna ya registrada (viene en el catálogo para la hoja de vida). */
+export type EventoSanitarioCatalogo = {
+  fecha: string;
+  tipo: Database["public"]["Enums"]["tipo_evento_sanitario"];
+  diagnostico: string | null;
+  producto: string | null;
+  cuartos: string[] | null;
+  dias_retiro: number | null;
+  /** Último día del tratamiento; si está vacío el retiro se cuenta desde `fecha`. */
+  fecha_fin: string | null;
+  proxima_fecha: string | null;
+  estado: Database["public"]["Enums"]["estado_sanitario"];
+};
+
+/**
+ * Datos de solo lectura de la hoja de vida que no se usan para registrar.
+ * Viajan aparte para que un catálogo descargado con una versión anterior se reconozca enseguida:
+ * si falta este bloque, la pantalla pide descargar de nuevo en vez de mostrar datos en blanco.
+ */
+export type HojaVidaCatalogo = {
+  fecha_nacimiento: string | null;
+  madre: ParienteCatalogo | null;
+  padre: ParienteCatalogo | null;
+  /** `estado_reproductivo.mora_prenez`: puede ser negativo (la vaca sigue en descanso) o nulo (no aplica). */
+  mora_prenez: number | null;
+  /** Enfermedades, tratamientos y vacunas recientes, de la más nueva a la más vieja. */
+  sanidad: EventoSanitarioCatalogo[];
+};
+
 export type AnimalCatalogo = {
   id: string;
   codigo: string;
@@ -56,6 +88,11 @@ export type AnimalCatalogo = {
    * Opcional: los catálogos descargados con una versión anterior no lo traen y `completarCatalogo` lo deja en [].
    */
   ordenos_recientes?: OrdenoRegistrado[];
+  /**
+   * Datos de la hoja de vida (solo para ver). Opcional: los catálogos descargados con una versión anterior
+   * no lo traen y `completarCatalogo` lo deja en `null`, que la pantalla lee como «falta descargar de nuevo».
+   */
+  hoja_vida?: HojaVidaCatalogo | null;
 };
 
 export type PotreroCatalogo = Database["public"]["Functions"]["estado_potreros"]["Returns"][number];
@@ -72,6 +109,16 @@ export type Catalogo = {
   bienes: { id: string; nombre: string; codigo: string }[];
   insumos: { nombre: string; categoria: string; unidad: string }[];
   toros: string[];
+  /**
+   * Desde qué fecha vienen los eventos sanitarios de `animales[].hoja_vida.sanidad`.
+   * Opcional: los catálogos descargados con una versión anterior no lo traen.
+   */
+  sanidad_desde?: string | null;
+  /**
+   * La finca rellena sola los ordeños que falten: los formularios registran siempre hoy, sin selector de fecha.
+   * Opcional: los catálogos descargados con una versión anterior no lo traen y se asume `false`.
+   */
+  relleno_ordenos?: boolean;
   descargado_en: string;
 };
 

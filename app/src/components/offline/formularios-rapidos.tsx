@@ -26,6 +26,27 @@ function leerFormulario(form: HTMLFormElement) {
 
 export const jornadaActual = () => (new Date().getHours() < 12 ? "am" : "pm");
 
+/**
+ * ¿La finca tiene activo el «relleno de registros de ordeño faltantes»?
+ * Con la función activa, el ordeño se registra siempre sobre el día actual y no se muestra el
+ * selector de fecha (los días que falten los completa la base con el dato que se acaba de guardar).
+ *
+ * El dato viaja en el catálogo que el teléfono ya descargó, así que la respuesta funciona sin señal.
+ * Se lee opcional a propósito: los catálogos descargados antes de que el campo existiera no lo
+ * traen, y sin él se mantiene el comportamiento de siempre (se puede elegir la fecha).
+ */
+export const rellenoOrdenosActivo = (catalogo: Catalogo) => (catalogo as Catalogo & { relleno_ordenos?: boolean }).relleno_ordenos === true;
+
+/** Aviso que reemplaza al selector de fecha cuando la finca rellena los ordeños faltantes. */
+export function AvisoRellenoOrdenos() {
+  return (
+    <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+      Esta finca completa los ordeños faltantes: el registro va sobre <strong>hoy</strong> y los días que quedaron sin registrar se llenan solos con
+      estos litros. Por eso no se puede elegir otra fecha.
+    </p>
+  );
+}
+
 export function Chip({
   activo,
   onClick,
@@ -405,8 +426,21 @@ function CampoToro({ toros }: { toros: string[] }) {
 /**
  * Ordeño de una vaca. No deja registrar dos veces la misma fecha y jornada: la jornada ya registrada
  * sale marcada y el botón Guardar queda deshabilitado explicando por qué. Funciona sin señal.
+ *
+ * Con el relleno de ordeños faltantes activo en la finca no hay selector de fecha: se registra
+ * siempre el día de hoy.
  */
-function FormularioOrdeno({ animal, indice, alGuardar }: { animal: AnimalCatalogo; indice: Set<string>; alGuardar: Guardar }) {
+function FormularioOrdeno({
+  animal,
+  indice,
+  alGuardar,
+  relleno,
+}: {
+  animal: AnimalCatalogo;
+  indice: Set<string>;
+  alGuardar: Guardar;
+  relleno: boolean;
+}) {
   const hoy = hoyISO();
   const [fecha, setFecha] = useState(hoy);
   const [jornada, setJornada] = useState<Jornada>(() => jornadaLibre(indice, animal.id, hoy, jornadaActual()) ?? jornadaActual());
@@ -425,9 +459,13 @@ function FormularioOrdeno({ animal, indice, alGuardar }: { animal: AnimalCatalog
       alGuardar={alGuardar}
       bloqueado={registrada(jornada) ? textoYaOrdenada(fecha, jornada, hoy) : null}
     >
-      <Campo etiqueta="Fecha">
-        <input type="date" value={fecha} max={hoy} onChange={(e) => cambiarFecha(e.target.value)} className={control} />
-      </Campo>
+      {relleno ? (
+        <AvisoRellenoOrdenos />
+      ) : (
+        <Campo etiqueta="Fecha">
+          <input type="date" value={fecha} max={hoy} onChange={(e) => cambiarFecha(e.target.value)} className={control} />
+        </Campo>
+      )}
       <fieldset>
         <legend className="mb-2 font-bold text-slate-800">Jornada</legend>
         <div className="flex flex-wrap gap-2">
@@ -471,7 +509,7 @@ export function FormularioAnimalRapido({
 
   switch (accion) {
     case "ordeno":
-      return <FormularioOrdeno animal={animal} indice={indice} alGuardar={alGuardar} />;
+      return <FormularioOrdeno animal={animal} indice={indice} alGuardar={alGuardar} relleno={rellenoOrdenosActivo(catalogo)} />;
     case "servicio":
       return (
         <FormaRapida accion="servicio" fijos={fijos} alGuardar={alGuardar} descripcion="La palpación queda programada 33 días después.">

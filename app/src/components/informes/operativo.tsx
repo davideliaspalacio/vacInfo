@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { fecha, litros, num } from "@/lib/formato";
+import { DIAS_MORA_PRENEZ, leerMora, UMBRAL_MORA_ALTA } from "@/lib/mora";
 import { Etiqueta, Tarjeta, TituloTarjeta, Vacio } from "@/components/ui";
 import { todasLasFilas, type PropsInforme } from "./consultas";
 
@@ -176,6 +177,7 @@ export async function InformeOperativo({ supabase, rango, finca }: PropsInforme)
           <div className="space-y-6">
             <Matriz titulo="Vacas en ordeño" filas={enOrdeno} hasta={hasta} />
             <Matriz titulo="Vacas secas y novillas de vientre" filas={secas} hasta={hasta} secas />
+            <LeyendaMora />
           </div>
         )}
       </Tarjeta>
@@ -278,6 +280,24 @@ export async function InformeOperativo({ supabase, rango, finca }: PropsInforme)
   );
 }
 
+/**
+ * La mora de preñez cambió de «días en ordeño − 40» a un contador con signo sobre los 45 días de
+ * descanso post parto, así que la columna se explica aquí mismo junto con los umbrales de alerta.
+ */
+function LeyendaMora() {
+  return (
+    <p className="text-[11px] leading-relaxed text-tinta-suave">
+      <strong className="text-bosque">Mora de preñez:</strong> cuenta los días desde el último parto menos los {DIAS_MORA_PRENEZ} de
+      descanso. <strong className="text-pasto-oscuro">Negativa</strong> (de −{DIAS_MORA_PRENEZ} a 0) la vaca está descansando y no hay
+      nada que hacer: no genera alerta. En <strong>0</strong> termina el descanso y ya se puede inseminar.{" "}
+      <strong className="text-cafe">Positiva</strong> son días de retraso para inseminar: alerta media desde +1 y{" "}
+      <strong className="text-alerta">alta por encima de +{UMBRAL_MORA_ALTA}</strong>. Cuando la palpación confirma la preñez el
+      contador queda <em>cerrado</em> en el día del servicio que la preñó (no en el de la palpación) y se muestra apagado, porque ya
+      es historia. Palpación a los 33 días del servicio, secado a los 210 y parto esperado a los 280.
+    </p>
+  );
+}
+
 function Con({ n, p }: { n: number; p: string }) {
   return (
     <span>
@@ -364,45 +384,56 @@ function Matriz({ titulo, filas, hasta, secas = false }: { titulo: string; filas
               </tr>
             </thead>
             <tbody>
-              {filas.map((f, i) => (
-                <tr key={f.animal_id} className="odd:bg-white even:bg-[#f5f8fb]">
-                  <td className="text-tinta/50">{i + 1}</td>
-                  <td className="font-bold">{f.chapeta ?? "—"}</td>
-                  <td className="!text-left font-bold">{f.nombre}</td>
-                  <td>{f.partoAnterior ? fecha(f.partoAnterior) : f.categoria === "novilla" || f.ultimo_parto ? "NOVILLA" : ""}</td>
-                  <td>{fecha(f.ultimo_parto)}</td>
-                  <td>{secas ? num(f.dias_seca) : num(f.dias_ordeno)}</td>
-                  <td className={clsx(f.mora_prenez != null && f.mora_prenez > 0 && "font-bold text-alerta")}>
-                    {f.mora_prenez ? f.mora_prenez : "-"}
-                  </td>
-                  <td>{f.ultimo_servicio ? fecha(f.ultimo_servicio) : ""}</td>
-                  <td className={vencida(f.palpar_el)}>{f.palpar_el ? fecha(f.palpar_el) : ""}</td>
-                  <td>{f.toro_nombre ?? ""}</td>
-                  <td>{f.toro_raza ?? ""}</td>
-                  <td>{f.tipo_servicio ? (INSEMINACION[f.tipo_servicio] ?? f.tipo_servicio) : ""}</td>
-                  <td>{f.ultima_palpacion ? fecha(f.ultima_palpacion) : ""}</td>
-                  <td className={clsx(f.prenada && "font-bold text-pasto-oscuro")}>{f.ultima_palpacion ? (f.prenada ? "SI" : "NO") : ""}</td>
-                  <td>{f.palpador ?? ""}</td>
-                  <td className={f.en_ordeno ? vencida(f.secar_el) : undefined}>{f.secar_el ? fecha(f.secar_el) : ""}</td>
-                  <td>{f.parto_esperado ? fecha(f.parto_esperado) : ""}</td>
-                  <td>{f.ultimo_secado && (!f.ultimo_parto || f.ultimo_secado > f.ultimo_parto) ? fecha(f.ultimo_secado) : ""}</td>
-                  <td className={clsx(f.aborto && "font-bold text-alerta")}>{f.aborto ? "SI" : ""}</td>
-                  <td>{f.am != null ? num(f.am) : ""}</td>
-                  <td className="text-alerta">{f.pm != null ? num(f.pm) : ""}</td>
-                  <td className="font-bold">{f.total != null ? num(f.total) : ""}</td>
-                  {CUARTOS.map((c) => (
-                    <td key={c} className="font-bold text-alerta">
-                      {si(f.sanidad.cuartos.has(c))}
+              {filas.map((f, i) => {
+                // Mora con signo: negativa es descanso (no alarma), positiva es retraso para inseminar.
+                const mora = leerMora(f.mora_prenez, f.prenada);
+                return (
+                  <tr key={f.animal_id} className="odd:bg-white even:bg-[#f5f8fb]">
+                    <td className="text-tinta/50">{i + 1}</td>
+                    <td className="font-bold">{f.chapeta ?? "—"}</td>
+                    <td className="!text-left font-bold">{f.nombre}</td>
+                    <td>{f.partoAnterior ? fecha(f.partoAnterior) : f.categoria === "novilla" || f.ultimo_parto ? "NOVILLA" : ""}</td>
+                    <td>{fecha(f.ultimo_parto)}</td>
+                    <td>{secas ? num(f.dias_seca) : num(f.dias_ordeno)}</td>
+                    <td className={mora?.clase} title={mora?.detalle}>
+                      {mora ? (
+                        <>
+                          {mora.valor}
+                          {mora.corta && <span className="ml-0.5 text-[9px] font-normal text-tinta-suave">{mora.corta}</span>}
+                        </>
+                      ) : (
+                        "-"
+                      )}
                     </td>
-                  ))}
-                  {SANIDAD.map((s) => (
-                    <td key={s.tipo} className="font-bold text-alerta">
-                      {si(f.sanidad.tipos.has(s.tipo))}
-                    </td>
-                  ))}
-                  <td>{f.crioSexo ? f.crioSexo.toUpperCase() : ""}</td>
-                </tr>
-              ))}
+                    <td>{f.ultimo_servicio ? fecha(f.ultimo_servicio) : ""}</td>
+                    <td className={vencida(f.palpar_el)}>{f.palpar_el ? fecha(f.palpar_el) : ""}</td>
+                    <td>{f.toro_nombre ?? ""}</td>
+                    <td>{f.toro_raza ?? ""}</td>
+                    <td>{f.tipo_servicio ? (INSEMINACION[f.tipo_servicio] ?? f.tipo_servicio) : ""}</td>
+                    <td>{f.ultima_palpacion ? fecha(f.ultima_palpacion) : ""}</td>
+                    <td className={clsx(f.prenada && "font-bold text-pasto-oscuro")}>{f.ultima_palpacion ? (f.prenada ? "SI" : "NO") : ""}</td>
+                    <td>{f.palpador ?? ""}</td>
+                    <td className={f.en_ordeno ? vencida(f.secar_el) : undefined}>{f.secar_el ? fecha(f.secar_el) : ""}</td>
+                    <td>{f.parto_esperado ? fecha(f.parto_esperado) : ""}</td>
+                    <td>{f.ultimo_secado && (!f.ultimo_parto || f.ultimo_secado > f.ultimo_parto) ? fecha(f.ultimo_secado) : ""}</td>
+                    <td className={clsx(f.aborto && "font-bold text-alerta")}>{f.aborto ? "SI" : ""}</td>
+                    <td>{f.am != null ? num(f.am) : ""}</td>
+                    <td className="text-alerta">{f.pm != null ? num(f.pm) : ""}</td>
+                    <td className="font-bold">{f.total != null ? num(f.total) : ""}</td>
+                    {CUARTOS.map((c) => (
+                      <td key={c} className="font-bold text-alerta">
+                        {si(f.sanidad.cuartos.has(c))}
+                      </td>
+                    ))}
+                    {SANIDAD.map((s) => (
+                      <td key={s.tipo} className="font-bold text-alerta">
+                        {si(f.sanidad.tipos.has(s.tipo))}
+                      </td>
+                    ))}
+                    <td>{f.crioSexo ? f.crioSexo.toUpperCase() : ""}</td>
+                  </tr>
+                );
+              })}
             </tbody>
             {!secas && (
               <tfoot>
