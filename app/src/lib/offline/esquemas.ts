@@ -61,15 +61,23 @@ export const ESQUEMAS = {
     jornada,
     items: z.array(z.object({ animal_id: uuid, litros: litrosVaca })).min(1).max(500),
   }),
-  servicio: z.object({
-    ...delAnimal,
-    tipo: z.enum(["inseminacion", "monta"]),
-    toro_nombre: texto,
-    toro_raza: texto,
-    inseminador: texto,
-    jornada: z.preprocess(limpiar, jornada.optional()),
-    observaciones: texto,
-  }),
+  // Un servicio real puede llevar dos pajillas de toros distintos (el toro 2 es opcional).
+  // El tope de 2 dosis por vaca y día lo revisan `lib/offline/servicios.ts` (en el teléfono, sin
+  // señal) y la función `registrar_servicio` de la base (respaldo final).
+  servicio: z
+    .object({
+      ...delAnimal,
+      tipo: z.enum(["inseminacion", "monta"]),
+      toro_nombre: texto,
+      toro_raza: texto,
+      toro2_nombre: texto,
+      toro2_raza: texto,
+      inseminador: texto,
+      jornada: z.preprocess(limpiar, jornada.optional()),
+      observaciones: texto,
+    })
+    // No hay toro 2 sin toro 1: si solo se conoce un toro, va en el primero.
+    .refine((d) => (d.toro2_nombre === undefined && d.toro2_raza === undefined) || d.toro_nombre !== undefined, { path: ["toro_nombre"] }),
   palpacion: z.object({
     ...delAnimal,
     resultado: z.enum(["prenada", "vacia"]),
@@ -94,7 +102,10 @@ export const ESQUEMAS = {
       cria_nombre: z.preprocess(limpiar, z.string().max(120).optional()),
       cria_chapeta: z.preprocess(limpiar, z.string().max(30).optional()),
     })
-    .refine((d) => !partoConCria(d) || d.cria_sexo !== undefined, { path: ["cria_sexo"] }),
+    .refine((d) => !partoConCria(d) || d.cria_sexo !== undefined, { path: ["cria_sexo"] })
+    // Un aborto no puede traer «nació viva: sí» ni calostro. El formulario ya lo bloquea en
+    // pantalla; esto deja coherente también lo que llegue de una cola vieja o de otro cliente.
+    .transform((d) => (d.aborto === true ? { ...d, nacido_vivo: false, toma_calostro: undefined, persona_calostro: undefined } : d)),
   secado: z.object({ ...delAnimal, motivo: texto }),
   salud: z
     .object({
@@ -223,6 +234,8 @@ const ETIQUETAS: Record<string, string> = {
   finca_id: "finca",
   toro_nombre: "nombre del toro",
   toro_raza: "raza del toro",
+  toro2_nombre: "nombre del toro 2",
+  toro2_raza: "raza del toro 2",
   dias_prenez: "días de preñez",
   cria_sexo: "sexo de la cría",
   dias_retiro: "días de retiro",

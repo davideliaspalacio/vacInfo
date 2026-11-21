@@ -6,9 +6,9 @@ import { CircleCheck, LoaderCircle, Save, Search } from "lucide-react";
 import { clasesGuardar } from "@/components/campo/boton-guardar";
 import { control } from "@/components/campo/ui";
 import { hoyISO } from "@/lib/formato";
-import { OrdenoRepetidoError } from "@/lib/offline/cliente";
+import { RegistroRechazadoError } from "@/lib/offline/cliente";
 import { validarDatos } from "@/lib/offline/esquemas";
-import { yaOrdenada } from "@/lib/offline/ordenos";
+import { litrosOrdeno, yaOrdenada } from "@/lib/offline/ordenos";
 import { formatoNumero } from "@/lib/offline/resumen";
 import type { AnimalCatalogo, Catalogo, Jornada } from "@/lib/offline/tipos";
 import { AvisoRellenoOrdenos, Chip, rellenoOrdenosActivo, type Guardar } from "./formularios-rapidos";
@@ -79,6 +79,32 @@ export function OrdenoLista({ catalogo, indice, alGuardar }: { catalogo: Catalog
   const invalidas = litros.filter((l) => Number.isNaN(l)).length;
   const total = anotadas.reduce((s, l) => s + l, 0);
 
+  /**
+   * Lo que ya está registrado ese día en estas vacas, por jornada, para poder verlo aunque ya no se
+   * pueda registrar (el cliente pidió «observar la cantidad registrada en cada horario y el total
+   * del día»). Sale del índice que armó el teléfono, así que también se ve sin señal.
+   */
+  const registrado = useMemo(() => {
+    const porJornada = (j: Jornada) => {
+      let vacasRegistradas = 0;
+      let vacasConDato = 0;
+      let litrosJornada = 0;
+      for (const a of vacas) {
+        if (!yaOrdenada(indice, a.id, fecha, j)) continue;
+        vacasRegistradas++;
+        const l = litrosOrdeno(indice, a.id, fecha, j);
+        if (l != null) {
+          vacasConDato++;
+          litrosJornada += l;
+        }
+      }
+      return { vacasRegistradas, vacasConDato, litros: litrosJornada };
+    };
+    const am = porJornada("am");
+    const pm = porJornada("pm");
+    return { am, pm, total: am.litros + pm.litros, hay: am.vacasRegistradas + pm.vacasRegistradas > 0 };
+  }, [vacas, indice, fecha]);
+
   function cambiarTurno(nuevaFecha: string, nuevaJornada: Jornada) {
     const clave = claveBorrador(catalogo.finca_id, nuevaFecha, nuevaJornada);
     setTurno({ fecha: nuevaFecha, jornada: nuevaJornada, clave, valores: leerBorrador(clave) });
@@ -117,7 +143,7 @@ export function OrdenoLista({ catalogo, indice, alGuardar }: { catalogo: Catalog
       setTurno({ ...turno, valores: {} });
       setFiltro("");
     } catch (e) {
-      setError(e instanceof OrdenoRepetidoError ? e.message : "No se pudo guardar en el teléfono. Revisa que haya espacio disponible.");
+      setError(e instanceof RegistroRechazadoError ? e.message : "No se pudo guardar en el teléfono. Revisa que haya espacio disponible.");
     } finally {
       setGuardando(false);
     }
@@ -177,6 +203,8 @@ export function OrdenoLista({ catalogo, indice, alGuardar }: { catalogo: Catalog
             const invalido = Number.isNaN(aLitros(valor));
             const anterior = jornada === "am" ? a.litros_am : a.litros_pm;
             const bloqueada = ordenada(a);
+            // Litros que quedaron en esa jornada: null si el teléfono sabe que está registrada pero no cuántos.
+            const litrosYa = bloqueada ? litrosOrdeno(indice, a.id, fecha, jornada) : null;
             // Las casillas (y el salto con Enter) van en el orden de las vacas que todavía se pueden anotar.
             const i = editables.indexOf(a);
             return (
@@ -197,7 +225,7 @@ export function OrdenoLista({ catalogo, indice, alGuardar }: { catalogo: Catalog
                 {bloqueada ? (
                   <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-800">
                     <CircleCheck className="h-4 w-4" aria-hidden />
-                    Ya ordeñada
+                    {litrosYa == null ? "Ya ordeñada" : `Ya ordeñada · ${formatoNumero(litrosYa)} L`}
                   </span>
                 ) : (
                   <input
@@ -227,6 +255,17 @@ export function OrdenoLista({ catalogo, indice, alGuardar }: { catalogo: Catalog
       )}
 
       <div className="sticky bottom-24 z-10 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+        {registrado.hay && (
+          <p className="mb-2 rounded-xl bg-emerald-50 p-2 text-sm font-semibold text-emerald-900">
+            Ya registrado {fecha === hoyISO() ? "hoy" : `el ${fecha}`}: mañana (AM) {formatoNumero(registrado.am.litros)} L en{" "}
+            {registrado.am.vacasRegistradas} vaca{registrado.am.vacasRegistradas === 1 ? "" : "s"} · tarde (PM) {formatoNumero(registrado.pm.litros)} L en{" "}
+            {registrado.pm.vacasRegistradas} vaca{registrado.pm.vacasRegistradas === 1 ? "" : "s"} ·{" "}
+            <strong>total del día {formatoNumero(registrado.total)} L</strong>
+            {registrado.am.vacasConDato < registrado.am.vacasRegistradas || registrado.pm.vacasConDato < registrado.pm.vacasRegistradas
+              ? ". De algunas vacas no se descargó la cantidad, así que no están en el total."
+              : ""}
+          </p>
+        )}
         <p className="mb-2 flex justify-between text-sm font-bold text-slate-700">
           <span>
             {anotadas.length} de {pendientes.length} vacas

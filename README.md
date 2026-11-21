@@ -217,7 +217,7 @@ flowchart LR
 | Ruta | Descripción |
 |---|---|
 | `/campo` | Menú: **Registrar**, Mensajes (con no leídos), Aprendizaje, Comentario |
-| `/campo/registrar` | Flujo único con o sin señal: Animal · Ordeño por lista · Finca · Pendientes |
+| `/campo/registrar` | Flujo único con o sin señal: Animal · Ordeño por lista · Finca. Lo que falta por enviar y lo que falló se ve en la barra de estado de arriba |
 | `/campo/mensajes` | Mensajes del administrador, legibles sin señal |
 | `/campo/aprendizaje` | Manual del trabajador (texto), ciclo reproductivo, plan sanitario |
 | `/campo/comentario` | Novedades al administrador con urgencia |
@@ -234,8 +234,8 @@ sequenceDiagram
     participant API as /api/campo/sincronizar
     participant PG as Supabase Postgres
 
-    Note over J,App: Con señal (una vez al día)
-    App->>API: GET /api/campo/catalogo?finca=
+    Note over J,App: Con señal (automático, sin botón)
+    App->>API: GET /api/campo/catalogo?finca= (automático: al abrir, al volver al frente, al volver la señal y cada 2 min)
     API->>PG: animales + estado_reproductivo, potreros, insumos, toros, mensajes
     PG-->>App: catálogo de la finca
     App->>DB: guarda catálogo
@@ -256,7 +256,7 @@ sequenceDiagram
             API-->>App: duplicado
         else error de validación o permiso
             API->>PG: libera cliente_id
-            API-->>App: error (se ve en Pendientes)
+            API-->>App: error (se ve en la barra de estado)
         end
     end
     App->>DB: quita de la cola lo enviado

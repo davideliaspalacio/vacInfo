@@ -2,26 +2,25 @@
 
 import { useMemo, useState } from "react";
 import clsx from "clsx";
-import { ChevronRight, Eye, Search, TriangleAlert, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Eye, Search, TriangleAlert } from "lucide-react";
 import { control } from "@/components/campo/ui";
 import { HojaVida } from "@/components/campo/hoja-vida";
 import { fecha, hoyISO } from "@/lib/formato";
-import { jornadaLibre, textoJornadasCompletas } from "@/lib/offline/ordenos";
 import type { Accion, AnimalCatalogo, Catalogo } from "@/lib/offline/tipos";
-import { Chip, ETIQUETA_ACCION_ANIMAL, FormularioAnimalRapido, accionesDe, jornadaActual, type AccionAnimal } from "./formularios-rapidos";
+import { Chip, ETIQUETA_ACCION_ANIMAL, FormularioAnimalRapido, accionesDe, type AccionAnimal } from "./formularios-rapidos";
 
 const normalizar = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
-function Etiquetas({ animal }: { animal: AnimalCatalogo }) {
+function Etiquetas({ animal, grande = false }: { animal: AnimalCatalogo; grande?: boolean }) {
   const etiquetas: { texto: string; clase: string }[] = [];
   if (animal.en_ordeno) etiquetas.push({ texto: "En ordeño", clase: "bg-blue-100 text-blue-800" });
   else if (animal.categoria === "vaca") etiquetas.push({ texto: "Seca", clase: "bg-slate-100 text-slate-700" });
   if (animal.prenada) etiquetas.push({ texto: "Preñada", clase: "bg-emerald-100 text-emerald-800" });
   if (animal.categoria !== "vaca") etiquetas.push({ texto: animal.categoria, clase: "bg-amber-100 text-amber-900 capitalize" });
   return (
-    <span className="flex flex-wrap gap-1">
+    <span className={clsx("flex flex-wrap", grande ? "gap-2" : "gap-1")}>
       {etiquetas.map((e) => (
-        <span key={e.texto} className={`rounded-full px-2 py-0.5 text-xs font-bold ${e.clase}`}>
+        <span key={e.texto} className={clsx("rounded-full font-bold", grande ? "px-3 py-1 text-sm" : "px-2 py-0.5 text-xs", e.clase)}>
           {e.texto}
         </span>
       ))}
@@ -76,38 +75,47 @@ export function AnimalRapido({
 
   if (animal) {
     const disponibles = accionesDe(animal);
-    // Sin jornada libre hoy no hay nada que registrar: el botón de Ordeño se deshabilita y dice por qué.
     const hoy = hoyISO();
-    const libre = jornadaLibre(indice, animal.id, hoy, jornadaActual());
-    const motivoOrdeno = libre ? null : `${textoJornadasCompletas(hoy, hoy)} No se puede registrar otro ordeño de esta vaca hoy.`;
-    const posibles = disponibles.filter((a) => a !== "ordeno" || !motivoOrdeno);
+    // El chip de Ordeño se abre siempre: con las dos jornadas del día hechas, el formulario muestra
+    // los litros de cada jornada y el total del día, y no deja registrar (ver FormularioOrdeno).
     const verHoja = pestana === "hoja_vida";
     // Acción de registro activa (o la primera disponible). Mientras se ve la hoja de vida no hay ninguna marcada.
-    const actual = pestana !== "hoja_vida" && posibles.includes(pestana) ? pestana : posibles[0];
+    const actual = pestana !== "hoja_vida" && disponibles.includes(pestana) ? pestana : disponibles[0];
 
     return (
       <div className="space-y-4">
-        <div className="flex items-start justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-          <div className="min-w-0">
-            <p className="text-2xl font-bold leading-tight text-slate-900">{animal.chapeta ?? animal.codigo}</p>
-            <p className="mb-1.5 truncate font-semibold text-slate-700">{animal.nombre}</p>
-            <Etiquetas animal={animal} />
-            {(animal.palpar_el || animal.secar_el) && (
-              <p className="mt-1.5 text-xs text-slate-500">
-                {animal.palpar_el && `Palpar el ${fecha(animal.palpar_el)}`}
-                {animal.palpar_el && animal.secar_el && " · "}
-                {animal.secar_el && `Secar el ${fecha(animal.secar_el)}`}
-              </p>
-            )}
+        {/* Tarjeta de identificación: se lee de lejos, en el potrero y a pleno sol. */}
+        <div className="rounded-3xl bg-campo p-5 text-white shadow-[0_16px_42px_rgba(37,99,235,0.28)]">
+          <div className="mb-1 flex items-start justify-between gap-3">
+            <p className="pt-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-100">Chapeta</p>
+            <button
+              type="button"
+              onClick={() => setAnimalId(null)}
+              className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-xl bg-white px-4 text-base font-bold text-campo-oscuro shadow-md active:scale-[0.98]"
+            >
+              <ArrowLeft className="h-5 w-5" aria-hidden />
+              Volver atrás
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setAnimalId(null)}
-            className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-700"
-          >
-            <X className="h-4 w-4" aria-hidden />
-            Cambiar
-          </button>
+          <p className="font-display break-words text-[4rem] font-bold leading-none tracking-tight tabular-nums">
+            {animal.chapeta ?? animal.codigo}
+          </p>
+          {animal.nombre.trim() && (
+            <p className="mt-2 break-words text-[1.6rem] font-bold uppercase leading-tight text-blue-50">{animal.nombre}</p>
+          )}
+          <p className="mt-3 inline-flex rounded-full bg-white px-4 py-1.5 text-base font-bold uppercase tracking-wide text-campo-oscuro">
+            {animal.ultimo_parto ? `Último parto: ${fecha(animal.ultimo_parto, true)}` : "Sin parto registrado"}
+          </p>
+          <span className="mt-3 block">
+            <Etiquetas animal={animal} grande />
+          </span>
+          {(animal.palpar_el || animal.secar_el) && (
+            <p className="mt-3 text-sm font-semibold text-blue-100">
+              {animal.palpar_el && `Palpar el ${fecha(animal.palpar_el)}`}
+              {animal.palpar_el && animal.secar_el && " · "}
+              {animal.secar_el && `Secar el ${fecha(animal.secar_el)}`}
+            </p>
+          )}
         </div>
 
         <div>
@@ -117,20 +125,12 @@ export function AnimalRapido({
               <Chip
                 key={a}
                 activo={!verHoja && a === actual}
-                bloqueado={a === "ordeno" && Boolean(motivoOrdeno)}
-                motivo={a === "ordeno" ? (motivoOrdeno ?? undefined) : undefined}
                 onClick={() => setPestana(a)}
               >
                 {ETIQUETA_ACCION_ANIMAL[a]}
               </Chip>
             ))}
           </div>
-          {motivoOrdeno && !verHoja && (
-            <p role="status" className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
-              {motivoOrdeno}
-            </p>
-          )}
-
           {/* Aparte de las opciones de registro y con otro color: esta pestaña no guarda nada. */}
           <p className="mb-2 mt-4 text-sm font-bold uppercase tracking-wide text-slate-500">Solo para ver</p>
           <button

@@ -10,9 +10,18 @@ const CLAVE = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "sb_publishabl
 const JOSEFINA = "00000000-0000-4000-8000-000000000016";
 const UVA = "00000000-0000-4000-8000-000000000044"; // novilla sin destete
 const SAIRA = "00000000-0000-4000-8000-000000000048"; // novilla activa
+const CAMILA = "00000000-0000-4000-8000-000000000006"; // vaca sin servicios en las fechas de esta prueba
 const TONELES = "00000000-0000-4000-8000-000000000101";
 const FECHA = "2026-04-29";
 const FECHA_PARTO = "2026-04-28";
+/** Servicio con las dos pajillas en el mismo registro. */
+const FECHA_DOS_TOROS = "2026-04-20";
+/** Servicio con la segunda pajilla registrada aparte (mañana y tarde del mismo día). */
+const FECHA_SEGUNDA_PAJILLA = "2026-04-21";
+const FECHA_ABORTO = "2026-04-26";
+const TORO_A = "Toro prueba offline A";
+const TORO_B = "Toro prueba offline B";
+const TORO_C = "Toro prueba offline C";
 const MARCA = "Prueba offline";
 const GRUPO = "Grupo prueba offline";
 const CHAPETA_CRIA = "OFF1";
@@ -49,13 +58,14 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("sincronización sin duplicado
   afterAll(async () => {
     const p = propietario;
     const { data: partos } = await p.from("partos").select("id, cria_id").eq("animal_id", JOSEFINA).eq("fecha", FECHA_PARTO);
-    await p.from("partos").delete().eq("animal_id", JOSEFINA).eq("fecha", FECHA_PARTO);
+    await p.from("partos").delete().eq("animal_id", JOSEFINA).in("fecha", [FECHA_PARTO, FECHA_ABORTO]);
     const crias = (partos ?? []).flatMap((x) => (x.cria_id ? [x.cria_id] : []));
     if (crias.length) await p.from("animales").delete().in("id", crias);
     await p.from("animales").delete().eq("madre_id", JOSEFINA).eq("chapeta", CHAPETA_CRIA);
 
     await Promise.all([
       p.from("servicios").delete().eq("toro_nombre", MARCA),
+      p.from("servicios").delete().eq("animal_id", CAMILA).in("fecha", [FECHA_DOS_TOROS, FECHA_SEGUNDA_PAJILLA]),
       p.from("eventos_sanitarios").delete().eq("producto", MARCA),
       pesajePrevio.existia ? null : p.from("pesajes").delete().eq("animal_id", JOSEFINA).eq("fecha", FECHA),
       p.from("recolecciones_leche").delete().eq("placa", "OFF123"),
@@ -307,6 +317,100 @@ describe.skipIf(!process.env.VACDATA_INTEGRACION)("sincronización sin duplicado
       expect(r.estado).toBe("ok");
       // Ya existía en los datos de prueba: tampoco se duplica, pero es un registro aparte de la jornada AM.
       expect((await deJosefina("pm")).count).toBe(1);
+    });
+  });
+
+  // Problema 6 del cliente: dos pajillas de toros distintos, con tope de 2 dosis por vaca y día.
+  describe("servicio con dos pajillas y tope de 2 dosis por día", () => {
+    const fila = (fecha: string) =>
+      supabase.from("servicios").select("tipo, jornada, toro_nombre, toro_raza, toro2_nombre, toro2_raza").eq("animal_id", CAMILA).eq("fecha", fecha);
+    const servicio = (fecha: string, datos: Record<string, unknown>) => ({
+      cliente_id: id(),
+      accion: "servicio",
+      datos: { animal_id: CAMILA, fecha, tipo: "inseminacion", ...datos },
+    });
+
+    it("guarda los dos toros en la misma fila del día", async () => {
+      const [r] = await registrar([
+        servicio(FECHA_DOS_TOROS, { jornada: "am", toro_nombre: TORO_A, toro_raza: "Holstein", toro2_nombre: TORO_B, toro2_raza: "Jersey" }),
+      ]);
+      console.log("dos toros en un registro", r);
+      expect(r.estado).toBe("ok");
+
+      const { data } = await fila(FECHA_DOS_TOROS);
+      expect(data).toHaveLength(1);
+      expect(data![0]).toMatchObject({ toro_nombre: TORO_A, toro_raza: "Holstein", toro2_nombre: TORO_B, toro2_raza: "Jersey" });
+    });
+
+    it("rechaza la tercera dosis del día y no toca la fila", async () => {
+      const [r] = await registrar([servicio(FECHA_DOS_TOROS, { jornada: "pm", toro_nombre: TORO_C })]);
+      console.log("tercera dosis del día", r);
+      expect(r.estado).toBe("error");
+      expect(r.mensaje).toMatch(/2 dosis de pajilla por vaca y día/);
+
+      const { data } = await fila(FECHA_DOS_TOROS);
+      expect(data).toHaveLength(1);
+      expect(data![0]).toMatchObject({ toro_nombre: TORO_A, toro2_nombre: TORO_B });
+    });
+
+    it("la segunda pajilla registrada aparte (otra jornada) completa el toro 2 sin crear otra fila", async () => {
+      const primero = servicio(FECHA_SEGUNDA_PAJILLA, { jornada: "am", toro_nombre: TORO_A });
+      const [r1] = await registrar([primero]);
+      expect(r1.estado).toBe("ok");
+      expect(r1.mensaje).toBeUndefined();
+
+      const [r2] = await registrar([servicio(FECHA_SEGUNDA_PAJILLA, { jornada: "pm", toro_nombre: TORO_B })]);
+      console.log("segunda pajilla en la tarde", r2);
+      expect(r2.estado).toBe("ok");
+      expect(r2.mensaje).toMatch(/segunda pajilla/);
+
+      const { data } = await fila(FECHA_SEGUNDA_PAJILLA);
+      expect(data).toHaveLength(1);
+      // La jornada guardada es la del primer registro: el tope se cuenta por día, no por hora.
+      expect(data![0]).toMatchObject({ jornada: "am", toro_nombre: TORO_A, toro2_nombre: TORO_B });
+
+      const [r3] = await registrar([servicio(FECHA_SEGUNDA_PAJILLA, { jornada: "pm", toro_nombre: TORO_C })]);
+      expect(r3.estado).toBe("error");
+      expect(r3.mensaje).toMatch(/2 dosis de pajilla por vaca y día/);
+
+      // Reenviar lo mismo (cola que se sincroniza dos veces) no inventa una dosis nueva.
+      const [r4] = await registrar([primero]);
+      expect(r4.estado).toBe("duplicado");
+      expect((await fila(FECHA_SEGUNDA_PAJILLA)).data![0]).toMatchObject({ toro_nombre: TORO_A, toro2_nombre: TORO_B });
+    });
+  });
+
+  // Problema 8 del cliente: un aborto no puede llegar con «nació viva: sí» ni con calostro.
+  describe("parto con aborto", () => {
+    it("no manda «nació viva», no guarda calostro y no crea la cría", async () => {
+      const [r] = await registrar([
+        {
+          cliente_id: id(),
+          accion: "parto",
+          datos: {
+            animal_id: JOSEFINA,
+            fecha: FECHA_ABORTO,
+            aborto: "on",
+            // Lo que podría llegar de un teléfono con la app vieja, que no bloqueaba la casilla.
+            nacido_vivo: "si",
+            toma_calostro: "si",
+            persona_calostro: MARCA,
+            registrar_cria: "on",
+            cria_sexo: "hembra",
+            observaciones: MARCA,
+          },
+        },
+      ]);
+      console.log("parto con aborto", r);
+      expect(r.estado).toBe("ok");
+
+      const { data } = await supabase
+        .from("partos")
+        .select("aborto, nacido_vivo, toma_calostro, persona_calostro, cria_id")
+        .eq("animal_id", JOSEFINA)
+        .eq("fecha", FECHA_ABORTO);
+      expect(data).toHaveLength(1);
+      expect(data![0]).toEqual({ aborto: true, nacido_vivo: false, toma_calostro: null, persona_calostro: null, cria_id: null });
     });
   });
 });

@@ -1,15 +1,25 @@
 // Una vaca no se puede ordeñar dos veces en la misma jornada. Esta prueba cubre la revisión del teléfono
 // (sin señal): solo usa la cola pendiente y el catálogo descargado. Ejecutar con: pnpm test
 import { describe, expect, it } from "vitest";
-import { indiceOrdenos, jornadaLibre, revisarOrdenoRepetido, textoJornadasCompletas, textoYaOrdenada, yaOrdenada } from "../ordenos";
-import type { AnimalCatalogo, Catalogo, RegistroCola, RegistroHistorial } from "../tipos";
+import {
+  indiceOrdenos,
+  jornadaLibre,
+  litrosOrdeno,
+  resumenDiaOrdeno,
+  revisarOrdenoRepetido,
+  textoJornadasCompletas,
+  textoLitros,
+  textoYaOrdenada,
+  yaOrdenada,
+} from "../ordenos";
+import type { AnimalCatalogo, Catalogo, OrdenoRegistrado, RegistroCola, RegistroHistorial } from "../tipos";
 
 const VACA = "00000000-0000-4000-8000-000000000016";
 const OTRA = "00000000-0000-4000-8000-000000000017";
 const FINCA = "00000000-0000-4000-8000-000000000101";
 const HOY = "2026-10-16";
 
-const animal = (id: string, ordenos?: { fecha: string; jornada: "am" | "pm" }[]): AnimalCatalogo => ({
+const animal = (id: string, ordenos?: OrdenoRegistrado[]): AnimalCatalogo => ({
   id,
   codigo: `TON-${id.slice(-2)}`,
   chapeta: id.slice(-2),
@@ -148,5 +158,65 @@ describe("no se deja registrar dos veces la misma jornada", () => {
     expect(textoYaOrdenada(HOY, "pm", HOY)).toBe("Ya se registró el ordeño de la tarde de hoy.");
     expect(textoYaOrdenada("2026-10-15", "pm", HOY)).toBe("Ya se registró el ordeño de la tarde del 15/10.");
     expect(textoJornadasCompletas(HOY, HOY)).toBe("Ya se registró el ordeño de la mañana y de la tarde de hoy.");
+  });
+});
+
+// Problema 5 del cliente: con las dos jornadas hechas la pantalla de ordeño se puede abrir y muestra
+// los litros de cada horario y el total del día, pero no deja registrar otra vez.
+describe("el ordeño del día ya registrado se puede ver", () => {
+  it("muestra los litros de cada jornada y el total del día, con las dos jornadas hechas", () => {
+    const indice = indiceOrdenos(
+      [enCola("ordeno", { animal_id: VACA, fecha: HOY, jornada: "pm", litros: 9 })],
+      catalogoCon([animal(VACA, [{ fecha: HOY, jornada: "am", litros: 12.5 }])]),
+    );
+
+    const dia = resumenDiaOrdeno(indice, VACA, HOY);
+    expect(dia.completo).toBe(true);
+    expect(dia.cuantas).toBe(2);
+    expect(dia.total).toBe(21.5);
+    expect(dia.incompletos).toBe(false);
+    expect(dia.jornadas).toEqual([
+      { jornada: "am", registrada: true, litros: 12.5 },
+      { jornada: "pm", registrada: true, litros: 9 },
+    ]);
+    expect(litrosOrdeno(indice, VACA, HOY, "am")).toBe(12.5);
+
+    // Verlo no debilita la revisión: ninguna de las dos jornadas se puede volver a registrar.
+    expect(revisarOrdenoRepetido("ordeno", { animal_id: VACA, fecha: HOY, jornada: "am", litros: 1 }, indice, HOY)).toMatch(/de la mañana de hoy/);
+    expect(revisarOrdenoRepetido("ordeno", { animal_id: VACA, fecha: HOY, jornada: "pm", litros: 1 }, indice, HOY)).toMatch(/de la tarde de hoy/);
+    expect(jornadaLibre(indice, VACA, HOY, "am")).toBeNull();
+  });
+
+  it("con una sola jornada registrada muestra esa cantidad y deja registrar la otra", () => {
+    const indice = indiceOrdenos([], catalogoCon([animal(VACA, [{ fecha: HOY, jornada: "am", litros: 10 }])]));
+    const dia = resumenDiaOrdeno(indice, VACA, HOY);
+    expect(dia.completo).toBe(false);
+    expect(dia.cuantas).toBe(1);
+    expect(dia.total).toBe(10);
+    expect(dia.jornadas[1]).toEqual({ jornada: "pm", registrada: false, litros: null });
+    expect(revisarOrdenoRepetido("ordeno", { animal_id: VACA, fecha: HOY, jornada: "pm", litros: 8 }, indice, HOY)).toBeNull();
+  });
+
+  it("lee los litros del ordeño por lista que está en la cola", () => {
+    const indice = indiceOrdenos([enCola("ordeno_lista", { fecha: HOY, jornada: "am", items: [{ animal_id: VACA, litros: 7.5 }] })], null);
+    expect(resumenDiaOrdeno(indice, VACA, HOY).total).toBe(7.5);
+  });
+
+  it("un catálogo anterior sin la cantidad se ve como registrado, sin inventar un cero", () => {
+    const indice = indiceOrdenos([], catalogoCon([animal(VACA, [{ fecha: HOY, jornada: "am" }, { fecha: HOY, jornada: "pm" }])]));
+    const dia = resumenDiaOrdeno(indice, VACA, HOY);
+    expect(dia.completo).toBe(true);
+    expect(dia.total).toBeNull();
+    expect(dia.incompletos).toBe(true);
+    expect(textoLitros(null)).toBe("sin el dato de litros");
+    expect(textoLitros(12.5)).toBe("12,5 L");
+  });
+
+  it("el dato propio del teléfono completa el del catálogo cuando este no trae la cantidad", () => {
+    const indice = indiceOrdenos(
+      [enviado("ordeno", { animal_id: VACA, fecha: HOY, jornada: "am", litros: 11 })],
+      catalogoCon([animal(VACA, [{ fecha: HOY, jornada: "am" }])]),
+    );
+    expect(litrosOrdeno(indice, VACA, HOY, "am")).toBe(11);
   });
 });

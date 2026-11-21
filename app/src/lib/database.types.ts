@@ -1596,6 +1596,8 @@ export type Database = {
           tipo: Database["public"]["Enums"]["tipo_servicio"]
           toro_nombre: string | null
           toro_raza: string | null
+          toro2_nombre: string | null
+          toro2_raza: string | null
         }
         Insert: {
           animal_id: string
@@ -1609,6 +1611,8 @@ export type Database = {
           tipo?: Database["public"]["Enums"]["tipo_servicio"]
           toro_nombre?: string | null
           toro_raza?: string | null
+          toro2_nombre?: string | null
+          toro2_raza?: string | null
         }
         Update: {
           animal_id?: string
@@ -1622,6 +1626,8 @@ export type Database = {
           tipo?: Database["public"]["Enums"]["tipo_servicio"]
           toro_nombre?: string | null
           toro_raza?: string | null
+          toro2_nombre?: string | null
+          toro2_raza?: string | null
         }
         Relationships: [
           {
@@ -1962,6 +1968,7 @@ export type Database = {
         Args: { p_cria?: Json; p_parto: Json }
         Returns: string
       }
+      registrar_servicio: { Args: { p_servicio: Json }; Returns: string }
       reiniciar_limite: { Args: { p_clave: string }; Returns: undefined }
       resumen_finca: {
         Args: { p_corte?: string; p_finca: string }

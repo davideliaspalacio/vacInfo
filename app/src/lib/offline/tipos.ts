@@ -30,8 +30,37 @@ export type FincaResumen = { id: string; nombre: string; municipio: string | nul
 
 export type Jornada = "am" | "pm";
 
-/** Ordeño que ya está registrado en el servidor (viene en el catálogo). */
-export type OrdenoRegistrado = { fecha: string; jornada: Jornada };
+/**
+ * Ordeño que ya está registrado en el servidor (viene en el catálogo).
+ * `litros` es opcional a propósito: los catálogos descargados con una versión anterior solo traen
+ * la fecha y la jornada, y en ese caso la pantalla muestra «registrado» sin la cantidad.
+ */
+export type OrdenoRegistrado = { fecha: string; jornada: Jornada; litros?: number | null };
+
+/**
+ * Servicio ya registrado en el servidor (viene en el catálogo). Lo usa el teléfono para no pasarse
+ * del tope de 2 dosis de pajilla por vaca y día sin señal.
+ *
+ * `toros` trae un elemento por dosis con el nombre del toro, o `""` cuando el servicio se registró
+ * sin nombre. El nombre es lo que permite reconocer una dosis que el teléfono ya tenía contada en
+ * su propio historial y no contarla dos veces.
+ */
+export type ServicioRegistrado = { fecha: string; toros: string[] };
+
+/**
+ * Lo que el teléfono ya sabe de los eventos registrados, para revisar las reglas sin señal.
+ *
+ * Es un `Set<string>` de claves `animal|fecha|jornada` (los ordeños ya registrados) para que las
+ * pantallas que solo preguntan «¿ya está?» sigan funcionando igual, y lleva al lado los datos que
+ * hacen falta para *mostrar* lo registrado y para contar las dosis del día:
+ *   · `litros`: clave `animal|fecha|jornada` → litros de ese ordeño (null si no se conocen,
+ *     p. ej. con un catálogo anterior que no traía la cantidad);
+ *   · `dosis`: clave `animal|fecha` → dosis de pajilla que ya tiene la vaca ese día.
+ */
+export interface IndiceCampo extends Set<string> {
+  readonly litros: ReadonlyMap<string, number | null>;
+  readonly dosis: ReadonlyMap<string, number>;
+}
 
 /** Mamá o papá del animal, como se puede mostrar sin señal (nombre y chapeta, si se conocen). */
 export type ParienteCatalogo = { nombre: string | null; chapeta: string | null };
@@ -88,6 +117,12 @@ export type AnimalCatalogo = {
    * Opcional: los catálogos descargados con una versión anterior no lo traen y `completarCatalogo` lo deja en [].
    */
   ordenos_recientes?: OrdenoRegistrado[];
+  /**
+   * Servicios ya registrados en el servidor de los últimos días, con las dosis de pajilla de cada día.
+   * Opcional: los catálogos descargados con una versión anterior no lo traen y entonces el teléfono
+   * se guía por `ultimo_servicio` (sabe que ese día ya hay al menos una dosis, pero no si hay dos).
+   */
+  servicios_recientes?: ServicioRegistrado[];
   /**
    * Datos de la hoja de vida (solo para ver). Opcional: los catálogos descargados con una versión anterior
    * no lo traen y `completarCatalogo` lo deja en `null`, que la pantalla lee como «falta descargar de nuevo».

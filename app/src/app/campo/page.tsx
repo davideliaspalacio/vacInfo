@@ -23,13 +23,13 @@ function saludo() {
 }
 
 export default async function CampoInicio() {
-  const { nombre, organizacion, user } = await obtenerSesion();
+  const { nombre, user } = await obtenerSesion();
   const primerNombre = nombre.split(" ")[0];
 
   return (
     <>
       <section className="mb-4 rounded-3xl bg-gradient-to-br from-campo to-campo-oscuro p-6 text-white shadow-[0_16px_42px_rgba(37,99,235,0.28)]">
-        <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-blue-100">{organizacion || "VacDaTa"}</p>
+        {/* Aquí iba el nombre de la empresa. El cliente pidió que no aparezca en ninguna parte de VacDaTa. */}
         <h1 className="font-display mb-3 text-3xl font-bold leading-tight">
           {saludo()}, {primerNombre}
         </h1>

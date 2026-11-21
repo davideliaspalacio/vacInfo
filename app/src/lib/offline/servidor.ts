@@ -85,6 +85,22 @@ async function aplicarParto(s: Cliente, datos: DatosDe<"parto">, id: string): Pr
   return error ? fallo(error) : { error: null, nuevos: 1, total: 1 };
 }
 
+/**
+ * Servicio con una o dos pajillas, respetando el tope de 2 dosis por vaca y día.
+ *
+ * Todo el trabajo lo hace `registrar_servicio` en la base (migración 20261121000025_segundo_toro.sql),
+ * que es el único lugar donde se pueden contar las dosis que la vaca ya tiene ese día sin carreras
+ * entre dos teléfonos: `servicios` tiene el índice único (animal_id, fecha), así que el día es una
+ * sola fila y la segunda pajilla que llega aparte completa `toro2_*` de esa fila.
+ */
+async function aplicarServicio(s: Cliente, datos: DatosDe<"servicio">, id: string): Promise<Aplicado> {
+  const { data, error } = await s.rpc("registrar_servicio", { p_servicio: { ...datos, id } });
+  if (error) return fallo(error);
+  if (data === "completado") return yaExistia("Esa vaca ya tenía un servicio ese día: el toro nuevo quedó como la segunda pajilla (toro 2).");
+  if (data === "repetido") return yaExistia("Ya había un servicio de esa vaca ese día con ese mismo toro; se conservó el anterior.");
+  return { error: null, nuevos: 1, total: 1 };
+}
+
 async function aplicarAplicacion(s: Cliente, { potrero_ids, ...d }: DatosDe<"aplicacion">, id: string): Promise<Aplicado> {
   if (!potrero_ids.length) return uno(s.from("aplicaciones_campo").insert({ ...d, id }));
   // Se conserva el texto «potreros» (7, 8, 9) para los informes que lo leen.
@@ -164,7 +180,7 @@ async function aplicar(s: Cliente, v: Validado, id: string): Promise<Aplicado> {
       return insertados(s.from("ordenos").upsert(filas, { onConflict: "animal_id,fecha,jornada", ignoreDuplicates: true }).select("id"), filas.length);
     }
     case "servicio":
-      return uno(s.from("servicios").insert({ ...v.datos, id }));
+      return aplicarServicio(s, v.datos, id);
     case "palpacion":
       return uno(s.from("palpaciones").insert({ ...v.datos, id }));
     case "parto":

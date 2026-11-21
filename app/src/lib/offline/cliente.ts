@@ -1,6 +1,7 @@
 import { borrar, contar, guardar, leer, leerTodos, transaccion } from "./idb";
 import { indiceOrdenos, revisarOrdenoRepetido } from "./ordenos";
 import { resumir } from "./resumen";
+import { revisarDosisServicio } from "./servicios";
 import type {
   Accion,
   AnimalCatalogo,
@@ -32,11 +33,29 @@ export class SinConexionError extends Error {
   }
 }
 
-/** Esa vaca ya tiene el ordeño de esa fecha y jornada: no se encola otro (también sin señal). */
-export class OrdenoRepetidoError extends Error {
-  constructor(mensaje: string) {
+/**
+ * El teléfono rechaza el registro por una regla del negocio que puede revisar sin señal
+ * (ordeño repetido de la misma jornada, tope de dosis de pajilla del día).
+ * El mensaje se le muestra tal cual al trabajador.
+ */
+export class RegistroRechazadoError extends Error {
+  constructor(mensaje: string, nombre = "RegistroRechazadoError") {
     super(mensaje);
-    this.name = "OrdenoRepetidoError";
+    this.name = nombre;
+  }
+}
+
+/** Esa vaca ya tiene el ordeño de esa fecha y jornada: no se encola otro (también sin señal). */
+export class OrdenoRepetidoError extends RegistroRechazadoError {
+  constructor(mensaje: string) {
+    super(mensaje, "OrdenoRepetidoError");
+  }
+}
+
+/** Esa vaca ya tiene las 2 dosis de pajilla del día: no se encola otro servicio (también sin señal). */
+export class DosisDiariaError extends RegistroRechazadoError {
+  constructor(mensaje: string) {
+    super(mensaje, "DosisDiariaError");
   }
 }
 
@@ -152,6 +171,9 @@ function completarCatalogo(c: Catalogo): Catalogo {
       ...a,
       fecha_destete: a.fecha_destete ?? null,
       ordenos_recientes: a.ordenos_recientes ?? [],
+      // `servicios_recientes` se queda sin completar a propósito: si falta (catálogo descargado con
+      // una versión anterior) el conteo de dosis de pajilla se guía por `ultimo_servicio`, y una
+      // lista vacía haría creer que ese día no hubo ninguna (ver lib/offline/servicios.ts).
       // `null` (y no un bloque vacío) para que la hoja de vida sepa que este catálogo es anterior
       // y pida descargar de nuevo en vez de mostrar datos en blanco.
       hoja_vida: a.hoja_vida ?? null,
@@ -241,12 +263,21 @@ function nuevoId() {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-/** Última barrera antes de guardar en el teléfono: ningún segundo ordeño de la misma vaca, fecha y jornada. */
+/**
+ * Última barrera antes de guardar en el teléfono, con lo que el teléfono ya conoce (sin señal):
+ *   · ningún segundo ordeño de la misma vaca, fecha y jornada;
+ *   · ninguna tercera dosis de pajilla de la misma vaca en el mismo día.
+ */
 async function revisarAntesDeEncolar(accion: Accion, datos: Record<string, unknown>, fincaId: string) {
-  if (accion !== "ordeno" && accion !== "ordeno_lista") return;
+  if (accion !== "ordeno" && accion !== "ordeno_lista" && accion !== "servicio") return;
   const [cola, historial, catalogo] = await Promise.all([listarCola(), listarHistorial(), leerCatalogo(fincaId).catch(() => undefined)]);
-  const problema = revisarOrdenoRepetido(accion, datos, indiceOrdenos([...cola, ...historial], catalogo));
-  if (problema) throw new OrdenoRepetidoError(problema);
+  const indice = indiceOrdenos([...cola, ...historial], catalogo);
+
+  const repetido = revisarOrdenoRepetido(accion, datos, indice);
+  if (repetido) throw new OrdenoRepetidoError(repetido);
+
+  const dosis = revisarDosisServicio(accion, datos, indice);
+  if (dosis) throw new DosisDiariaError(dosis);
 }
 
 export async function encolar(accion: Accion, datos: Record<string, unknown>, fincaId: string, animal?: AnimalCatalogo) {

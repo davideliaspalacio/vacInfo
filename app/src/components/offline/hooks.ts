@@ -17,6 +17,7 @@ import {
   type ResumenSync,
 } from "@/lib/offline/cliente";
 import type { BandejaMensajes, FincaResumen, MensajeCampo, RegistroCola, RegistroHistorial } from "@/lib/offline/tipos";
+import { hayEdicionEnCurso } from "./refresco";
 
 function suscribirConexion(alCambiar: () => void) {
   window.addEventListener("online", alCambiar);
@@ -141,14 +142,18 @@ export function useCola() {
   return estado;
 }
 
+/**
+ * Cuántos registros quedan sin enviar y cuántos fallaron. Lo usa la insignia del encabezado, que
+ * ahora es el aviso que viaja por todas las pantallas de VacDaTa (ya no hay pestaña «Pendientes»).
+ */
 export function usePendientes() {
-  const [total, setTotal] = useState(0);
+  const [estado, setEstado] = useState({ total: 0, errores: 0 });
   useEffect(() => {
     let vivo = true;
     const cargar = () => {
       listarCola()
         .then((cola) => {
-          if (vivo) setTotal(cola.length);
+          if (vivo) setEstado({ total: cola.length, errores: cola.filter((r) => r.estado === "error").length });
         })
         .catch(() => undefined);
     };
@@ -159,7 +164,27 @@ export function usePendientes() {
       dejar();
     };
   }, []);
-  return total;
+  return estado;
+}
+
+/**
+ * ¿El trabajador está escribiendo en algún formulario de la pantalla? Se mira el campo con el foco
+ * y la última tecla (un `input` en cualquier parte de la página). Sirve para que la descarga
+ * automática del catálogo no le pise los datos a medio anotar.
+ */
+export function useEscribiendo() {
+  const ultimoTecleo = useRef(0);
+
+  useEffect(() => {
+    const anotar = () => {
+      ultimoTecleo.current = Date.now();
+    };
+    // En captura: así se oye aunque el formulario detenga el evento.
+    document.addEventListener("input", anotar, true);
+    return () => document.removeEventListener("input", anotar, true);
+  }, []);
+
+  return useCallback(() => hayEdicionEnCurso(document.activeElement, ultimoTecleo.current, Date.now()), []);
 }
 
 const INTERVALO = 60_000;

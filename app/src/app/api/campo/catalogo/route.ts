@@ -6,7 +6,7 @@ import { gruposDeFinca } from "@/components/potreros/rotacion";
 import { leerBandeja } from "@/lib/offline/mensajes";
 import { agruparSanidad, consultaParientes, consultaSanidad, desdeSanidad, hojaVidaDe } from "@/lib/offline/hoja-vida";
 import { REGLAS, limitar, respuestaLimite } from "@/lib/limites";
-import type { AnimalCatalogo, BandejaMensajes, Catalogo, FincaResumen, Jornada, OrdenoRegistrado, ParienteCatalogo } from "@/lib/offline/tipos";
+import type { AnimalCatalogo, BandejaMensajes, Catalogo, FincaResumen, Jornada, OrdenoRegistrado, ParienteCatalogo, ServicioRegistrado } from "@/lib/offline/tipos";
 
 const SIN_CACHE = { "Cache-Control": "no-store" };
 /** Días hacia atrás (desde hoy y desde el corte) de los que se mandan los ordeños ya registrados. */
@@ -67,15 +67,14 @@ export async function GET(request: Request) {
     supabase.from("insumos").select("nombre, categoria, unidad").eq("organizacion_id", finca.organizacion_id).order("nombre"),
     supabase
       .from("servicios")
-      .select("toro_nombre, animales!inner(finca_id)")
+      .select("animal_id, fecha, toro_nombre, toro2_nombre, toro2_raza, animales!inner(finca_id)")
       .eq("animales.finca_id", finca.id)
-      .not("toro_nombre", "is", null)
       .order("fecha", { ascending: false })
       .limit(1000),
     // Ordeños ya registrados de los últimos días: el teléfono los usa para no dejar registrar dos veces la misma jornada.
     supabase
       .from("ordenos")
-      .select("animal_id, fecha, jornada, animales!inner(finca_id)")
+      .select("animal_id, fecha, jornada, litros, animales!inner(finca_id)")
       .eq("animales.finca_id", finca.id)
       .in("fecha", fechasDeOrdenos(hoyISO(), corte))
       .limit(MAX_ORDENOS),
@@ -104,6 +103,7 @@ export async function GET(request: Request) {
   };
   (animales.data ?? []).filter((a) => a.categoria === "toro").forEach((a) => agregarToro(a.nombre));
   (servicios.data ?? []).forEach((s) => agregarToro(s.toro_nombre));
+  (servicios.data ?? []).forEach((s) => agregarToro(s.toro2_nombre));
 
   const estadoPorAnimal = new Map((estados.data ?? []).map((e) => [e.animal_id, e]));
   const sanidadPorAnimal = agruparSanidad(sanidad.data ?? []);
@@ -111,8 +111,19 @@ export async function GET(request: Request) {
   const ordenosPorAnimal = new Map<string, OrdenoRegistrado[]>();
   for (const o of ordenos.data ?? []) {
     const lista = ordenosPorAnimal.get(o.animal_id) ?? [];
-    lista.push({ fecha: o.fecha, jornada: o.jornada as Jornada });
+    lista.push({ fecha: o.fecha, jornada: o.jornada as Jornada, litros: o.litros });
     ordenosPorAnimal.set(o.animal_id, lista);
+  }
+
+  // Servicios recientes: el teléfono cuenta las dosis de pajilla del día para no pasar de 2
+  // (ver lib/offline/servicios.ts). `toros` lleva un elemento por dosis, «» si no tiene nombre.
+  const fechasServicios = new Set(fechasDeOrdenos(hoyISO(), corte));
+  const serviciosPorAnimal = new Map<string, ServicioRegistrado[]>();
+  for (const s of servicios.data ?? []) {
+    if (!fechasServicios.has(s.fecha)) continue;
+    const lista = serviciosPorAnimal.get(s.animal_id) ?? [];
+    lista.push({ fecha: s.fecha, toros: [s.toro_nombre ?? "", ...(s.toro2_nombre || s.toro2_raza ? [s.toro2_nombre ?? ""] : [])] });
+    serviciosPorAnimal.set(s.animal_id, lista);
   }
   const catalogo: Catalogo = {
     finca_id: finca.id,
@@ -141,6 +152,7 @@ export async function GET(request: Request) {
         litros_am: e?.litros_am ?? null,
         litros_pm: e?.litros_pm ?? null,
         ordenos_recientes: (ordenosPorAnimal.get(a.id) ?? []).sort((x, y) => y.fecha.localeCompare(x.fecha) || y.jornada.localeCompare(x.jornada)),
+        servicios_recientes: serviciosPorAnimal.get(a.id) ?? [],
         hoja_vida: hojaVidaDe(a, { mora_prenez: e?.mora_prenez ?? null, sanidad: sanidadPorAnimal.get(a.id), fichas }),
       };
     }),
